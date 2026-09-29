@@ -301,7 +301,7 @@ PAGES.macro = () => `
     <label class="f"><span>只追蹤與持股及關注產業相關的關鍵字（逗號或換行分隔）</span><textarea data-bind="macro.keywords">${esc(S.macro.keywords)}</textarea></label>
   </div>`;
 function macroStatus() {
-  if (S.macro.fetching) return '資料更新中…';
+  if (S.macro.fetching) return '資料更新中…（第一次可能需要數十秒）';
   if (!S.macro.fetchedAt) return '按「更新數據」自動帶入美國總經數據（來源：FRED 聖路易聯準銀行）。台灣指標請手動填寫。';
   const t = new Date(S.macro.fetchedAt);
   return `已於 ${t.toLocaleString('zh-TW', { hour12: false })} 自動更新（來源：FRED）${S.macro.fetchError ? `，<span class="down">${esc(S.macro.fetchError)}</span>` : ''}`;
@@ -338,7 +338,7 @@ async function fetchMacro(silent) {
   if (S.macro.fetching) return;
   S.macro.fetching = true; if (current === 'macro') $('#macroStatus').innerHTML = macroStatus();
   try {
-    const r = await fetch('api/macro', { cache: 'no-store' });
+    const r = await fetch('api/macro', { signal: AbortSignal.timeout(90000) });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
     let n = 0;
@@ -349,6 +349,7 @@ async function fetchMacro(silent) {
       row.extra = row.key === 'cpi' ? `核心 CPI：${d.corePrev}% → ${d.core}%` : row.key === 'ffr' ? `目標區間 ${d.label}${d.effective != null ? `，有效利率 ${d.effective}%` : ''}` : '';
       n++;
     });
+    if (!n) throw new Error('資料來源暫時無回應');
     S.macro.fetchedAt = j.updated; S.macro.fetchError = j.errors?.length ? `${j.errors.length} 項抓取失敗` : '';
     if (!silent) toast(`已更新 ${n} 項指標`);
   } catch (e) {
