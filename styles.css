@@ -267,3 +267,6 @@ dialog form { padding: 18px; }
   table.stack td.t-head { grid-column: 1 / -1; }
   table.stack td:has(> button:only-child) { grid-column: 1 / -1; padding-top: 2px; }
 }
+textarea.cell-ta { min-height: 0; resize: none; overflow: hidden; line-height: 1.45; padding: 6px 8px; font-size: 14px; }
+.layer textarea.cell-ta { margin-top: 5px; font-size: 15px; }
+@media (max-width: 720px) { table.stack td.wide { grid-column: 1 / -1; } }

@@ -68,6 +68,18 @@ function defaultState() {
 }
 
 let S = load();
+function seedExamples(force) {
+  const E = window.EXAMPLES; if (!E) return 0;
+  let n = 0;
+  E.layers.forEach((v, i) => { if (!S.layers[i]) { S.layers[i] = v; n++; } });
+  E.positions.forEach(p => { if (!S.positions.some(x => x.company === p.company)) { S.positions.push({ id: uid(), ...p }); n++; } });
+  E.cards.forEach(c => {
+    if (S.cards.some(x => x.code === c.code)) return;
+    S.cards.push(Object.assign(blankCard(), JSON.parse(JSON.stringify(c)))); n++;
+  });
+  S.examplesSeeded = E.version;
+  return n;
+}
 S.macro.rows.forEach(r => { const d = MACRO_INDICATORS.find(m => m[0] === r.name); if (d) { r.key = d[2]; r.hint = d[1]; } });
 function load() {
   try {
@@ -375,7 +387,7 @@ PAGES.industry = () => `
     <h3 class="gold-bar">AI 供應鏈十二層</h3>
     ${LAYERS.map(([nm, ds, bn], i) => `<div class="layer"><div class="n">${i + 1}</div><div>
       <div class="nm">${esc(nm)}</div><div class="ds">${esc(ds)}</div>${bn ? `<div class="bn">${esc(bn)}</div>` : ''}
-      <input type="text" placeholder="我關注的公司" data-layer="${i}" value="${esc(S.layers[i] || '')}">
+      <textarea class="cell-ta" rows="1" placeholder="我關注的公司" data-layer="${i}">${esc(S.layers[i] || '')}</textarea>
     </div></div>`).join('')}
     <div class="note">層別依課程公開的供應鏈關鍵字自擬，可依你的持股調整。上層支出（例如雲端資本支出）轉向時，先看它沿哪條路徑往下傳到哪幾層。</div>
   </div>
@@ -416,7 +428,7 @@ PAGES.cards = () => {
     const g = c.lights.filter(l => l.c === '綠').length, r = c.lights.filter(l => l.c === '紅').length;
     const vs = valSummary(c);
     return `<div class="rec" data-card="${c.id}">
-      <div class="r-top"><span class="r-title">${esc(c.code)} ${esc(c.name)}</span>${lightsHTML(c)}</div>
+      <div class="r-top"><span class="r-title">${esc(c.code)} ${esc(c.name)}${c.example ? ' <span class="pill gold">範例</span>' : ''}</span>${lightsHTML(c)}</div>
       <div class="r-meta">${esc(c.market)} · ${esc(c.layer || '未定位')} · ${esc(c.date)}　綠 ${g} / 紅 ${r}${vs.upside != null ? `　合理價均值 ${fmt(vs.avg, 1)}（${pct(vs.upside)}）` : ''}</div>
       ${c.verdict ? `<div class="r-body">${esc(c.verdict)}</div>` : ''}
     </div>`;
@@ -426,6 +438,7 @@ function cardEditor(c) {
   const vs = valSummary(c);
   const inp = (path, v, attrs = '') => `<input type="text" data-card-f="${path}" value="${esc(v)}" ${attrs}>`;
   const ta = (path, v, ph = '') => `<textarea data-card-f="${path}" placeholder="${esc(ph)}">${esc(v)}</textarea>`;
+  const cta = (path, v) => `<textarea class="cell-ta" rows="1" data-card-f="${path}">${esc(v)}</textarea>`;
   return `
   <div class="btn-row" style="margin-bottom:10px">
     <button class="btn-small ghost" id="backCards">← 返回清單</button><span class="spacer"></span>
@@ -433,7 +446,8 @@ function cardEditor(c) {
     <button class="btn-small ghost" id="cardMd">匯出 Markdown</button>
     <button class="btn-danger btn-small" id="delCard" style="background:transparent">刪除</button>
   </div>
-  <h2>${esc(c.code || '新研究卡')} ${esc(c.name)}</h2>
+  <h2>${esc(c.code || '新研究卡')} ${esc(c.name)}${c.example ? ' <span class="pill gold" style="vertical-align:middle">範例</span>' : ''}</h2>
+  ${c.example ? '<div class="note">這是範例卡：財報數字附來源日期；標「示範」的是說明填法的假設，不是事實或投資建議。可以直接修改或刪除。</div>' : ''}
   <div class="card">
     <div class="inline">
       <label class="f"><span>代號</span>${inp('code', c.code)}</label>
@@ -447,14 +461,14 @@ function cardEditor(c) {
   <div class="card">
     <h3 class="gold-bar">六面向燈號</h3>
     <div class="tbl-wrap"><table><thead><tr><th>面向</th><th>燈號</th><th>一句話判讀</th></tr></thead><tbody>
-    ${DIMENSIONS.map((d, i) => `<tr><td><b>${d}</b></td><td><select data-card-f="lights.${i}.c">${['', '綠', '黃', '紅'].map(o => `<option ${o === c.lights[i].c ? 'selected' : ''} value="${o}">${o || '—'}</option>`).join('')}</select></td><td>${inp(`lights.${i}.note`, c.lights[i].note)}</td></tr>`).join('')}
+    ${DIMENSIONS.map((d, i) => `<tr><td><b>${d}</b></td><td><select data-card-f="lights.${i}.c">${['', '綠', '黃', '紅'].map(o => `<option ${o === c.lights[i].c ? 'selected' : ''} value="${o}">${o || '—'}</option>`).join('')}</select></td><td>${cta(`lights.${i}.note`, c.lights[i].note)}</td></tr>`).join('')}
     </tbody></table></div>
   </div>
   <div class="card">
     <h3 class="gold-bar">一、財報事實</h3>
     <p class="lead" style="margin-bottom:6px">來源：美股 10-Q／10-K／8-K；台股公開資訊觀測站。只填原始文件的數字。</p>
     <div class="tbl-wrap"><table><thead><tr><th>指標</th><th>本期</th><th>去年同期</th><th class="num">年增</th><th>來源與日期</th></tr></thead><tbody>
-    ${FIN_ROWS.map(([nm, kind], i) => { const f = c.fin[i]; return `<tr><td>${nm}${kind === 'pct' ? '（%）' : ''}</td><td>${inp(`fin.${i}.cur`, f.cur, 'inputmode="decimal" style="width:90px"')}</td><td>${inp(`fin.${i}.prev`, f.prev, 'inputmode="decimal" style="width:90px"')}</td><td class="num" data-yoy="${i}">${yoy(f, kind)}</td><td>${inp(`fin.${i}.src`, f.src)}</td></tr>`; }).join('')}
+    ${FIN_ROWS.map(([nm, kind], i) => { const f = c.fin[i]; return `<tr><td>${nm}${kind === 'pct' ? '（%）' : ''}</td><td>${inp(`fin.${i}.cur`, f.cur, 'inputmode="decimal" style="width:90px"')}</td><td>${inp(`fin.${i}.prev`, f.prev, 'inputmode="decimal" style="width:90px"')}</td><td class="num" data-yoy="${i}">${yoy(f, kind)}</td><td>${cta(`fin.${i}.src`, f.src)}</td></tr>`; }).join('')}
     </tbody></table></div>
     <label class="f" style="margin-top:8px"><span>頭條數字與真實體質的落差（例如獲利創高但現金流轉負）</span>${ta('finGap', c.finGap)}</label>
   </div>
@@ -468,7 +482,7 @@ function cardEditor(c) {
   <div class="card">
     <h3 class="gold-bar">三、估值（三法交叉）</h3>
     <div class="tbl-wrap"><table><thead><tr><th>方法</th><th>關鍵假設</th><th>合理價</th><th>備註</th></tr></thead><tbody>
-    ${VAL_ROWS.map((nm, i) => `<tr><td>${nm}</td><td>${inp(`val.${i}.assume`, c.val[i].assume)}</td><td>${inp(`val.${i}.fair`, c.val[i].fair, 'inputmode="decimal" style="width:90px"')}</td><td>${inp(`val.${i}.note`, c.val[i].note)}</td></tr>`).join('')}
+    ${VAL_ROWS.map((nm, i) => `<tr><td>${nm}</td><td>${cta(`val.${i}.assume`, c.val[i].assume)}</td><td>${inp(`val.${i}.fair`, c.val[i].fair, 'inputmode="decimal" style="width:90px"')}</td><td>${cta(`val.${i}.note`, c.val[i].note)}</td></tr>`).join('')}
     </tbody></table></div>
     <div class="result" id="valResult">${valResultHTML(c, vs)}</div>
     <label class="f" style="margin-top:8px"><span>三法差距很大時，先檢查哪個假設最脆弱</span>${ta('valCheck', c.valCheck)}</label>
@@ -476,14 +490,14 @@ function cardEditor(c) {
   <div class="card">
     <h3 class="gold-bar">四、技術面</h3>
     <div class="tbl-wrap"><table><thead><tr><th>項目</th><th>讀數</th><th>判讀</th></tr></thead><tbody>
-    ${TECH_ROWS.map((nm, i) => `<tr><td>${nm}</td><td>${inp(`tech.${i}.read`, c.tech[i].read)}</td><td>${inp(`tech.${i}.judge`, c.tech[i].judge)}</td></tr>`).join('')}
+    ${TECH_ROWS.map((nm, i) => `<tr><td>${nm}</td><td>${inp(`tech.${i}.read`, c.tech[i].read)}</td><td>${cta(`tech.${i}.judge`, c.tech[i].judge)}</td></tr>`).join('')}
     </tbody></table></div>
     <div class="note">台股用還原股價計算，避免除權息造成失真。</div>
   </div>
   <div class="card">
     <h3 class="gold-bar">五、籌碼面（台股）</h3>
     <div class="tbl-wrap"><table><thead><tr><th>項目</th><th>近 5 日</th><th>近 20 日</th><th>判讀</th></tr></thead><tbody>
-    ${CHIP_ROWS.map((nm, i) => `<tr><td>${nm}</td><td>${inp(`chip.${i}.d5`, c.chip[i].d5, 'style="width:90px"')}</td><td>${inp(`chip.${i}.d20`, c.chip[i].d20, 'style="width:90px"')}</td><td>${inp(`chip.${i}.judge`, c.chip[i].judge)}</td></tr>`).join('')}
+    ${CHIP_ROWS.map((nm, i) => `<tr><td>${nm}</td><td>${inp(`chip.${i}.d5`, c.chip[i].d5, 'style="width:90px"')}</td><td>${inp(`chip.${i}.d20`, c.chip[i].d20, 'style="width:90px"')}</td><td>${cta(`chip.${i}.judge`, c.chip[i].judge)}</td></tr>`).join('')}
     </tbody></table></div>
   </div>
   <div class="card">
@@ -771,6 +785,9 @@ PAGES.settings = () => `
       <li>Android（Chrome）：右上選單 → 安裝應用程式／加到主畫面</li>
       <li>安裝後可離線開啟。</li>
     </ul></div>
+  <div class="card"><h3 class="gold-bar">範例資料</h3>
+    <p class="lead">重新加入十二層範例公司與台積電、SpaceX 研究卡（不會覆蓋你已填的內容）。</p>
+    <button class="btn-ghost" id="seedBtn">載入範例</button></div>
   <div class="card"><h3 class="gold-bar">重設</h3>
     <p class="lead">清除這台裝置上的所有筆記（無法復原）。</p>
     <button class="btn-danger" id="resetBtn">清除全部資料</button></div>
@@ -797,16 +814,19 @@ function stackTables(root) {
       [...tr.children].forEach((td, i) => {
         if (i === 0) td.classList.add('t-head');
         td.dataset.label = heads[i] || '';
+        if (/來源|假設|判讀|備註/.test(heads[i] || '')) td.classList.add('wide');
         if (!heads[i] && !td.querySelector('input,select,button') && !td.textContent.trim()) td.classList.add('t-empty');
       });
     });
   });
 }
+function autoGrow(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 2 + 'px'; }
 function render() {
   if ((current === 'macro' || current === 'home') && !S.macro.fetching && location.protocol.startsWith('http') &&
       (!S.macro.fetchedAt || Date.now() - new Date(S.macro.fetchedAt) > 6 * 3600e3) && !render._tried) { render._tried = true; setTimeout(() => fetchMacro(true), 50); }
   $('#view').innerHTML = PAGES[current]();
   stackTables($('#view'));
+  document.querySelectorAll('#view textarea.cell-ta').forEach(autoGrow);
   if (current === 'strategy') calcStrategy();
 }
 
@@ -833,6 +853,7 @@ document.addEventListener('click', e => {
     }
     case 'addEtf': editEtf(); break;
     case 'fetchMacro': fetchMacro(false); break;
+    case 'seedBtn': { const n = seedExamples(true); save(); toast(n ? `已加入 ${n} 筆範例` : '範例都已存在'); break; }
     case 'allocAdd': S.alloc.push({ name: '新類別', target: 0, value: '' }); save(); render(); break;
     case 'copyReport': copy(`每個交易日收盤後，請整理一份盤後報告：\n關注清單：${S.report.watchlist}\n內容：${S.report.content}\n\n另外檢查以下監控條件是否觸發：\n${S.monitors.filter(m => m.status === '啟用').map(m => `- ${m.target}：${m.cond}`).join('\n') || '（無）'}\n\n只整理事實與數據並附來源，不給買賣建議。`); break;
     case 'exportBtn': {
@@ -846,6 +867,7 @@ document.addEventListener('click', e => {
 
 document.addEventListener('input', e => {
   const t = e.target;
+  if (t.classList?.contains('cell-ta')) autoGrow(t);
   if (t.dataset.bind) { setPath(S, t.dataset.bind, t.value); save(); return; }
   if (t.dataset.macro != null) {
     const r = S.macro.rows[+t.dataset.macro]; r[t.dataset.f] = t.value; save();
@@ -890,4 +912,5 @@ $('#installBtn').addEventListener('click', async () => {
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 
 window.addEventListener('hashchange', () => { const p = location.hash.slice(1); if (p && p !== current) go(p); });
+if (S.examplesSeeded !== window.EXAMPLES?.version) { seedExamples(); save(); }
 go(location.hash.slice(1) || 'home');
