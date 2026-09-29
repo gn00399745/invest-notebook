@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI 投資筆記</title>
+<meta name="description" content="總經、產業、個股研究、ETF 健檢與投資策略的個人投資筆記工具">
+<meta name="theme-color" content="#0b1f3a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="投資筆記">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">📈</span>
+    <div>
+      <div class="title">AI 投資筆記</div>
+      <div class="subtitle">總經 → 產業 → 個股 → 策略 → 覆盤</div>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button id="installBtn" class="btn-gold" hidden>安裝</button>
+    <button class="icon-btn" data-go="settings" title="設定與備份">⚙︎</button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-go="home" class="active">總覽</button>
+  <button data-go="macro">總經</button>
+  <button data-go="industry">產業定位</button>
+  <button data-go="cards">研究卡</button>
+  <button data-go="etf">ETF 健檢</button>
+  <button data-go="strategy">策略</button>
+  <button data-go="monitor">監控</button>
+  <button data-go="claims">待驗主張</button>
+  <button data-go="review">覆盤</button>
+</nav>
+
+<main id="view"></main>
+
+<dialog id="modal">
+  <form method="dialog" id="modalForm">
+    <h3 id="modalTitle"></h3>
+    <div id="modalBody"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-danger" id="modalDelete" hidden>刪除</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn-ghost" id="modalCancel">取消</button>
+      <button type="submit" class="btn-primary" id="modalSave">儲存</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast"></div>
+
+<footer class="foot">資料只存在這台裝置的瀏覽器中，請定期到 ⚙︎ 匯出備份。本工具僅供個人研究紀錄，不構成投資建議。</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
