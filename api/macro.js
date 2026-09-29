@@ -66,6 +66,18 @@ async function bot() {
     return { d: m ? `${m[1]}-${m[2]}-${m[3]}` : '', v };
   }).filter(o => o.d && Number.isFinite(o.v)).sort((a, b) => a.d.localeCompare(b.d));
 }
+async function fxFallback() {
+  // 備援：fawazahmed0 公開匯率（jsDelivr CDN，免金鑰）
+  const get = async tag => {
+    const r = await fetch(`https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${tag}/v1/currencies/usd.json`, { signal: T(), headers: UA });
+    if (!r.ok) throw new Error('FX HTTP ' + r.status);
+    const j = await r.json(); return { d: j.date, v: j.usd.twd };
+  };
+  const a = await get('latest');
+  const prevDay = new Date(new Date(a.d).getTime() - 864e5).toISOString().slice(0, 10);
+  const b = await get(prevDay).catch(() => null);
+  return b ? [b, a] : [a, a];
+}
 async function fred(id) {
   const key = process.env.FRED_API_KEY;
   if (!key) throw new Error('未設定 FRED_API_KEY');
@@ -114,8 +126,11 @@ module.exports = async (req, res) => {
       return { latest: s[n].hi, prev: s[j].hi, date: s[n].d, prevDate: s[j].d, label: `${s[n].lo.toFixed(2)}–${s[n].hi.toFixed(2)}%`, effective: s[n].eff, unit: '% 目標上限', source: '紐約聯準銀行 EFFR' }; }),
     tryFill('us10y', () => TR.value && { ...last2(TR.value, 2), unit: '%', source: '美國財政部殖利率曲線' },
       async () => ({ ...last2(await fred('DGS10'), 2), unit: '%', source: 'FRED DGS10' })),
-    tryFill('usdtwd', () => BOT.value && { ...last2(BOT.value, 3), unit: '新台幣／美元', source: '臺灣銀行即期買賣中價' },
-      async () => ({ ...last2(await fred('DEXTAUS'), 2), unit: '新台幣／美元', source: 'FRED DEXTAUS' })),
+    (async () => {
+      if (BOT.value) { data.usdtwd = { ...last2(BOT.value, 3), unit: '新台幣／美元', source: '臺灣銀行即期買賣中價' }; return; }
+      try { data.usdtwd = { ...last2(await fxFallback(), 3), unit: '新台幣／美元', source: '國際匯率中價（jsDelivr currency-api）' }; errors.splice(errors.findIndex(e => e.startsWith('臺灣銀行')), 1); }
+      catch (e) { if (hasKey) data.usdtwd = { ...last2(await fred('DEXTAUS'), 2), unit: '新台幣／美元', source: 'FRED DEXTAUS' }; else errors.push('匯率備援：' + e.message); }
+    })(),
     tryFill('pce', () => null, async () => ({ ...yoyPair(await fred('PCEPILFE')), unit: '% 年增', source: 'FRED PCEPILFE' })),
     tryFill('claims', () => null, async () => { const p = last2(await fred('ICSA'), 0); return { ...p, latest: Math.round(p.latest / 1000), prev: Math.round(p.prev / 1000), unit: '千人（週）', source: 'FRED ICSA' }; }),
   ]);
