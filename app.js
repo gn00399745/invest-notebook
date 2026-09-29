@@ -302,9 +302,10 @@ PAGES.macro = () => `
   </div>`;
 function macroStatus() {
   if (S.macro.fetching) return '資料更新中…（第一次可能需要數十秒）';
-  if (!S.macro.fetchedAt) return '按「更新數據」自動帶入美國總經數據（來源：FRED 聖路易聯準銀行）。台灣指標請手動填寫。';
+  const err = S.macro.fetchError ? `<div class="down" style="margin-top:4px">${esc(S.macro.fetchError)}</div>` : '';
+  if (!S.macro.fetchedAt) return '按「更新數據」自動帶入總經數據（BLS、紐約聯準銀行、美國財政部、臺灣銀行）。台灣景氣與出口請手動填寫。' + err;
   const t = new Date(S.macro.fetchedAt);
-  return `已於 ${t.toLocaleString('zh-TW', { hour12: false })} 自動更新（來源：FRED）${S.macro.fetchError ? `，<span class="down">${esc(S.macro.fetchError)}</span>` : ''}`;
+  return `已於 ${t.toLocaleString('zh-TW', { hour12: false })} 自動更新。` + err;
 }
 function fmtVal(r) {
   if (r.latest === '' || r.latest == null) return '';
@@ -315,14 +316,14 @@ function indCard(r, i) {
   const extra = r.extra ? `<div class="ind-extra">${esc(r.extra)}</div>` : '';
   return `<div class="ind">
     <div class="ind-top"><div><div class="ind-name">${esc(r.name)}</div><div class="ind-hint">${esc(r.hint || '')}</div></div>
-      ${auto ? '<span class="pill green">自動</span>' : r.key ? '' : '<span class="pill">手動</span>'}</div>
+      ${auto ? '<span class="pill green">自動</span>' : (r.key === 'pce' || r.key === 'claims') && S.macro.noKey ? '<span class="pill" title="在 Vercel 設定 FRED_API_KEY 後可自動取得">需 FRED 金鑰</span>' : r.key ? '' : '<span class="pill">手動</span>'}</div>
     <div class="ind-vals">
       <label><span>最新${r.unit ? `（${esc(r.unit)}）` : ''}</span><input type="text" inputmode="decimal" data-macro="${i}" data-f="latest" value="${esc(fmtVal(r))}"></label>
       <label><span>前值</span><input type="text" inputmode="decimal" data-macro="${i}" data-f="prev" value="${esc(r.prev)}"></label>
       <div class="ind-dir" data-dir="${i}">${dirOf(r)}</div>
     </div>
     ${extra}
-    ${auto ? `<div class="ind-src">資料期間 ${esc(r.date)}（前值 ${esc(r.prevDate || '')}）· ${esc(r.src || '')}</div>` : ''}
+    ${auto ? `<div class="ind-src">資料日期 ${esc(r.date)}（前值 ${esc(r.prevDate || '')}）· ${esc(r.src || '')}</div>` : ''}
     <input type="text" class="ind-imp" placeholder="對利率／市場的意涵" data-macro="${i}" data-f="implication" value="${esc(r.implication)}">
     <label class="ind-next"><span>下次公布</span><input type="date" data-macro="${i}" data-f="next" value="${esc(r.next)}"></label>
   </div>`;
@@ -344,16 +345,17 @@ async function fetchMacro(silent) {
     let n = 0;
     S.macro.rows.forEach(row => {
       const d = row.key && j.data[row.key]; if (!d) return;
-      row.latest = String(d.latest); row.prev = String(d.prev); row.date = d.date.slice(0, 7 + (/(DGS10|DEXTAUS|ICSA|DFEDTAR)/.test(d.source) ? 3 : 0));
-      row.prevDate = d.prevDate.slice(0, row.date.length); row.unit = d.unit; row.src = d.source.replace(/^FRED\s*/, '');
+      row.latest = String(d.latest); row.prev = String(d.prev); row.date = d.date;
+      row.prevDate = d.prevDate; row.unit = d.unit; row.src = d.source;
       row.extra = row.key === 'cpi' ? `核心 CPI：${d.corePrev}% → ${d.core}%` : row.key === 'ffr' ? `目標區間 ${d.label}${d.effective != null ? `，有效利率 ${d.effective}%` : ''}` : '';
       n++;
     });
     if (!n) throw new Error('資料來源暫時無回應');
-    S.macro.fetchedAt = j.updated; S.macro.fetchError = j.errors?.length ? `${j.errors.length} 項抓取失敗` : '';
+    S.macro.fetchedAt = j.updated; S.macro.fetchError = j.errors?.length ? '部分來源失敗：' + j.errors.join('；') : '';
+    S.macro.noKey = !j.fredKey;
     if (!silent) toast(`已更新 ${n} 項指標`);
   } catch (e) {
-    S.macro.fetchError = '更新失敗，請稍後再試'; if (!silent) toast('更新失敗：' + e.message);
+    S.macro.fetchError = '更新失敗：' + (e.name === 'TimeoutError' ? '連線逾時' : e.message); if (!silent) toast(S.macro.fetchError);
   } finally {
     S.macro.fetching = false; save();
     if (current === 'macro' || current === 'home') render();
