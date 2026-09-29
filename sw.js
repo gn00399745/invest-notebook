@@ -1,5 +1,5 @@
 // 離線快取：網路優先，失敗時用快取（確保更新後立即生效）
-const CACHE = 'invest-notebook-v1';
+const CACHE = 'invest-notebook-v2';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS))); self.skipWaiting(); });
 self.addEventListener('activate', e => {

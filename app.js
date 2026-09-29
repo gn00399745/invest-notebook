@@ -12,17 +12,17 @@ const pct = (n, d = 1) => n == null || !isFinite(n) ? '—' : (n > 0 ? '+' : '')
 
 /* ---------- 預設資料 ---------- */
 const MACRO_INDICATORS = [
-  ['CPI（含核心）', '消費者物價；高於預期→升息壓力、壓抑估值'],
-  ['PPI', '生產端成本；領先 CPI，影響企業毛利'],
-  ['核心 PCE', 'Fed 主要參考的通膨指標'],
-  ['非農就業', '就業動能；過熱→降息延後'],
-  ['失業率', '上升過快→衰退風險'],
-  ['初領失業金', '週頻，最快反映就業轉弱'],
-  ['聯邦基金利率', '資金成本基準'],
-  ['美國 10 年期公債殖利率', '估值折現率；上升壓成長股'],
-  ['美元兌新台幣', '台幣貶→出口股受惠、外資可能匯出'],
-  ['台灣景氣對策信號', '國發會燈號，判斷台灣景氣位置'],
-  ['台灣出口年增率', '電子供應鏈需求的即時溫度計'],
+  ['CPI（含核心）', '消費者物價；高於預期→升息壓力、壓抑估值', 'cpi'],
+  ['PPI', '生產端成本；領先 CPI，影響企業毛利', 'ppi'],
+  ['核心 PCE', 'Fed 主要參考的通膨指標', 'pce'],
+  ['非農就業', '就業動能；過熱→降息延後', 'nfp'],
+  ['失業率', '上升過快→衰退風險', 'unrate'],
+  ['初領失業金', '週頻，最快反映就業轉弱', 'claims'],
+  ['聯邦基金利率', '資金成本基準', 'ffr'],
+  ['美國 10 年期公債殖利率', '估值折現率；上升壓成長股', 'us10y'],
+  ['美元兌新台幣', '台幣貶→出口股受惠、外資可能匯出', 'usdtwd'],
+  ['台灣景氣對策信號', '國發會燈號，判斷台灣景氣位置（手動填寫）', ''],
+  ['台灣出口年增率', '電子供應鏈需求的即時溫度計（手動填寫）', ''],
 ];
 const LAYERS = [
   ['終端需求與變現', '企業與消費者付費使用 AI 應用', '整條鏈的金流源頭'],
@@ -47,7 +47,7 @@ const VAL_ROWS = ['相對估值（本益比、EV/EBITDA 對同業）', '現金�
 function defaultState() {
   return {
     macro: {
-      rows: MACRO_INDICATORS.map(([name, hint]) => ({ name, hint, latest: '', prev: '', implication: '', next: '' })),
+      rows: MACRO_INDICATORS.map(([name, hint, key]) => ({ name, hint, key, latest: '', prev: '', implication: '', next: '' })),
       fedNote: '', growth: '', inflation: '', keywords: '',
     },
     events: [], impacts: [],
@@ -68,10 +68,11 @@ function defaultState() {
 }
 
 let S = load();
+S.macro.rows.forEach(r => { const d = MACRO_INDICATORS.find(m => m[0] === r.name); if (d) { r.key = d[2]; r.hint = d[1]; } });
 function load() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if (raw) return Object.assign(defaultState(), JSON.parse(raw));
+    if (raw) { const o = Object.assign(defaultState(), JSON.parse(raw)); o.macro.fetching = false; return o; }
   } catch (e) { /* ignore */ }
   return defaultState();
 }
@@ -270,18 +271,11 @@ PAGES.macro = () => `
   <h2>總經與行事曆</h2>
   <p class="lead">重點不在數字高低，而在它怎麼影響利率與你的部位。每月數據公布後更新一次，並寫一句 Fed 判讀。</p>
   <div class="card">
-    <div class="card-head"><h3 class="gold-bar">指標追蹤</h3><button class="btn-small ghost" data-ai="macro">產生 AI 更新提示</button></div>
-    <div class="tbl-wrap"><table>
-      <thead><tr><th>指標</th><th>最新值</th><th>前值</th><th>方向</th><th>對利率／市場的意涵</th><th>下次公布</th></tr></thead>
-      <tbody>${S.macro.rows.map((r, i) => `<tr>
-        <td><b>${esc(r.name)}</b><div class="r-meta" style="font-size:11px;color:var(--muted)">${esc(r.hint || '')}</div></td>
-        <td><input data-macro="${i}" data-f="latest" value="${esc(r.latest)}" style="width:80px"></td>
-        <td><input data-macro="${i}" data-f="prev" value="${esc(r.prev)}" style="width:80px"></td>
-        <td class="dir" data-dir="${i}">${dirOf(r)}</td>
-        <td><input data-macro="${i}" data-f="implication" value="${esc(r.implication)}" style="min-width:160px"></td>
-        <td><input type="date" data-macro="${i}" data-f="next" value="${esc(r.next)}"></td>
-      </tr>`).join('')}</tbody>
-    </table></div>
+    <div class="card-head"><h3 class="gold-bar">指標追蹤</h3>
+      <div class="btn-row"><button class="btn-small" id="fetchMacro">↻ 更新數據</button><button class="btn-small ghost" data-ai="macro">AI 提示</button></div></div>
+    <div class="r-meta" id="macroStatus" style="margin-bottom:10px">${macroStatus()}</div>
+    ${inflationHint()}
+    <div class="ind-grid">${S.macro.rows.map((r, i) => indCard(r, i)).join('')}</div>
     <div class="note">CPI 看消費者物價，PPI 看生產端成本，PCE 是 Fed 主要參考的通膨指標。</div>
     <label class="f"><span>本月 Fed 判讀（一句話）</span><input type="text" data-bind="macro.fedNote" value="${esc(S.macro.fedNote)}"></label>
   </div>
@@ -306,6 +300,64 @@ PAGES.macro = () => `
     <h3 class="gold-bar">新聞過濾關鍵字</h3>
     <label class="f"><span>只追蹤與持股及關注產業相關的關鍵字（逗號或換行分隔）</span><textarea data-bind="macro.keywords">${esc(S.macro.keywords)}</textarea></label>
   </div>`;
+function macroStatus() {
+  if (S.macro.fetching) return '資料更新中…';
+  if (!S.macro.fetchedAt) return '按「更新數據」自動帶入美國總經數據（來源：FRED 聖路易聯準銀行）。台灣指標請手動填寫。';
+  const t = new Date(S.macro.fetchedAt);
+  return `已於 ${t.toLocaleString('zh-TW', { hour12: false })} 自動更新（來源：FRED）${S.macro.fetchError ? `，<span class="down">${esc(S.macro.fetchError)}</span>` : ''}`;
+}
+function fmtVal(r) {
+  if (r.latest === '' || r.latest == null) return '';
+  return r.latest;
+}
+function indCard(r, i) {
+  const auto = !!r.key && !!r.date;
+  const extra = r.extra ? `<div class="ind-extra">${esc(r.extra)}</div>` : '';
+  return `<div class="ind">
+    <div class="ind-top"><div><div class="ind-name">${esc(r.name)}</div><div class="ind-hint">${esc(r.hint || '')}</div></div>
+      ${auto ? '<span class="pill green">自動</span>' : r.key ? '' : '<span class="pill">手動</span>'}</div>
+    <div class="ind-vals">
+      <label><span>最新${r.unit ? `（${esc(r.unit)}）` : ''}</span><input type="text" inputmode="decimal" data-macro="${i}" data-f="latest" value="${esc(fmtVal(r))}"></label>
+      <label><span>前值</span><input type="text" inputmode="decimal" data-macro="${i}" data-f="prev" value="${esc(r.prev)}"></label>
+      <div class="ind-dir" data-dir="${i}">${dirOf(r)}</div>
+    </div>
+    ${extra}
+    ${auto ? `<div class="ind-src">資料期間 ${esc(r.date)}（前值 ${esc(r.prevDate || '')}）· ${esc(r.src || '')}</div>` : ''}
+    <input type="text" class="ind-imp" placeholder="對利率／市場的意涵" data-macro="${i}" data-f="implication" value="${esc(r.implication)}">
+    <label class="ind-next"><span>下次公布</span><input type="date" data-macro="${i}" data-f="next" value="${esc(r.next)}"></label>
+  </div>`;
+}
+function inflationHint() {
+  const c = S.macro.rows.find(r => r.key === 'cpi'), u = S.macro.rows.find(r => r.key === 'unrate'), n = S.macro.rows.find(r => r.key === 'nfp');
+  if (!c?.date) return '';
+  const inf = num(c.latest) > num(c.prev) ? '上升' : num(c.latest) < num(c.prev) ? '下降' : '持平';
+  const weak = (num(u?.latest) > num(u?.prev)) || (num(n?.latest) < num(n?.prev));
+  return `<div class="note">數據參考：CPI 年增 ${esc(c.prev)}% → ${esc(c.latest)}%，通膨偏<b>${inf}</b>；就業${weak ? '轉弱，成長動能偏<b>下降</b>' : '穩健，成長動能偏<b>上升</b>'}。象限仍由你判斷。</div>`;
+}
+async function fetchMacro(silent) {
+  if (S.macro.fetching) return;
+  S.macro.fetching = true; if (current === 'macro') $('#macroStatus').innerHTML = macroStatus();
+  try {
+    const r = await fetch('api/macro', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    let n = 0;
+    S.macro.rows.forEach(row => {
+      const d = row.key && j.data[row.key]; if (!d) return;
+      row.latest = String(d.latest); row.prev = String(d.prev); row.date = d.date.slice(0, 7 + (/(DGS10|DEXTAUS|ICSA|DFEDTAR)/.test(d.source) ? 3 : 0));
+      row.prevDate = d.prevDate.slice(0, row.date.length); row.unit = d.unit; row.src = d.source.replace(/^FRED\s*/, '');
+      row.extra = row.key === 'cpi' ? `核心 CPI：${d.corePrev}% → ${d.core}%` : row.key === 'ffr' ? `目標區間 ${d.label}${d.effective != null ? `，有效利率 ${d.effective}%` : ''}` : '';
+      n++;
+    });
+    S.macro.fetchedAt = j.updated; S.macro.fetchError = j.errors?.length ? `${j.errors.length} 項抓取失敗` : '';
+    if (!silent) toast(`已更新 ${n} 項指標`);
+  } catch (e) {
+    S.macro.fetchError = '更新失敗，請稍後再試'; if (!silent) toast('更新失敗：' + e.message);
+  } finally {
+    S.macro.fetching = false; save();
+    if (current === 'macro' || current === 'home') render();
+  }
+}
 function quadHTML() {
   const k = `${S.macro.growth}|${S.macro.inflation}`;
   const cell = key => { const q = QUADS[key]; return `<div class="${k === key ? 'on' : ''}"><b>${q.name}</b>${q.tilt}</div>`; };
@@ -499,7 +551,7 @@ function aiCardPrompt(c) {
 目前股價：${c.price || '（未填）'}；研究日：${c.date}。`;
 }
 function aiMacroPrompt() {
-  return `請幫我更新以下總經指標的「最新值、前值、下次公布日期」，並各用一句話說明對利率與股市的意涵。每個數字附來源與公布日期，找不到就留白：
+  return `請幫我查以下總經指標的「最新值、前值、下次公布日期」，並各用一句話說明對利率與股市的意涵。每個數字附來源與公布日期，找不到就留白：
 ${S.macro.rows.map(r => `- ${r.name}`).join('\n')}
 
 最後請：
@@ -733,8 +785,25 @@ function go(page) {
   if (location.hash !== '#' + page) history.replaceState(null, '', '#' + page);
   render(); window.scrollTo(0, 0);
 }
+function stackTables(root) {
+  // 為每個儲存格加上欄名，手機版以卡片方式顯示
+  root.querySelectorAll('table').forEach(t => {
+    const heads = [...t.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    t.classList.add('stack');
+    t.querySelectorAll('tbody tr').forEach(tr => {
+      [...tr.children].forEach((td, i) => {
+        if (i === 0) td.classList.add('t-head');
+        td.dataset.label = heads[i] || '';
+        if (!heads[i] && !td.querySelector('input,select,button') && !td.textContent.trim()) td.classList.add('t-empty');
+      });
+    });
+  });
+}
 function render() {
+  if ((current === 'macro' || current === 'home') && !S.macro.fetching && location.protocol.startsWith('http') &&
+      (!S.macro.fetchedAt || Date.now() - new Date(S.macro.fetchedAt) > 6 * 3600e3) && !render._tried) { render._tried = true; setTimeout(() => fetchMacro(true), 50); }
   $('#view').innerHTML = PAGES[current]();
+  stackTables($('#view'));
   if (current === 'strategy') calcStrategy();
 }
 
@@ -760,6 +829,7 @@ document.addEventListener('click', e => {
       c.monitored = '是'; save(); go('monitor'); editRecord('monitors', S.monitors[S.monitors.length - 1].id); break;
     }
     case 'addEtf': editEtf(); break;
+    case 'fetchMacro': fetchMacro(false); break;
     case 'allocAdd': S.alloc.push({ name: '新類別', target: 0, value: '' }); save(); render(); break;
     case 'copyReport': copy(`每個交易日收盤後，請整理一份盤後報告：\n關注清單：${S.report.watchlist}\n內容：${S.report.content}\n\n另外檢查以下監控條件是否觸發：\n${S.monitors.filter(m => m.status === '啟用').map(m => `- ${m.target}：${m.cond}`).join('\n') || '（無）'}\n\n只整理事實與數據並附來源，不給買賣建議。`); break;
     case 'exportBtn': {

@@ -212,3 +212,58 @@ dialog form { padding: 18px; }
   .card { padding: 14px 12px; }
   h2 { font-size: 20px; }
 }
+
+/* ---------- 手機：表格改為卡片式 ---------- */
+@media (max-width: 720px) {
+  table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; width: 100%; }
+  table.stack thead { display: none; }
+  table.stack tr {
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: var(--bg);
+  }
+  table.stack td {
+    border: 0; padding: 4px 0; display: grid; grid-template-columns: 84px 1fr; gap: 8px; align-items: center;
+    text-align: left !important;
+  }
+  table.stack td::before { content: attr(data-label); font-size: 12px; color: var(--muted); }
+  table.stack td.t-head { display: block; padding: 0 0 6px; margin-bottom: 4px; border-bottom: 1px dashed var(--line); font-size: 15px; }
+  table.stack td.t-head::before { content: none; }
+  table.stack td.t-empty { display: none; }
+  table.stack td input, table.stack td select { width: 100% !important; min-width: 0 !important; }
+  .tbl-wrap { overflow: visible; }
+  .inline { grid-template-columns: 1fr 1fr; }
+  .card-head .btn-small { padding: 5px 9px; }
+  .tabs { top: calc(60px + env(safe-area-inset-top)); }
+  .title { font-size: 17px; }
+  .subtitle { font-size: 11px; }
+}
+
+/* 總經指標卡片 */
+.ind-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.ind { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--card); }
+.ind-top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.ind-name { font-weight: 700; font-size: 15px; }
+.ind-hint { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.ind-vals { display: grid; grid-template-columns: 1fr 1fr 34px; gap: 8px; align-items: end; margin-top: 8px; }
+.ind-vals label span, .ind-next span { display: block; font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.ind-vals input { font-size: 17px; font-weight: 700; padding: 6px 8px; }
+.ind-dir { font-size: 20px; text-align: center; padding-bottom: 6px; }
+.ind-extra { font-size: 13px; margin-top: 6px; color: var(--navy-2); font-weight: 600; }
+@media (prefers-color-scheme: dark) { .ind-extra { color: var(--gold-2); } }
+.ind-src { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.ind-imp { margin-top: 8px; font-size: 14px !important; }
+.ind-next { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.ind-next span { margin: 0; white-space: nowrap; }
+.ind-next input { padding: 5px 8px; font-size: 14px; }
+@media (max-width: 720px) {
+  .ind-grid { grid-template-columns: 1fr; }
+  table.stack tr { background: var(--card); }
+  table.stack td:has(> button:only-child) { display: flex; justify-content: flex-end; padding-top: 6px; }
+  table.stack td:has(> button:only-child)::before { content: none; }
+}
+@media (max-width: 720px) {
+  table.stack tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+  table.stack td { display: block; padding: 0; }
+  table.stack td::before { display: block; margin-bottom: 2px; }
+  table.stack td.t-head { grid-column: 1 / -1; }
+  table.stack td:has(> button:only-child) { grid-column: 1 / -1; padding-top: 2px; }
+}
