@@ -70,7 +70,7 @@ function defaultState() {
       { name: '現金', target: 10, value: '' },
     ],
     rules: '1. 每筆交易最大虧損不超過總資金 1%\n2. 進場前先寫下「證明我錯的條件」\n3. 單一個股不超過總資產 10%\n4. 配置偏離目標超過 5 個百分點才再平衡',
-    monitors: [], claims: [], reviews: [],
+    monitors: [], claims: [], reviews: [], trades: [],
     report: { watchlist: '', content: '當天公布財報的關注公司、台股籌碼摘要、隔日美股與匯率', schedule: '' },
     backtest: {},
   };
@@ -527,7 +527,7 @@ function cardEditor(c) {
       <label class="f"><span>代號</span>${inp('code', c.code)}</label>
       <label class="f"><span>名稱</span>${inp('name', c.name)}</label>
       <label class="f"><span>市場</span><select data-card-f="market">${['台股', '美股', '其他'].map(o => `<option ${o === c.market ? 'selected' : ''}>${o}</option>`).join('')}</select></label>
-      <label class="f"><span>所在層</span><select data-card-f="layer"><option value="">—</option>${LAYERS.map((l, i) => { const v = `${i + 1} ${l[0]}`; return `<option ${v === c.layer ? 'selected' : ''}>${v}</option>`; }).join('')}<option ${c.layer === '非 AI 供應鏈' ? 'selected' : ''}>非 AI 供應鏈</option></select></label>
+      <label class="f"><span>所在層（供應鏈）</span>${layerSelectHTML(c.layer)}</label>
       <label class="f"><span>研究日</span><input type="date" data-card-f="date" value="${esc(c.date)}"></label>
       <label class="f"><span>目前股價</span>${inp('price', c.price, 'inputmode="decimal"')}</label>
     </div>
@@ -535,7 +535,8 @@ function cardEditor(c) {
   ${c.auto ? `<div class="card"><h3 class="gold-bar">自動資料摘要</h3><div class="r-body" style="white-space:pre-wrap;color:var(--text)">${esc(c.auto.summary)}</div>
     <div class="help" style="margin-top:6px">更新於 ${esc(new Date(c.auto.at).toLocaleString('zh-TW', { hour12: false }))}；自動填入的欄位標有「自動」。數字來自公開資料，仍請自行核對。${c.auto.errors?.length ? `<br><span class="down">部分資料抓取失敗：${esc(c.auto.errors.join('；'))}</span>` : ''}</div></div>` : ''}
   <div class="card">
-    <h3 class="gold-bar">六面向燈號</h3>
+    <div class="card-head" style="margin-bottom:0"><h3 class="gold-bar">六面向燈號</h3><button class="btn-small ghost" id="relight">依最新資料重算燈號</button></div>
+    ${srcLinks(c, 'industry')}
     <div class="help" style="margin-bottom:6px">綠＝加分、黃＝中性待觀察、紅＝扣分。財報、估值、技術、籌碼四項可由「自動帶入」給出建議，產業位置與管理層指引需要自己判斷。</div>
     <div class="tbl-wrap"><table><thead><tr><th>面向</th><th>燈號</th><th>一句話判讀</th></tr></thead><tbody>
     ${DIMENSIONS.map((d, i) => `<tr><td><b>${d}</b>${helpTxt(HELP.dim[i])}</td><td><select data-card-f="lights.${i}.c">${['', '綠', '黃', '紅'].map(o => `<option ${o === c.lights[i].c ? 'selected' : ''} value="${o}">${o || '—'}</option>`).join('')}</select></td><td>${cta(`lights.${i}.note`, c.lights[i].note)}</td></tr>`).join('')}
@@ -551,6 +552,7 @@ function cardEditor(c) {
   </div>
   <div class="card">
     <h3 class="gold-bar">二、法說會</h3>
+    ${srcLinks(c, 'guide')}
     <label class="f"><span>管理層指引（營收、毛利率區間；上修或下修多少）</span>${ta('guidance', c.guidance)}</label>
     <label class="f"><span>關鍵原話（標日期）</span>${ta('quotes', c.quotes)}</label>
     <label class="f"><span>分析師問答重點</span>${ta('qa', c.qa)}</label>
@@ -561,11 +563,14 @@ function cardEditor(c) {
     <div class="tbl-wrap"><table><thead><tr><th>方法</th><th>關鍵假設</th><th>合理價</th><th>備註</th></tr></thead><tbody>
     ${VAL_ROWS.map((nm, i) => `<tr><td>${nm}${helpTxt(HELP.val[i])}</td><td>${cta(`val.${i}.assume`, c.val[i].assume)}</td><td>${inp(`val.${i}.fair`, c.val[i].fair, 'inputmode="decimal" style="width:90px"')}</td><td>${cta(`val.${i}.note`, c.val[i].note)}</td></tr>`).join('')}
     </tbody></table></div>
+    ${srcLinks(c, 'val')}
+    ${dcfHTML(c)}
     <div class="result" id="valResult">${valResultHTML(c, vs)}</div>
     <label class="f" style="margin-top:8px"><span>三法差距很大時，先檢查哪個假設最脆弱</span>${ta('valCheck', c.valCheck)}</label>
   </div>
   <div class="card">
     <h3 class="gold-bar">四、技術面</h3>
+    ${chartHTML(c)}
     <div class="tbl-wrap"><table><thead><tr><th>項目</th><th>讀數</th><th>判讀</th></tr></thead><tbody>
     ${TECH_ROWS.map((nm, i) => `<tr><td>${nm}${helpTxt(HELP.tech[i])}</td><td>${cta(`tech.${i}.read`, c.tech[i].read)}</td><td>${cta(`tech.${i}.judge`, c.tech[i].judge)}</td></tr>`).join('')}
     </tbody></table></div>
@@ -586,6 +591,8 @@ function cardEditor(c) {
     <div class="btn-row" style="align-items:center">
       <label class="f" style="margin:0;flex:1"><span>監控條件已寫入「監控」分頁</span><select data-card-f="monitored">${['否', '是'].map(o => `<option ${o === c.monitored ? 'selected' : ''}>${o}</option>`).join('')}</select></label>
       <button class="btn-small" id="cardToMonitor">＋ 建立監控條件</button>
+      <button class="btn-small ghost" id="cardToSize">用這檔算部位</button>
+      <button class="btn-small ghost" id="cardToTrade">記錄買進</button>
     </div>
   </div>`;
 }
@@ -638,7 +645,8 @@ async function autoFillCard(c, quiet) {
   (d.val || []).forEach((v, i) => { const row = c.val[i]; if (row && (isBlankish(row.assume) || !row.fair || c.auto)) Object.assign(row, v); });
   const L = (i, color, note) => { if (!color) return; const l = c.lights[i]; if (!l.c || isBlankish(l.note) || l.auto) { l.c = color; l.note = '【自動】' + note; l.auto = true; } };
   L(1, d.finLight, d.finNote); L(3, d.valLight, d.valNote); L(4, d.tech?.light, d.tech?.lightNote); L(5, d.chipLight, d.chipNote);
-  if (!c.verdict) {
+  if (window.afterAutoFill) afterAutoFill(c, d);
+  if (!c.verdict || c.verdict.startsWith('【自動草稿】')) {
     const g = c.lights.filter(l => l.c === '綠').length, r = c.lights.filter(l => l.c === '紅').length;
     c.verdict = `【自動草稿】${c.name || c.code}：綠燈 ${g}、紅燈 ${r}。${g > r ? '體質與趨勢偏正面，' : r > g ? '有明顯扣分項，' : '好壞參半，'}請補上產業位置與管理層指引後再下結論。`;
   }
@@ -869,7 +877,7 @@ function calcStrategy() {
       <dt>建議股數</dt><dd class="big" style="font-size:18px">${fmt(shares)} 股${lot === 1000 ? `（${fmt(shares / 1000)} 張）` : ''}</dd>
       <dt>部位金額</dt><dd>${fmt(posVal)}（佔總資金 ${posPct.toFixed(1)}%）</dd>
       ${rr != null ? `<dt>風險報酬比</dt><dd class="${rr >= 2 ? 'up' : 'down'}">1 : ${rr.toFixed(2)}${rr < 2 ? '（低於 1:2）' : ''}</dd>` : ''}
-      </dl>${shares === 0 ? '<div class="note">停損距離太大或資金太小，連一個交易單位都買不起；可改零股或放寬單筆風險。</div>' : ''}${posPct > 100 ? '<div class="note">部位超過總資金，代表停損設得太近，請重新檢查。</div>' : ''}`;
+      </dl>${shares === 0 ? `<div class="note">資金規模買不到一整張。<b>改買零股：最多 ${fmt(Math.floor(riskAmt / perShare))} 股</b>（約 ${fmt(Math.floor(riskAmt / perShare) * entry)} 元）；或把停損設近一點、提高單筆可承受虧損。</div>` : ''}${posPct > 100 ? '<div class="note">部位超過總資金，代表停損設得太近，請重新檢查。</div>' : ''}`;
   }
   $('#psResult').innerHTML = html;
   const m = g('dca_m'), y = g('dca_y'), r = g('dca_r');
@@ -1060,13 +1068,4 @@ $('#installBtn').addEventListener('click', async () => {
 });
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 
-window.addEventListener('hashchange', () => { const p = location.hash.slice(1); if (p && p !== current) go(p); });
-if (S.examplesSeeded !== window.EXAMPLES?.version) { seedExamples(); save(); }
-macroAutoFill(); save();
-if (location.protocol.startsWith('http') && (!S.macro.fetchedAt || Date.now() - new Date(S.macro.fetchedAt) > 6 * 3600e3)) { render._tried = true; setTimeout(() => fetchMacro(true), 300); }
-// 範例卡第一次開啟時，在背景自動帶入最新資料
-setTimeout(async () => {
-  if (!location.protocol.startsWith('http')) return;
-  for (const c of S.cards.filter(c => c.example && !c.auto)) { await autoFillCard(c, true); }
-}, 1500);
-go(location.hash.slice(1) || 'home');
+// 啟動流程移到 features.js 最後（確保新功能已載入）
