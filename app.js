@@ -77,6 +77,13 @@ function seedExamples(force) {
     if (S.cards.some(x => x.code === c.code)) return;
     S.cards.push(Object.assign(blankCard(), JSON.parse(JSON.stringify(c)))); n++;
   });
+  (E.etfs || []).forEach(e => {
+    if (S.etfs.some(x => x.name === e.name)) return;
+    const id = uid(); S.etfs.push({ id, ...e }); n++;
+    if (E.etfAlloc?.[e.name] != null && S.etfAlloc[id] == null) S.etfAlloc[id] = E.etfAlloc[e.name];
+  });
+  (E.etfLog || []).forEach(l => { if (!S.etfLog.some(x => x.date === l.date && x.change === l.change)) { S.etfLog.push({ id: uid(), ...l }); n++; } });
+  (E.monitors || []).forEach(m => { if (!S.monitors.some(x => x.cond === m.cond)) { S.monitors.push({ id: uid(), ...m }); n++; } });
   S.examplesSeeded = E.version;
   return n;
 }
@@ -593,9 +600,10 @@ function etfStats(e) {
   const neff = tot ? 1 / h.reduce((s, x) => s + (x.w / 100) ** 2, 0) : null; // 以實際權重計算（未列出的成分視為極分散）
   return { h, top10, tot, neff };
 }
+const hKey = n => { const m = String(n).trim().match(/^([A-Za-z0-9.]+)(\s|$)/); return (m ? m[1] : n).toUpperCase(); };
 function overlap(a, b) {
-  const mb = new Map(parseHoldings(b.holdings).map(x => [x.name.toUpperCase(), x.w]));
-  return parseHoldings(a.holdings).reduce((s, x) => s + Math.min(x.w, mb.get(x.name.toUpperCase()) || 0), 0);
+  const mb = new Map(parseHoldings(b.holdings).map(x => [hKey(x.name), x.w]));
+  return parseHoldings(a.holdings).reduce((s, x) => s + Math.min(x.w, mb.get(hKey(x.name)) || 0), 0);
 }
 PAGES.etf = () => {
   const etfs = S.etfs;
@@ -611,7 +619,7 @@ PAGES.etf = () => {
   const allocTot = etfs.reduce((s, e) => s + (num(S.etfAlloc[e.id]) || 0), 0);
   const merged = new Map();
   etfs.forEach(e => { const a = num(S.etfAlloc[e.id]) || 0; parseHoldings(e.holdings).forEach(x => {
-    const k = x.name.toUpperCase(); const m = merged.get(k) || { name: x.name, w: 0, from: new Set() };
+    const k = hKey(x.name); const m = merged.get(k) || { name: x.name, w: 0, from: new Set() };
     m.w += a / (allocTot || 1) * x.w; m.from.add(e.name); merged.set(k, m); }); });
   const top = [...merged.values()].sort((a, b) => b.w - a.w).slice(0, 15);
   return `
@@ -622,6 +630,7 @@ PAGES.etf = () => {
     ${etfs.length ? `<div class="tbl-wrap"><table><thead><tr><th>ETF</th><th class="num">前十大權重</th><th class="num">有效檔數</th><th>主要產業</th><th>主要國家</th><th class="num">費用率</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty">新增 ETF 並貼上成分股權重（每行「代號 權重%」）。</div>'}
     <div class="note">有效檔數 N = 1 ÷ Σ(權重²)，數字越小代表越集中。例如 N = 12 代表風險分散程度約等於平均持有 12 檔。</div>
   </div>
+  ${etfs.some(e => e.note) ? `<div class="card"><h3 class="gold-bar">研究摘要</h3>${etfs.filter(e => e.note).map(e => `<div class="rec" data-etf="${e.id}"><div class="r-top"><span class="r-title">${esc(e.name)}${e.example ? ' <span class="pill gold">範例</span>' : ''}</span></div><div class="r-body" style="color:var(--text)">${esc(e.note)}</div></div>`).join('')}</div>` : ''}
   ${etfs.length > 1 ? `<div class="card"><h3 class="gold-bar">多檔重疊度</h3>
     <div class="tbl-wrap"><table><thead><tr><th>比較組合</th><th class="num">個股加權重疊</th><th>結論</th></tr></thead><tbody>${pairs}</tbody></table></div>
     <div class="note">加權重疊 = Σ min(A 權重, B 權重)。超過 50% 代表兩檔大致是同一份曝險。</div></div>` : ''}
@@ -642,7 +651,8 @@ function editEtf(id) {
   const F = [{ k: 'name', l: 'ETF 代號／名稱' }, { k: 'sector', l: '主要產業' }, { k: 'country', l: '主要國家' }, { k: 'fee', l: '費用率' }];
   openModal({
     title: e ? '編輯 ETF' : '新增 ETF',
-    body: F.map(f => fieldHTML(f, e?.[f.k])).join('') + `<label class="f"><span>成分股權重（每行「代號 權重%」，可直接從投信網站貼上）</span><textarea name="holdings" style="min-height:160px" placeholder="2330 45.2\n2317 5.1\n2454 4.3">${esc(e?.holdings || '')}</textarea></label>`,
+    body: F.map(f => fieldHTML(f, e?.[f.k])).join('') + `<label class="f"><span>成分股權重（每行「代號 權重%」，可直接從投信網站貼上）</span><textarea name="holdings" style="min-height:160px" placeholder="2330 台積電 45.2\n2317 鴻海 5.1\n2454 聯發科 4.3">${esc(e?.holdings || '')}</textarea></label>` +
+      `<label class="f"><span>研究摘要（事實、判讀分開寫，附資料日期）</span><textarea name="note" style="min-height:120px">${esc(e?.note || '')}</textarea></label>`,
     onSave: d => { if (e) Object.assign(e, d); else S.etfs.push({ id: uid(), ...d }); },
     onDelete: e ? () => { S.etfs = S.etfs.filter(x => x.id !== id); delete S.etfAlloc[id]; save(); } : null,
   });
@@ -786,7 +796,7 @@ PAGES.settings = () => `
       <li>安裝後可離線開啟。</li>
     </ul></div>
   <div class="card"><h3 class="gold-bar">範例資料</h3>
-    <p class="lead">重新加入十二層範例公司與台積電、SpaceX 研究卡（不會覆蓋你已填的內容）。</p>
+    <p class="lead">重新加入十二層範例公司、台積電與 SpaceX 研究卡、009816 ETF 健檢範例（不會覆蓋你已填的內容）。</p>
     <button class="btn-ghost" id="seedBtn">載入範例</button></div>
   <div class="card"><h3 class="gold-bar">重設</h3>
     <p class="lead">清除這台裝置上的所有筆記（無法復原）。</p>
