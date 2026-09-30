@@ -58,6 +58,7 @@ function technicals(bars, unit = '') {
       { read: `支撐 ${r(sup)}｜壓力 ${r(res)}（近 60 日低／高）`, judge: last - sup < res - last ? '較接近支撐' : '較接近壓力' },
       { read: v5 && v20 ? `5 日均量 ${Math.round(v5).toLocaleString()}｜20 日均量 ${Math.round(v20).toLocaleString()}${unit}` : '', judge: volJ },
     ],
+    num: { last: r(last), ma20: r(m20), ma60: r(m60), rsi: r(R, 1), chg20: r(chg20, 1), hi52: r(hi52), lo52: r(lo52), support: r(sup), resistance: r(res) },
     light: score >= 1 ? '綠' : score <= -1 ? '紅' : '黃',
     lightNote: `${trend.split('（')[0]}；RSI ${R == null ? '—' : r(R, 0)}；近 20 日 ${chg20 >= 0 ? '+' : ''}${r(chg20, 1)}%`,
   };
@@ -90,7 +91,7 @@ async function taiwan(code, errors) {
 
   // 股價與技術面
   const bars = px.filter(b => b.close > 0).map(b => ({ d: b.date, c: b.close, h: b.max, l: b.min, v: b.Trading_Volume / 1000 }));
-  if (bars.length > 30) { out.price = r(bars[bars.length - 1].c); out.priceDate = bars[bars.length - 1].d; out.tech = technicals(bars, ' 張'); }
+  if (bars.length > 30) { out.price = r(bars[bars.length - 1].c); out.priceDate = bars[bars.length - 1].d; out.tech = technicals(bars, ' 張'); out.spark = bars.slice(-250).map(b => [b.d, b.c]); }
 
   // 財報（單季）
   const byQ = {};
@@ -142,6 +143,12 @@ async function taiwan(code, errors) {
     // TTM EPS
     const last4 = qs.slice(-4).map(q => byQ[q].EPS).filter(x => x != null);
     if (last4.length === 4) out.epsTTM = r(last4.reduce((s, x) => s + x, 0));
+    // DCF 參數：近四季自由現金流、流通股數（股本 ÷ 面額 10 元）
+    const q4 = qs.slice(-4);
+    const fcfs = q4.map(q => { const o = ocfKey ? single(q, ocfKey) : null, c = capKey ? neg(single(q, capKey)) : null; return o != null && c != null ? o + c : null; });
+    const shareCap = Object.entries(bsMap[lastQ] || {}).find(([k]) => /^OrdinaryShare$|^CapitalStock$|^ShareCapital$/.test(k))?.[1];
+    const shares = shareCap ? shareCap / 10 : (A.IncomeAfterTaxes && A.EPS ? A.IncomeAfterTaxes / A.EPS : null);
+    if (fcfs.every(x => x != null) && shares) out.dcf = { fcfTTM: fcfs.reduce((a, b) => a + b, 0), shares, revG: r(revG, 1), currency: '元' };
   }
 
   // 月營收
@@ -149,6 +156,12 @@ async function taiwan(code, errors) {
     const m = mrev.sort((a, b) => a.date.localeCompare(b.date)); const L = m[m.length - 1];
     const ly = m.find(x => x.revenue_year === L.revenue_year - 1 && x.revenue_month === L.revenue_month);
     if (ly) out.monthRev = `${L.revenue_year}/${L.revenue_month} 月營收 ${r(L.revenue / 1e8, 1)} 億元，年增 ${r((L.revenue / ly.revenue - 1) * 100, 1)}%`;
+    const yoys = m.slice(-3).map(x => { const b = m.find(y => y.revenue_year === x.revenue_year - 1 && y.revenue_month === x.revenue_month); return b ? (x.revenue / b.revenue - 1) * 100 : null; }).filter(x => x != null);
+    if (yoys.length) {
+      const avg = yoys.reduce((a, b) => a + b, 0) / yoys.length;
+      out.guideLight = avg > 15 ? '綠' : avg < 0 ? '紅' : '黃';
+      out.guideNote = `近 ${yoys.length} 個月營收平均年增 ${r(avg, 1)}%（以營運動能暫代，請再用法說會指引覆核）`;
+    }
   }
 
   // 估值：TTM EPS × 近 3 年本益比中位數
@@ -211,7 +224,7 @@ async function stooqBars(sym) {
   return { bars };
 }
 async function yahooFin(sym) {
-  const types = ['quarterlyTotalRevenue', 'quarterlyGrossProfit', 'quarterlyOperatingIncome', 'quarterlyDilutedEPS', 'quarterlyBasicEPS', 'quarterlyOperatingCashFlow', 'quarterlyCapitalExpenditure', 'quarterlyFreeCashFlow', 'quarterlyInventory', 'trailingPeRatio'];
+  const types = ['quarterlyTotalRevenue', 'quarterlyGrossProfit', 'quarterlyOperatingIncome', 'quarterlyDilutedEPS', 'quarterlyBasicEPS', 'quarterlyOperatingCashFlow', 'quarterlyCapitalExpenditure', 'quarterlyFreeCashFlow', 'quarterlyInventory', 'trailingPeRatio', 'quarterlyDilutedAverageShares', 'quarterlyBasicAverageShares'];
   const p2 = Math.floor(Date.now() / 1000), p1 = p2 - 3 * 365 * 86400;
   const res = await fetch(`https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(sym)}?type=${types.join(',')}&period1=${p1}&period2=${p2}`, { signal: T(), headers: UA });
   if (!res.ok) throw new Error('Yahoo 財報 HTTP ' + res.status);
@@ -235,6 +248,13 @@ async function yahooFin(sym) {
   const src = `Yahoo Finance｜季末 ${L}${lyD ? ` vs ${lyD}` : '（無去年同期）'}`;
   return {
     quarter: L, epsTTM: epsArr.length === 4 ? r(epsArr.reduce((a, b) => a + b, 0)) : null,
+    dcf: (() => {
+      const f = (S.quarterlyFreeCashFlow || []).slice(-4).map(x => x.v);
+      const sh = (S.quarterlyDilutedAverageShares || S.quarterlyBasicAverageShares || []).slice(-1)[0]?.v;
+      return f.length === 4 && sh ? { fcfTTM: f.reduce((a, b) => a + b, 0), shares: sh, revG: R.cur && R.prev ? r((R.cur / R.prev - 1) * 100, 1) : null, currency: '美元' } : null;
+    })(),
+    guideLight: R.cur && R.prev ? ((R.cur / R.prev - 1) * 100 > 15 ? '綠' : R.cur < R.prev ? '紅' : '黃') : null,
+    guideNote: R.cur && R.prev ? `最新一季營收年增 ${r((R.cur / R.prev - 1) * 100, 1)}%（以營運動能暫代，請再用財報電話會議指引覆核）` : '',
     peHist: pes.length ? { med: pes[Math.floor(pes.length / 2)], lo: pes[Math.floor(pes.length * 0.25)], hi: pes[Math.floor(pes.length * 0.75)], cur: S.trailingPeRatio[S.trailingPeRatio.length - 1].v } : null,
     fin: [
       { cur: M(R.cur), prev: M(R.prev), src: `百萬美元｜${src}` },
@@ -311,7 +331,7 @@ async function us(code, errors) {
   const out = { market: '美股', code: code.toUpperCase(), currency: 'USD' };
   let px = null;
   try { px = await yahooBars(code); } catch (e) { errors.push(e.message); try { px = await stooqBars(code); } catch (e2) { errors.push(e2.message); } }
-  if (px?.bars?.length > 30) { const b = px.bars; out.price = r(b[b.length - 1].c); out.priceDate = b[b.length - 1].d; out.tech = technicals(b, ' 股'); if (px.name) out.name = px.name; }
+  if (px?.bars?.length > 30) { const b = px.bars; out.price = r(b[b.length - 1].c); out.priceDate = b[b.length - 1].d; out.tech = technicals(b, ' 股'); out.spark = b.slice(-250).map(x => [x.d, r(x.c)]); if (px.name) out.name = px.name; }
   let got = false;
   try {
     const f = await yahooFin(code); Object.assign(out, f); out.finQuarter = f.quarter; got = true;
@@ -333,6 +353,35 @@ async function us(code, errors) {
 module.exports = async (req, res) => {
   const code = String(req.query.code || '').trim().toUpperCase().replace(/\.TW$/, '');
   if (!code) { res.status(400).json({ error: '請提供 code' }); return; }
+  if (req.query.quote) {
+    // 輕量模式：只抓股價，計算技術指標（給持倉與監控用）
+    try {
+      let bars, name;
+      if (/^\d{4,6}[A-Z]?$/.test(code)) {
+        const [px, info] = await Promise.all([fm('TaiwanStockPrice', code, daysAgo(400)), fm('TaiwanStockInfo', code, '2000-01-01').catch(() => [])]);
+        bars = px.filter(b => b.close > 0).map(b => ({ d: b.date, c: b.close, h: b.max, l: b.min, v: b.Trading_Volume / 1000 }));
+        name = (info.find(x => x.stock_id === code) || info[0])?.stock_name;
+      } else { const y = await yahooBars(code); bars = y.bars; name = y.name; }
+      if (bars.length < 30) throw new Error('股價資料不足');
+      const t = technicals(bars);
+      res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=7200');
+      res.status(200).json({ code, name, price: t.num.last, priceDate: bars[bars.length - 1].d, market: /^\d/.test(code) ? '台股' : '美股', num: t.num });
+    } catch (e) { res.status(502).json({ code, error: e.message }); }
+    return;
+  }
+  if (req.query.history) {
+    try {
+      let bars;
+      if (/^\d{4,6}[A-Z]?$/.test(code)) bars = (await fm('TaiwanStockPrice', code, daysAgo(365 * 3 + 10))).filter(b => b.close > 0).map(b => [b.date, b.close]);
+      else {
+        const rr = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(code)}?range=5y&interval=1d`, { signal: T(), headers: UA });
+        const R = (await rr.json()).chart.result[0]; bars = R.timestamp.map((t, i) => [iso(t * 1000), r(R.indicators.quote[0].close[i])]).filter(b => b[1] != null);
+      }
+      res.setHeader('Cache-Control', 's-maxage=43200, stale-while-revalidate=86400');
+      res.status(200).json({ code, bars });
+    } catch (e) { res.status(502).json({ code, error: e.message }); }
+    return;
+  }
   const errors = [];
   req_debug = req.query.debug === '1';
   let out;
