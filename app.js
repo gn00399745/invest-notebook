@@ -43,6 +43,15 @@ const FIN_ROWS = [['營收', 'amt'], ['毛利率', 'pct'], ['營業利益率', '
 const TECH_ROWS = ['趨勢（均線排列）', 'RSI', 'MACD', '布林通道', '型態（W 底、M 頭等）', '支撐／壓力', '量價分佈'];
 const CHIP_ROWS = ['外資買賣超', '投信買賣超', '自營商買賣超', '融資餘額變化', '融券餘額變化', '主力分點集中度', '大股東持股增減'];
 const VAL_ROWS = ['相對估值（本益比、EV/EBITDA 對同業）', '現金流折現 DCF', '分析師共識'];
+// 給投資新手的白話說明
+const HELP = {
+  dim: ['公司在產業鏈裡是不是關鍵、別人難取代', '賺錢能力有沒有變好（營收、毛利、現金流）', '公司對未來的說法是樂觀還是保守', '現在股價貴不貴（跟自己歷史、跟同業比）', '股價走勢與買賣力道', '法人與大戶在買還是在賣'],
+  fin: ['公司這一季總共賣了多少錢', '每賣 100 元扣掉成本後剩多少毛利；越高代表越有定價能力', '再扣掉管銷研發後的本業利潤率', '每股賺多少錢，是估值最常用的基礎', '本業實際收進來的現金；長期低於獲利要小心', '營業現金流扣掉資本支出，真正能自由運用的錢', '蓋廠、買設備花的錢；成長股通常很高', '還沒賣掉的貨；增加太快可能是需求轉弱'],
+  val: ['拿本益比跟自己過去或同業比，看現在貴還是便宜', '把未來現金流折回現在的價值，假設影響很大', '券商分析師的平均目標價，僅供參考'],
+  tech: ['股價在均線之上且均線向上＝多頭；反之為空頭', '0～100，>70 偏熱、<30 偏冷', '動能指標，柱狀體由負轉正代表動能轉強', '股價波動的通道，碰上軌偏強、碰下軌偏弱', '股價在一年高低區間的位置', '近期容易止跌（支撐）或遇到賣壓（壓力）的價位', '成交量有沒有放大，量增價漲通常比較健康'],
+  chip: ['外國法人的買賣，台股影響力最大', '國內投信（基金）的買賣，常有作帳行情', '券商自營部的買賣，偏短線', '散戶借錢買股的總量；增加太快代表槓桿升高', '借券放空的總量；增加代表看空的人變多', '少數券商分點是否集中買進（需另查）', '董監事與大股東持股變化（需另查）'],
+};
+const helpTxt = t => (t ? `<div class="help">${esc(t)}</div>` : '');
 
 function defaultState() {
   return {
@@ -449,7 +458,8 @@ function cardEditor(c) {
   return `
   <div class="btn-row" style="margin-bottom:10px">
     <button class="btn-small ghost" id="backCards">← 返回清單</button><span class="spacer"></span>
-    <button class="btn-small ghost" data-ai="card">產生 AI 研究提示</button>
+    <button class="btn-small" id="autoFill">⚡ 自動帶入資料</button>
+    <button class="btn-small ghost" data-ai="card">AI 研究提示</button>
     <button class="btn-small ghost" id="cardMd">匯出 Markdown</button>
     <button class="btn-danger btn-small" id="delCard" style="background:transparent">刪除</button>
   </div>
@@ -465,17 +475,20 @@ function cardEditor(c) {
       <label class="f"><span>目前股價</span>${inp('price', c.price, 'inputmode="decimal"')}</label>
     </div>
   </div>
+  ${c.auto ? `<div class="card"><h3 class="gold-bar">自動資料摘要</h3><div class="r-body" style="white-space:pre-wrap;color:var(--text)">${esc(c.auto.summary)}</div>
+    <div class="help" style="margin-top:6px">更新於 ${esc(new Date(c.auto.at).toLocaleString('zh-TW', { hour12: false }))}；自動填入的欄位標有「自動」。數字來自公開資料，仍請自行核對。${c.auto.errors?.length ? `<br><span class="down">部分資料抓取失敗：${esc(c.auto.errors.join('；'))}</span>` : ''}</div></div>` : ''}
   <div class="card">
     <h3 class="gold-bar">六面向燈號</h3>
+    <div class="help" style="margin-bottom:6px">綠＝加分、黃＝中性待觀察、紅＝扣分。財報、估值、技術、籌碼四項可由「自動帶入」給出建議，產業位置與管理層指引需要自己判斷。</div>
     <div class="tbl-wrap"><table><thead><tr><th>面向</th><th>燈號</th><th>一句話判讀</th></tr></thead><tbody>
-    ${DIMENSIONS.map((d, i) => `<tr><td><b>${d}</b></td><td><select data-card-f="lights.${i}.c">${['', '綠', '黃', '紅'].map(o => `<option ${o === c.lights[i].c ? 'selected' : ''} value="${o}">${o || '—'}</option>`).join('')}</select></td><td>${cta(`lights.${i}.note`, c.lights[i].note)}</td></tr>`).join('')}
+    ${DIMENSIONS.map((d, i) => `<tr><td><b>${d}</b>${helpTxt(HELP.dim[i])}</td><td><select data-card-f="lights.${i}.c">${['', '綠', '黃', '紅'].map(o => `<option ${o === c.lights[i].c ? 'selected' : ''} value="${o}">${o || '—'}</option>`).join('')}</select></td><td>${cta(`lights.${i}.note`, c.lights[i].note)}</td></tr>`).join('')}
     </tbody></table></div>
   </div>
   <div class="card">
     <h3 class="gold-bar">一、財報事實</h3>
     <p class="lead" style="margin-bottom:6px">來源：美股 10-Q／10-K／8-K；台股公開資訊觀測站。只填原始文件的數字。</p>
     <div class="tbl-wrap"><table><thead><tr><th>指標</th><th>本期</th><th>去年同期</th><th class="num">年增</th><th>來源與日期</th></tr></thead><tbody>
-    ${FIN_ROWS.map(([nm, kind], i) => { const f = c.fin[i]; return `<tr><td>${nm}${kind === 'pct' ? '（%）' : ''}</td><td>${inp(`fin.${i}.cur`, f.cur, 'inputmode="decimal" style="width:90px"')}</td><td>${inp(`fin.${i}.prev`, f.prev, 'inputmode="decimal" style="width:90px"')}</td><td class="num" data-yoy="${i}">${yoy(f, kind)}</td><td>${cta(`fin.${i}.src`, f.src)}</td></tr>`; }).join('')}
+    ${FIN_ROWS.map(([nm, kind], i) => { const f = c.fin[i]; return `<tr><td>${nm}${kind === 'pct' ? '（%）' : ''}${helpTxt(HELP.fin[i])}</td><td>${inp(`fin.${i}.cur`, f.cur, 'inputmode="decimal" style="width:90px"')}</td><td>${inp(`fin.${i}.prev`, f.prev, 'inputmode="decimal" style="width:90px"')}</td><td class="num" data-yoy="${i}">${yoy(f, kind)}</td><td>${cta(`fin.${i}.src`, f.src)}</td></tr>`; }).join('')}
     </tbody></table></div>
     <label class="f" style="margin-top:8px"><span>頭條數字與真實體質的落差（例如獲利創高但現金流轉負）</span>${ta('finGap', c.finGap)}</label>
   </div>
@@ -489,7 +502,7 @@ function cardEditor(c) {
   <div class="card">
     <h3 class="gold-bar">三、估值（三法交叉）</h3>
     <div class="tbl-wrap"><table><thead><tr><th>方法</th><th>關鍵假設</th><th>合理價</th><th>備註</th></tr></thead><tbody>
-    ${VAL_ROWS.map((nm, i) => `<tr><td>${nm}</td><td>${cta(`val.${i}.assume`, c.val[i].assume)}</td><td>${inp(`val.${i}.fair`, c.val[i].fair, 'inputmode="decimal" style="width:90px"')}</td><td>${cta(`val.${i}.note`, c.val[i].note)}</td></tr>`).join('')}
+    ${VAL_ROWS.map((nm, i) => `<tr><td>${nm}${helpTxt(HELP.val[i])}</td><td>${cta(`val.${i}.assume`, c.val[i].assume)}</td><td>${inp(`val.${i}.fair`, c.val[i].fair, 'inputmode="decimal" style="width:90px"')}</td><td>${cta(`val.${i}.note`, c.val[i].note)}</td></tr>`).join('')}
     </tbody></table></div>
     <div class="result" id="valResult">${valResultHTML(c, vs)}</div>
     <label class="f" style="margin-top:8px"><span>三法差距很大時，先檢查哪個假設最脆弱</span>${ta('valCheck', c.valCheck)}</label>
@@ -497,14 +510,14 @@ function cardEditor(c) {
   <div class="card">
     <h3 class="gold-bar">四、技術面</h3>
     <div class="tbl-wrap"><table><thead><tr><th>項目</th><th>讀數</th><th>判讀</th></tr></thead><tbody>
-    ${TECH_ROWS.map((nm, i) => `<tr><td>${nm}</td><td>${inp(`tech.${i}.read`, c.tech[i].read)}</td><td>${cta(`tech.${i}.judge`, c.tech[i].judge)}</td></tr>`).join('')}
+    ${TECH_ROWS.map((nm, i) => `<tr><td>${nm}${helpTxt(HELP.tech[i])}</td><td>${cta(`tech.${i}.read`, c.tech[i].read)}</td><td>${cta(`tech.${i}.judge`, c.tech[i].judge)}</td></tr>`).join('')}
     </tbody></table></div>
     <div class="note">台股用還原股價計算，避免除權息造成失真。</div>
   </div>
   <div class="card">
     <h3 class="gold-bar">五、籌碼面（台股）</h3>
     <div class="tbl-wrap"><table><thead><tr><th>項目</th><th>近 5 日</th><th>近 20 日</th><th>判讀</th></tr></thead><tbody>
-    ${CHIP_ROWS.map((nm, i) => `<tr><td>${nm}</td><td>${inp(`chip.${i}.d5`, c.chip[i].d5, 'style="width:90px"')}</td><td>${inp(`chip.${i}.d20`, c.chip[i].d20, 'style="width:90px"')}</td><td>${cta(`chip.${i}.judge`, c.chip[i].judge)}</td></tr>`).join('')}
+    ${CHIP_ROWS.map((nm, i) => `<tr><td>${nm}${helpTxt(HELP.chip[i])}</td><td>${inp(`chip.${i}.d5`, c.chip[i].d5, 'style="width:90px"')}</td><td>${inp(`chip.${i}.d20`, c.chip[i].d20, 'style="width:90px"')}</td><td>${cta(`chip.${i}.judge`, c.chip[i].judge)}</td></tr>`).join('')}
     </tbody></table></div>
   </div>
   <div class="card">
@@ -518,6 +531,73 @@ function cardEditor(c) {
       <button class="btn-small" id="cardToMonitor">＋ 建立監控條件</button>
     </div>
   </div>`;
+}
+function newCardDialog() {
+  openModal({
+    title: '新增研究標的',
+    body: `<label class="f"><span>股票代號</span><input type="text" name="code" placeholder="台股：2330、0050；美股：NVDA、SPCX" autocapitalize="characters" required></label>
+      <div class="help">輸入後會自動帶入名稱、股價、最近一季財報、技術指標、法人買賣與歷史本益比估值（台股資料較完整）。</div>`,
+    saveText: '建立並自動帶入',
+    onSave: d => {
+      const code = String(d.code || '').trim().toUpperCase().replace(/\.TW$/, '');
+      if (!code) return false;
+      const c = blankCard(); c.code = code; c.market = /^\d/.test(code) ? '台股' : '美股';
+      S.cards.push(c); openCardId = c.id; setTimeout(() => autoFillCard(c), 50);
+    },
+  });
+}
+const isBlankish = v => !v || /^示範|^【自動】|^請查詢|^待補/.test(String(v));
+async function autoFillCard(c) {
+  if (!c.code) { toast('請先填代號'); return; }
+  toast('資料抓取中…（約 5～20 秒）');
+  const btn = $('#autoFill'); if (btn) { btn.disabled = true; btn.textContent = '抓取中…'; }
+  let d;
+  try {
+    const r = await fetch('api/stock?code=' + encodeURIComponent(c.code), { signal: AbortSignal.timeout(60000) });
+    d = await r.json();
+    if (!r.ok && !d.price) throw new Error(d.errors?.join('；') || d.error || 'HTTP ' + r.status);
+  } catch (e) {
+    toast('自動帶入失敗：' + (e.name === 'TimeoutError' ? '逾時' : e.message));
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ 自動帶入資料'; }
+    return;
+  }
+  const set = (obj, k, v) => { if (v != null && v !== '' && isBlankish(obj[k])) obj[k] = v; };
+  const force = (obj, k, v) => { if (v != null && v !== '') obj[k] = v; };
+  set(c, 'name', d.name); force(c, 'market', d.market);
+  if (d.price != null) { c.price = String(d.price); }
+  c.date = today();
+  // 財報：自動資料一律更新（標示為自動來源）；使用者自填且非空的保留
+  (d.fin || []).forEach((f, i) => {
+    const row = c.fin[i]; if (!row) return;
+    const mine = row.src && !/自動|FinMind|SEC|待補|未揭露|同上|新台幣|百萬美元|億元/.test(row.src) && row.cur;
+    if (mine) return;
+    if (f.cur !== '' || f.prev !== '') { row.cur = f.cur; row.prev = f.prev; row.src = f.src; }
+  });
+  set(c, 'finGap', d.finGap && '【自動】' + d.finGap);
+  (d.tech?.rows || []).forEach((t, i) => { const row = c.tech[i]; if (!row) return; if (isBlankish(row.judge) || !row.read || c.auto) { row.read = t.read; row.judge = t.judge; } });
+  (d.chip || []).forEach((t, i) => { const row = c.chip[i]; if (!row || !t.d5) return; if (!row.d5 || c.auto || isBlankish(row.judge)) { row.d5 = t.d5; row.d20 = t.d20; row.judge = t.judge; } });
+  if (!d.chip && d.chipNote && isBlankish(c.chip[0].judge)) c.chip[0].judge = d.chipNote;
+  (d.val || []).forEach((v, i) => { const row = c.val[i]; if (row && (isBlankish(row.assume) || !row.fair || c.auto)) Object.assign(row, v); });
+  const L = (i, color, note) => { if (!color) return; const l = c.lights[i]; if (!l.c || isBlankish(l.note) || l.auto) { l.c = color; l.note = '【自動】' + note; l.auto = true; } };
+  L(1, d.finLight, d.finNote); L(3, d.valLight, d.valNote); L(4, d.tech?.light, d.tech?.lightNote); L(5, d.chipLight, d.chipNote);
+  if (!c.verdict) {
+    const g = c.lights.filter(l => l.c === '綠').length, r = c.lights.filter(l => l.c === '紅').length;
+    c.verdict = `【自動草稿】${c.name || c.code}：綠燈 ${g}、紅燈 ${r}。${g > r ? '體質與趨勢偏正面，' : r > g ? '有明顯扣分項，' : '好壞參半，'}請補上產業位置與管理層指引後再下結論。`;
+  }
+  const v = d.valuation || {};
+  const lines = [
+    `${d.name || c.code}（${d.market}${d.industry ? '｜' + d.industry : ''}）`,
+    d.price != null ? `收盤價 ${d.price}${d.currency === 'USD' ? ' 美元' : ' 元'}（${d.priceDate}）${d.tech?.chg20 != null ? `，近 20 日 ${d.tech.chg20 >= 0 ? '+' : ''}${d.tech.chg20}%` : ''}` : '',
+    d.finQuarter ? `最新財報：${d.finQuarter}${d.epsTTM != null ? `；近四季 EPS ${d.epsTTM}` : ''}` : '',
+    d.monthRev || '',
+    v.pe ? `本益比 ${v.pe} 倍${v.peMedian ? `（近 3 年中位數 ${v.peMedian}，區間 ${v.peLow}～${v.peHigh}）` : ''}${v.pbr ? `；股價淨值比 ${v.pbr}` : ''}${v.dy ? `；殖利率 ${v.dy}%` : ''}` : '',
+    d.dividends ? `近年配息：${d.dividends}` : '',
+    d.isEtf ? '這是 ETF：沒有公司財報，請改用「ETF 健檢」頁看成分股與重疊度。' : '',
+  ].filter(Boolean);
+  c.auto = { at: d.updated || new Date().toISOString(), summary: lines.join('\n'), errors: d.errors || [] };
+  save();
+  if (openCardId === c.id) render();
+  toast(d.errors?.length ? '已帶入，部分資料缺漏' : '已自動帶入');
 }
 function yoy(f, kind) {
   const a = num(f.cur), b = num(f.prev);
@@ -824,7 +904,7 @@ function stackTables(root) {
       [...tr.children].forEach((td, i) => {
         if (i === 0) td.classList.add('t-head');
         td.dataset.label = heads[i] || '';
-        if (/來源|假設|判讀|備註/.test(heads[i] || '')) td.classList.add('wide');
+        if (/來源|假設|判讀|備註|讀數/.test(heads[i] || '')) td.classList.add('wide');
         if (!heads[i] && !td.querySelector('input,select,button') && !td.textContent.trim()) td.classList.add('t-empty');
       });
     });
@@ -852,7 +932,8 @@ document.addEventListener('click', e => {
   if (t.dataset.ai === 'card') return copy(aiCardPrompt(S.cards.find(c => c.id === openCardId)));
   if (t.dataset.allocDel != null) { S.alloc.splice(+t.dataset.allocDel, 1); save(); return render(); }
   switch (t.id) {
-    case 'newCard': { const c = blankCard(); S.cards.push(c); openCardId = c.id; save(); render(); break; }
+    case 'newCard': newCardDialog(); break;
+    case 'autoFill': { const c = S.cards.find(x => x.id === openCardId); if (c) autoFillCard(c); break; }
     case 'backCards': openCardId = null; render(); window.scrollTo(0, 0); break;
     case 'delCard': if (confirmInline()) { S.cards = S.cards.filter(c => c.id !== openCardId); openCardId = null; save(); render(); toast('已刪除'); } break;
     case 'cardMd': copy(cardMarkdown(S.cards.find(c => c.id === openCardId))); break;
