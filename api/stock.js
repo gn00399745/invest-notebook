@@ -58,7 +58,7 @@ function technicals(bars, unit = '') {
       { read: `支撐 ${r(sup)}｜壓力 ${r(res)}（近 60 日低／高）`, judge: last - sup < res - last ? '較接近支撐' : '較接近壓力' },
       { read: v5 && v20 ? `5 日均量 ${Math.round(v5).toLocaleString()}｜20 日均量 ${Math.round(v20).toLocaleString()}${unit}` : '', judge: volJ },
     ],
-    num: { last: r(last), ma20: r(m20), ma60: r(m60), rsi: r(R, 1), chg20: r(chg20, 1), hi52: r(hi52), lo52: r(lo52), support: r(sup), resistance: r(res) },
+    num: { last: r(last), ma20: r(m20), ma60: r(m60), ma120: r(m120), rsi: r(R, 1), chg20: r(chg20, 1), hi52: r(hi52), lo52: r(lo52), support: r(sup), resistance: r(res), macd: r(macd), signal: r(signal), hist: r(hist), prevHist: r(prevHist), bbUp: r(up), bbLo: r(lo), vol5: r(v5, 0), vol20: r(v20, 0) },
     light: score >= 1 ? '綠' : score <= -1 ? '紅' : '黃',
     lightNote: `${trend.split('（')[0]}；RSI ${R == null ? '—' : r(R, 0)}；近 20 日 ${chg20 >= 0 ? '+' : ''}${r(chg20, 1)}%`,
   };
@@ -372,10 +372,14 @@ module.exports = async (req, res) => {
   if (req.query.history) {
     try {
       let bars;
-      if (/^\d{4,6}[A-Z]?$/.test(code)) bars = (await fm('TaiwanStockPrice', code, daysAgo(365 * 3 + 10))).filter(b => b.close > 0).map(b => [b.date, b.close]);
-      else {
-        const rr = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(code)}?range=5y&interval=1d`, { signal: T(), headers: UA });
-        const R = (await rr.json()).chart.result[0]; bars = R.timestamp.map((t, i) => [iso(t * 1000), r(R.indicators.quote[0].close[i])]).filter(b => b[1] != null);
+      const ohlc = !!req.query.ohlc;
+      if (/^\d{4,6}[A-Z]?$/.test(code)) {
+        const raw = (await fm('TaiwanStockPrice', code, daysAgo(ohlc ? 400 : 365 * 3 + 10))).filter(b => b.close > 0);
+        bars = ohlc ? raw.map(b => [b.date, b.open, b.max, b.min, b.close, Math.round(b.Trading_Volume / 1000)]) : raw.map(b => [b.date, b.close]);
+      } else {
+        const rr = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(code)}?range=${ohlc ? '1y' : '5y'}&interval=1d`, { signal: T(), headers: UA });
+        const R = (await rr.json()).chart.result[0], q = R.indicators.quote[0];
+        bars = R.timestamp.map((t, i) => ohlc ? [iso(t * 1000), r(q.open[i]), r(q.high[i]), r(q.low[i]), r(q.close[i]), q.volume[i]] : [iso(t * 1000), r(q.close[i])]).filter(b => b[ohlc ? 4 : 1] != null);
       }
       res.setHeader('Cache-Control', 's-maxage=43200, stale-while-revalidate=86400');
       res.status(200).json({ code, bars });
