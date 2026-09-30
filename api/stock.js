@@ -20,7 +20,7 @@ function rsi(a, n = 14) {
   for (let i = n + 1; i < a.length; i++) { const d = a[i] - a[i - 1]; g = (g * (n - 1) + Math.max(d, 0)) / n; l = (l * (n - 1) + Math.max(-d, 0)) / n; }
   return l === 0 ? 100 : 100 - 100 / (1 + g / l);
 }
-function technicals(bars) {
+function technicals(bars, unit = '') {
   const c = bars.map(b => b.c), v = bars.map(b => b.v), last = c[c.length - 1];
   const m20 = sma(c, 20), m60 = sma(c, 60), m120 = sma(c, 120);
   const e12 = ema(c, 12), e26 = ema(c, 26), dif = e12.map((x, i) => x - e26[i]), dea = ema(dif, 9);
@@ -56,7 +56,7 @@ function technicals(bars) {
       { read: up != null ? `上軌 ${r(up)}｜中軌 ${r(m20)}｜下軌 ${r(lo)}` : '', judge: bollJ },
       { read: `52 週 ${r(lo52)}～${r(hi52)}`, judge: shape },
       { read: `支撐 ${r(sup)}｜壓力 ${r(res)}（近 60 日低／高）`, judge: last - sup < res - last ? '較接近支撐' : '較接近壓力' },
-      { read: v5 && v20 ? `5 日均量 ${Math.round(v5).toLocaleString()}｜20 日均量 ${Math.round(v20).toLocaleString()}` : '', judge: volJ },
+      { read: v5 && v20 ? `5 日均量 ${Math.round(v5).toLocaleString()}｜20 日均量 ${Math.round(v20).toLocaleString()}${unit}` : '', judge: volJ },
     ],
     light: score >= 1 ? '綠' : score <= -1 ? '紅' : '黃',
     lightNote: `${trend.split('（')[0]}；RSI ${R == null ? '—' : r(R, 0)}；近 20 日 ${chg20 >= 0 ? '+' : ''}${r(chg20, 1)}%`,
@@ -89,8 +89,8 @@ async function taiwan(code, errors) {
   if (inf) { out.name = inf.stock_name; out.industry = inf.industry_category; out.isEtf = /ETF|ETN|受益證券/.test(inf.industry_category || '') || /^00/.test(code); }
 
   // 股價與技術面
-  const bars = px.filter(b => b.close > 0).map(b => ({ d: b.date, c: b.close, h: b.max, l: b.min, v: b.Trading_Volume }));
-  if (bars.length > 30) { out.price = r(bars[bars.length - 1].c); out.priceDate = bars[bars.length - 1].d; out.tech = technicals(bars); }
+  const bars = px.filter(b => b.close > 0).map(b => ({ d: b.date, c: b.close, h: b.max, l: b.min, v: b.Trading_Volume / 1000 }));
+  if (bars.length > 30) { out.price = r(bars[bars.length - 1].c); out.priceDate = bars[bars.length - 1].d; out.tech = technicals(bars, ' 張'); }
 
   // 財報（單季）
   const byQ = {};
@@ -118,9 +118,9 @@ async function taiwan(code, errors) {
     const neg = x => (x == null ? null : -Math.abs(x));
     const ocf = ocfKey ? single(lastQ, ocfKey) : null, ocfP = ocfKey ? single(pq, ocfKey) : null;
     const cap = capKey ? neg(single(lastQ, capKey)) : null, capP = capKey ? neg(single(pq, capKey)) : null;
-    if (req_debug) out.debug = { cfTypes: Object.keys(cfMap[lastQ] || {}), finTypes: Object.keys(A), bsSample: Object.keys(bsMap[lastQ] || {}).slice(0, 40) };
     const bsMap = {}; bs.forEach(x => { (bsMap[x.date] = bsMap[x.date] || {})[x.type] = x.value; });
     const invKey = Object.keys(bsMap[lastQ] || {}).find(k => /^Inventories$/.test(k));
+    if (req_debug) out.debug = { cfTypes: Object.keys(cfMap[lastQ] || {}), finTypes: Object.keys(A) };
     const e = n => (n == null ? '' : String(r(n / 1e8, 1)));       // 元 → 億元
     const p = n => (n == null ? '' : String(r(n, 1)));
     const src = `FinMind／公開資訊觀測站｜${qLabel(lastQ)} vs ${qLabel(pq)}`;
@@ -158,7 +158,7 @@ async function taiwan(code, errors) {
     const curPE = per[per.length - 1]?.PER;
     out.valuation = { pe: r(curPE, 1), peMedian: r(med, 1), peLow: r(q1, 1), peHigh: r(q3, 1), dy: r(per[per.length - 1]?.dividend_yield, 2), pbr: r(per[per.length - 1]?.PBR, 2) };
     if (out.epsTTM) out.val = [
-      { assume: `近四季 EPS ${out.epsTTM} 元 × 近 3 年本益比中位數 ${r(med, 1)} 倍（區間 ${r(q1, 1)}～${r(q3, 1)}）`, fair: String(r(out.epsTTM * med, 1)), note: `目前本益比 ${r(curPE, 1)} 倍（自動計算）` },
+      { assume: `近四季 EPS ${out.epsTTM} 元 × 近 3 年本益比中位數 ${r(med, 1)} 倍（區間 ${r(q1, 1)}～${r(q3, 1)}）`, fair: String(r(out.epsTTM * med, 1)), note: `目前本益比 ${r(curPE, 1)} 倍；成長股成長放緩時，歷史倍數容易高估合理價` },
     ];
     out.valLight = curPE ? (curPE < q1 ? '綠' : curPE > q3 ? '紅' : '黃') : null;
     out.valNote = curPE ? `目前本益比 ${r(curPE, 1)} 倍，近 3 年中位數 ${r(med, 1)} 倍` : '';
@@ -209,6 +209,47 @@ async function stooqBars(sym) {
   const bars = lines.map(l => l.split(',')).map(c => ({ d: c[0], h: +c[2], l: +c[3], c: +c[4], v: +c[5] })).filter(b => b.c > 0);
   if (!bars.length) throw new Error('Stooq 查無資料');
   return { bars };
+}
+async function yahooFin(sym) {
+  const types = ['quarterlyTotalRevenue', 'quarterlyGrossProfit', 'quarterlyOperatingIncome', 'quarterlyDilutedEPS', 'quarterlyBasicEPS', 'quarterlyOperatingCashFlow', 'quarterlyCapitalExpenditure', 'quarterlyFreeCashFlow', 'quarterlyInventory', 'trailingPeRatio'];
+  const p2 = Math.floor(Date.now() / 1000), p1 = p2 - 3 * 365 * 86400;
+  const res = await fetch(`https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(sym)}?type=${types.join(',')}&period1=${p1}&period2=${p2}`, { signal: T(), headers: UA });
+  if (!res.ok) throw new Error('Yahoo 財報 HTTP ' + res.status);
+  const j = await res.json(); const S = {};
+  (j.timeseries?.result || []).forEach(x => { const t = x.meta.type[0]; S[t] = (x[t] || []).filter(Boolean).map(o => ({ d: o.asOfDate, v: o.reportedValue?.raw })).filter(o => o.v != null).sort((a, b) => a.d.localeCompare(b.d)); });
+  const rev = S.quarterlyTotalRevenue || [];
+  if (!rev.length) throw new Error('Yahoo 查無財報');
+  const L = rev[rev.length - 1].d;
+  const yAgo = d => { const t = new Date(d) - 365 * 864e5; return x => Math.abs(new Date(x.d) - t) < 25 * 864e5; };
+  const at = (k, d) => (S[k] || []).find(x => x.d === d)?.v;
+  const ly = (k, d) => (S[k] || []).find(yAgo(d))?.v;
+  const pair = k => ({ cur: at(k, L), prev: ly(k, L) });
+  const R = pair('quarterlyTotalRevenue'), G = pair('quarterlyGrossProfit'), O = pair('quarterlyOperatingIncome');
+  const E = (S.quarterlyDilutedEPS?.length ? pair('quarterlyDilutedEPS') : pair('quarterlyBasicEPS'));
+  const OC = pair('quarterlyOperatingCashFlow'), CX = pair('quarterlyCapitalExpenditure'), FC = pair('quarterlyFreeCashFlow'), IV = pair('quarterlyInventory');
+  const M = n => (n == null ? '' : String(r(n / 1e6, 0)));
+  const pct = (a, b) => (a != null && b ? String(r((a / b) * 100, 1)) : '');
+  const epsArr = (S.quarterlyDilutedEPS?.length ? S.quarterlyDilutedEPS : S.quarterlyBasicEPS || []).slice(-4).map(x => x.v);
+  const pes = (S.trailingPeRatio || []).map(x => x.v).filter(x => x > 0).sort((a, b) => a - b);
+  const lyD = (rev.find(yAgo(L)) || {}).d;
+  const src = `Yahoo Finance｜季末 ${L}${lyD ? ` vs ${lyD}` : '（無去年同期）'}`;
+  return {
+    quarter: L, epsTTM: epsArr.length === 4 ? r(epsArr.reduce((a, b) => a + b, 0)) : null,
+    peHist: pes.length ? { med: pes[Math.floor(pes.length / 2)], lo: pes[Math.floor(pes.length * 0.25)], hi: pes[Math.floor(pes.length * 0.75)], cur: S.trailingPeRatio[S.trailingPeRatio.length - 1].v } : null,
+    fin: [
+      { cur: M(R.cur), prev: M(R.prev), src: `百萬美元｜${src}` },
+      { cur: pct(G.cur, R.cur), prev: pct(G.prev, R.prev), src: G.cur == null ? '未揭露毛利' : '毛利 ÷ 營收（自動計算）' },
+      { cur: pct(O.cur, R.cur), prev: pct(O.prev, R.prev), src: '營業利益 ÷ 營收（自動計算）' },
+      { cur: E.cur != null ? String(E.cur) : '', prev: E.prev != null ? String(E.prev) : '', src: '美元（單季）' },
+      { cur: M(OC.cur), prev: M(OC.prev), src: '百萬美元｜單季' },
+      { cur: M(FC.cur ?? (OC.cur != null && CX.cur != null ? OC.cur + CX.cur : null)), prev: M(FC.prev ?? (OC.prev != null && CX.prev != null ? OC.prev + CX.prev : null)), src: '百萬美元｜營業現金流 − 資本支出' },
+      { cur: CX.cur != null ? M(Math.abs(CX.cur)) : '', prev: CX.prev != null ? M(Math.abs(CX.prev)) : '', src: '百萬美元｜單季' },
+      { cur: M(IV.cur), prev: M(IV.prev), src: '百萬美元｜季末存貨' },
+    ],
+    finLight: R.cur && R.prev ? (R.cur > R.prev && (O.cur ?? 0) / R.cur >= (O.prev ?? 0) / R.prev ? '綠' : R.cur < R.prev ? '紅' : '黃') : null,
+    finNote: R.cur && R.prev ? `營收年增 ${r((R.cur / R.prev - 1) * 100, 1)}%，營業利益率 ${pct(O.prev, R.prev)}% → ${pct(O.cur, R.cur)}%` : '',
+    finGap: FC.cur != null && FC.cur < 0 && (O.cur ?? 0) > 0 ? '本季本業有獲利，但自由現金流為負，資本支出吃掉現金。' : FC.cur != null && FC.cur < 0 ? `本季自由現金流約 ${M(FC.cur)} 百萬美元（為負）。` : '',
+  };
 }
 const SEC_UA = { 'User-Agent': process.env.SEC_USER_AGENT || 'invest-notebook research-tool (contact via github.com/gn00399745)', Accept: 'application/json' };
 async function secFacts(ticker) {
@@ -270,12 +311,21 @@ async function us(code, errors) {
   const out = { market: '美股', code: code.toUpperCase(), currency: 'USD' };
   let px = null;
   try { px = await yahooBars(code); } catch (e) { errors.push(e.message); try { px = await stooqBars(code); } catch (e2) { errors.push(e2.message); } }
-  if (px?.bars?.length > 30) { const b = px.bars; out.price = r(b[b.length - 1].c); out.priceDate = b[b.length - 1].d; out.tech = technicals(b); if (px.name) out.name = px.name; }
+  if (px?.bars?.length > 30) { const b = px.bars; out.price = r(b[b.length - 1].c); out.priceDate = b[b.length - 1].d; out.tech = technicals(b, ' 股'); if (px.name) out.name = px.name; }
+  let got = false;
   try {
-    const { facts, title } = await secFacts(code); out.name = out.name || title;
-    Object.assign(out, usFin(facts)); out.finQuarter = out.quarter;
-    if (out.epsTTM && out.epsTTM > 0 && out.price) out.valuation = { pe: r(out.price / out.epsTTM, 1) };
+    const f = await yahooFin(code); Object.assign(out, f); out.finQuarter = f.quarter; got = true;
+    const h = f.peHist;
+    if (h) {
+      out.valuation = { pe: r(h.cur, 1), peMedian: r(h.med, 1), peLow: r(h.lo, 1), peHigh: r(h.hi, 1) };
+      if (out.epsTTM > 0) out.val = [{ assume: `近四季 EPS ${out.epsTTM} 美元 × 近 3 年本益比中位數 ${r(h.med, 1)} 倍（區間 ${r(h.lo, 1)}～${r(h.hi, 1)}）`, fair: String(r(out.epsTTM * h.med, 2)), note: `目前本益比 ${r(h.cur, 1)} 倍；成長股成長放緩時，歷史倍數容易高估合理價` }];
+      out.valLight = h.cur < h.lo ? '綠' : h.cur > h.hi ? '紅' : '黃';
+      out.valNote = `目前本益比 ${r(h.cur, 1)} 倍，近 3 年中位數 ${r(h.med, 1)} 倍`;
+    } else if (out.epsTTM != null && out.epsTTM <= 0) { out.valNote = '近四季虧損，無法用本益比估值'; out.valLight = '紅'; }
   } catch (e) { errors.push(e.message); }
+  if (!got && process.env.SEC_USER_AGENT) {
+    try { const { facts, title } = await secFacts(code); out.name = out.name || title; Object.assign(out, usFin(facts)); out.finQuarter = out.quarter; } catch (e) { errors.push(e.message); }
+  }
   out.chipNote = '美股沒有三大法人資料，可改看機構持股（13F）與空單比率';
   return out;
 }
