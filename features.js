@@ -192,11 +192,13 @@ async function etfAutoFill(code, existingId) {
     if (!e) { e = { id: uid() }; S.etfs.push(e); }
     Object.assign(e, {
       name, holdings: d.holdings.map(h => `${h.code} ${h.name} ${h.w}`).join('\n'),
-      sector: d.sectors.slice(0, 3).map(s => `${s.name} ${s.w}%`).join('、'), country: '台灣',
+      sector: d.sectors.slice(0, 3).map(s => `${s.name} ${s.w}%`).join('、'),
+      country: (d.countries || []).length ? d.countries.slice(0, 3).map(s => `${s.name} ${s.w}%`).join('、') : (d.market === '美股' ? '美國' : '台灣'),
       fee: d.fee ? `${d.fee}%${d.totalFee ? `（總費用 ${d.totalFee}）` : ''}` : '', auto: { at: new Date().toISOString(), date: d.date },
     });
     const st = etfStats(e);
-    const autoNote = `【自動｜MoneyDJ 資料日期 ${d.date}】\n發行：${d.issuer || '—'}；成立：${d.since || '—'}\n追蹤指數：${d.index || '—'}\n規模：${d.size || '—'}；淨值：${d.nav || '—'}\n經理費：${d.fee || '—'}%；總管理費用：${d.totalFee || '尚無'}；配息：${d.dividend || '—'}；殖利率：${d.yield || '—'}\n成分股 ${st.h.length} 檔，前十大合計 ${st.top10.toFixed(1)}%，有效檔數 ${st.neff ? st.neff.toFixed(1) : '—'}\n產業：${d.sectors.slice(0, 5).map(s => `${s.name} ${s.w}%`).join('、')}`;
+    const autoNote = `【自動｜MoneyDJ 資料日期 ${d.date}】\n發行：${d.issuer || '—'}；成立：${d.since || '—'}\n追蹤指數：${d.index || '—'}\n規模：${d.size || '—'}；淨值：${d.nav || '—'}\n市場：${d.market || '—'}${(d.countries || []).length ? `；國家：${d.countries.slice(0, 5).map(s => `${s.name} ${s.w}%`).join('、')}` : ''}
+經理費：${d.fee || '—'}%；總管理費用：${d.totalFee || '尚無'}；配息：${d.dividend || '—'}；殖利率：${d.yield || '—'}\n成分股 ${st.h.length} 檔，前十大合計 ${st.top10.toFixed(1)}%，有效檔數 ${st.neff ? st.neff.toFixed(1) : '—'}\n產業：${d.sectors.slice(0, 5).map(s => `${s.name} ${s.w}%`).join('、')}`;
     e.note = e.note && !e.note.startsWith('【自動') ? `${autoNote}\n\n${e.note}` : autoNote;
     save(); render(); toast(`已帶入 ${name}（${d.holdings.length} 檔成分股）`);
   } catch (err) { toast('ETF 帶入失敗：' + (err.name === 'TimeoutError' ? '逾時' : err.message)); }
@@ -204,7 +206,7 @@ async function etfAutoFill(code, existingId) {
 const _etfPage = PAGES.etf;
 PAGES.etf = () => _etfPage().replace('<button class="btn-small" id="addEtf">＋ 新增 ETF</button>',
   '<div class="btn-row"><button class="btn-small" id="etfAuto">⚡ 輸入代號自動帶入</button><button class="btn-small ghost" id="addEtf">手動新增</button></div>')
-  .replace('<div class="card"><h3 class="gold-bar">環境對照</h3>', `<div class="card"><div class="help">ETF 資料來自 MoneyDJ 公開頁面（目前支援台股 ETF）。成分股每天會變動，建議每季健檢時按一次「更新成分股」。${S.etfs.length ? ` <button class="linkbtn" id="etfRefreshAll">更新全部成分股</button>` : ''}</div></div>
+  .replace('<div class="card"><h3 class="gold-bar">環境對照</h3>', `<div class="card"><div class="help">ETF 資料來自 MoneyDJ 公開頁面（支援台股與美股 ETF；美股 ETF 持股約每月更新）。成分股每天會變動，建議每季健檢時按一次「更新成分股」。${S.etfs.length ? ` <button class="linkbtn" id="etfRefreshAll">更新全部成分股</button>` : ''}</div></div>
   <div class="card"><h3 class="gold-bar">環境對照</h3>`);
 
 /* ================= 四、策略：部位計算教學與帶入 ================= */
@@ -427,8 +429,8 @@ document.addEventListener('click', async e => {
       S.ps = Object.assign({ cap: '1000000', risk: '1', lot: c.market === '台股' ? '1000' : '1' }, S.ps || {}, { entry: String(p || ''), stop: String(stop), target: vs.avg && p && vs.avg > p ? String(Math.round(vs.avg * 100) / 100) : '', lot: c.market === '台股' ? '1000' : '1' });
       save(); go('strategy'); setTimeout(() => $('#psResult')?.scrollIntoView({ block: 'center' }), 100); toast('已帶入現價與停損建議'); break; }
     case 'cardToTrade': { const c = card(); if (!c) return; go('trades'); editRecord('trades'); setTimeout(() => { const f = $('#modalBody'); f.querySelector('[name=code]').value = c.code; f.querySelector('[name=name]').value = c.name; f.querySelector('[name=price]').value = c.price || ''; f.querySelector('[name=shares]').value = c.market === '台股' ? '1000' : ''; f.querySelector('[name=reason]').value = c.verdict ? c.verdict.replace(/^【[^】]+】/, '') : ''; }, 30); break; }
-    case 'etfAuto': openModal({ title: 'ETF 自動帶入', body: '<label class="f"><span>台股 ETF 代號</span><input type="text" name="code" placeholder="例如 0050、00878、009816" required></label><div class="help">會自動抓成分股權重、產業分布、規模、費用率與配息資訊。</div>', saveText: '帶入', onSave: d => { setTimeout(() => etfAutoFill(d.code), 10); } }); break;
-    case 'etfRefreshAll': for (const x of S.etfs) { const code = hKey(x.name); if (/^\d/.test(code)) await etfAutoFill(code, x.id); } break;
+    case 'etfAuto': openModal({ title: 'ETF 自動帶入', body: '<label class="f"><span>ETF 代號</span><input type="text" name="code" placeholder="台股：0050、00878、009816；美股：VOO、QQQ、VT" required></label><div class="help">會自動抓成分股權重、產業分布、規模、費用率與配息資訊。</div>', saveText: '帶入', onSave: d => { setTimeout(() => etfAutoFill(d.code), 10); } }); break;
+    case 'etfRefreshAll': for (const x of S.etfs) { const code = hKey(x.name); if (/^(\d{4,6}[A-Z]?|[A-Z]{1,6})$/.test(code)) await etfAutoFill(code, x.id); } break;
     case 'monCheck': checkMonitors(true); break;
     case 'notifyOn': if (!('Notification' in window)) { toast('這個瀏覽器不支援通知（iPhone 需先「加入主畫面」再從主畫面開啟）'); return; }
       Notification.requestPermission().then(p => toast(p === 'granted' ? '已開啟通知' : '沒有取得通知權限')); break;
