@@ -351,7 +351,8 @@ SCHEMAS.trades = {
     { k: 'fee', l: '手續費＋稅（留白自動估算）' }, { k: 'reason', l: '為什麼買／賣（覆盤會用到）', t: 'textarea' },
   ],
   head: r => `${r.side || ''}　${r.code || ''} ${r.name || ''}`, meta: r => `${r.date || ''} · ${fmt(num(r.shares))} 股 @ ${r.price || ''}${r.fee ? ` · 費用 ${fmt(num(r.fee))}` : ''}`,
-  body: r => r.reason || '', sort: (a, b) => (b.date || '').localeCompare(a.date || ''),
+  body: r => [r.reasons?.length ? '理由：' + r.reasons.join('、') : r.reason, r.plan && `計畫：${r.plan}${r.conf ? `｜信心 ${r.conf}` : ''}${r.stop ? `｜停損 ${r.stop}` : ''}${r.target ? `｜目標 ${r.target}` : ''}`, r.snap?.signal && '當時訊號：' + r.snap.signal].filter(Boolean).join('\n'),
+  sort: (a, b) => (b.date || '').localeCompare(a.date || ''),
 };
 S.trades = S.trades || [];
 function estFee(t) {
@@ -428,7 +429,7 @@ document.addEventListener('click', async e => {
       const vs = valSummary(c);
       S.ps = Object.assign({ cap: '1000000', risk: '1', lot: c.market === '台股' ? '1000' : '1' }, S.ps || {}, { entry: String(p || ''), stop: String(stop), target: vs.avg && p && vs.avg > p ? String(Math.round(vs.avg * 100) / 100) : '', lot: c.market === '台股' ? '1000' : '1' });
       save(); go('strategy'); setTimeout(() => $('#psResult')?.scrollIntoView({ block: 'center' }), 100); toast('已帶入現價與停損建議'); break; }
-    case 'cardToTrade': { const c = card(); if (!c) return; go('trades'); editRecord('trades'); setTimeout(() => { const f = $('#modalBody'); f.querySelector('[name=code]').value = c.code; f.querySelector('[name=name]').value = c.name; f.querySelector('[name=price]').value = c.price || ''; f.querySelector('[name=shares]').value = c.market === '台股' ? '1000' : ''; f.querySelector('[name=reason]').value = c.verdict ? c.verdict.replace(/^【[^】]+】/, '') : ''; }, 30); break; }
+    case 'cardToTrade': { const c = card(); if (!c) return; go('trades'); openTradeForm({ code: c.code, name: c.name, side: '買進' }); break; }
     case 'etfAuto': openModal({ title: 'ETF 自動帶入', body: '<label class="f"><span>ETF 代號</span><input type="text" name="code" placeholder="台股：0050、00878、009816；美股：VOO、QQQ、VT" required></label><div class="help">會自動抓成分股權重、產業分布、規模、費用率與配息資訊。</div>', saveText: '帶入', onSave: d => { setTimeout(() => etfAutoFill(d.code), 10); } }); break;
     case 'etfRefreshAll': for (const x of S.etfs) { const code = hKey(x.name); if (/^(\d{4,6}[A-Z]?|[A-Z]{1,6})$/.test(code)) await etfAutoFill(code, x.id); } break;
     case 'monCheck': checkMonitors(true); break;
@@ -480,26 +481,140 @@ document.addEventListener('input', e => {
   }
 });
 
-// 新增交易後提示建立覆盤
+/* ---------- 交易表單：代號帶名稱、當下分析快照、選項化 ---------- */
+const BUY_REASONS = ['財報成長', '估值便宜', '技術面轉強', '法人買超', '產業趨勢向上', '配息／存股', '定期定額', '分散配置', '跌深反彈'];
+const SELL_REASONS = ['達到目標價', '跌破停損', '基本面轉差', '估值過高', '技術面轉弱', '再平衡', '換股', '資金需求'];
+const PLANS = ['短線（1 個月內）', '波段（1～6 個月）', '長期（1 年以上）', '存股（不打算賣）'];
+function techRead(n) {
+  if (!n) return null;
+  const trend = n.ma20 && n.ma60 ? (n.last > n.ma20 && n.ma20 > n.ma60 ? '多頭排列' : n.last < n.ma20 && n.ma20 < n.ma60 ? '空頭排列' : n.last > n.ma60 ? '整理偏多' : '整理偏弱') : '—';
+  const rsi = n.rsi == null ? '—' : n.rsi >= 70 ? `${n.rsi} 偏熱` : n.rsi <= 30 ? `${n.rsi} 偏冷` : `${n.rsi} 中性`;
+  const macd = n.hist == null ? '—' : n.hist > 0 ? (n.prevHist <= 0 ? '剛翻正（轉強）' : '多方動能') : (n.prevHist >= 0 ? '剛翻負（轉弱）' : '空方動能');
+  const bb = n.bbUp == null ? '—' : n.last > n.bbUp ? '突破上軌' : n.last < n.bbLo ? '跌破下軌' : '通道內';
+  const pos = n.hi52 && n.lo52 ? Math.round((n.last - n.lo52) / (n.hi52 - n.lo52 || 1) * 100) : null;
+  let score = 0;
+  if (trend === '多頭排列') score += 2; else if (trend === '整理偏多') score += 1; else if (trend === '空頭排列') score -= 2; else if (trend === '整理偏弱') score -= 1;
+  if (n.hist > 0) score += 1; else if (n.hist < 0) score -= 1;
+  if (n.rsi >= 75) score -= 1; if (n.rsi <= 25) score += 1;
+  const signal = score >= 2 ? '技術面偏多' : score <= -2 ? '技術面偏空' : '技術面中性';
+  return { trend, rsi, macd, bb, pos, signal, score };
+}
+function makeSnapshot(code, q, side) {
+  const n = q?.num, t = techRead(n), c = S.cards.find(x => String(x.code).toUpperCase() === code);
+  const h = holdings().find(x => x.code === code), qd = quadrant();
+  const lines = [];
+  if (n) {
+    lines.push(`【技術面】${t.signal}`);
+    lines.push(`價格 ${n.last}（${q.priceDate}），近 20 日 ${n.chg20 >= 0 ? '+' : ''}${n.chg20}%`);
+    lines.push(`趨勢：${t.trend}（月線 ${n.ma20}、季線 ${n.ma60}）`);
+    lines.push(`RSI：${t.rsi}；MACD：${t.macd}；布林：${t.bb}`);
+    if (t.pos != null) lines.push(`位於 52 週區間 ${t.pos}%（${n.lo52}～${n.hi52}）；支撐 ${n.support}、壓力 ${n.resistance}`);
+  }
+  if (c) {
+    const g = c.lights.filter(l => l.c === '綠').length, r = c.lights.filter(l => l.c === '紅').length, vs = valSummary(c);
+    lines.push(`【研究卡】綠燈 ${g}、紅燈 ${r}${vs.avg ? `；合理價均值 ${fmt(vs.avg, 1)}` : ''}${c.layer ? `；${c.layer}` : ''}`);
+    if (c.verdict) lines.push(`結論：${c.verdict.replace(/^【[^】]+】/, '')}`);
+  } else lines.push('【研究卡】尚未建立（建議先研究再交易）');
+  if (qd) lines.push(`【總經】${qd.name}`);
+  if (h && h.shares > 0) lines.push(`【交易前持倉】${fmt(h.shares)} 股，平均成本 ${fmt(h.cost / h.shares, 2)}`);
+  return { at: new Date().toISOString(), text: lines.join('\n'), signal: t ? `${t.signal}（${t.trend}、RSI ${t.rsi}）` : '', num: n || null };
+}
+function openTradeForm(pre = {}, id) {
+  const t = id ? S.trades.find(x => x.id === id) : null;
+  const v = Object.assign({ date: today(), side: '買進', reasons: [], plan: '', conf: '中' }, pre, t || {});
+  const reasonsHTML = side => (side === '賣出' ? SELL_REASONS : BUY_REASONS).map(o => `<label><input type="checkbox" name="reasons" value="${esc(o)}" ${(v.reasons || []).includes(o) ? 'checked' : ''}><span>${esc(o)}</span></label>`).join('');
+  const codes = [...new Set(S.cards.map(c => c.code).concat(S.trades.map(x => x.code)).filter(Boolean))];
+  openModal({
+    title: t ? '交易紀錄' : '記一筆交易',
+    body: `
+      <div class="seg" style="margin-bottom:10px"><label><input type="radio" name="side" value="買進" ${v.side !== '賣出' ? 'checked' : ''}><span>買進</span></label><label class="sell"><input type="radio" name="side" value="賣出" ${v.side === '賣出' ? 'checked' : ''}><span>賣出</span></label></div>
+      <div class="inline">
+        <label class="f"><span>代號</span><input type="text" name="code" list="codeList" value="${esc(v.code || '')}" autocapitalize="characters" placeholder="2330、VOO…" required><datalist id="codeList">${codes.map(x => `<option value="${esc(x)}">`).join('')}</datalist></label>
+        <label class="f"><span>名稱（自動）</span><input type="text" name="name" value="${esc(v.name || '')}"></label>
+        <label class="f"><span>日期</span><input type="date" name="date" value="${esc(v.date)}"></label>
+        <label class="f"><span>成交價（預設現價）</span><input type="text" inputmode="decimal" name="price" value="${esc(v.price || '')}"></label>
+      </div>
+      <div class="codestat" id="codeStat"></div>
+      <label class="f"><span>股數</span><input type="text" inputmode="numeric" name="shares" value="${esc(v.shares || '')}"></label>
+      <div class="qbtns" id="shareBtns"></div>
+      <label class="f" style="margin-top:10px"><span id="reasonLbl">${v.side === '賣出' ? '為什麼賣（可複選）' : '為什麼買（可複選）'}</span><div class="chipsel" id="reasonBox">${reasonsHTML(v.side)}</div></label>
+      <label class="f"><span>持有計畫</span><div class="chipsel">${PLANS.map(o => `<label><input type="radio" name="plan" value="${esc(o)}" ${v.plan === o ? 'checked' : ''}><span>${esc(o)}</span></label>`).join('')}</div></label>
+      <label class="f"><span>信心程度</span><div class="seg">${['低', '中', '高'].map(o => `<label><input type="radio" name="conf" value="${o}" ${v.conf === o ? 'checked' : ''}><span>${o}</span></label>`).join('')}</div></label>
+      <div class="inline">
+        <label class="f"><span>停損價（自動建議）</span><input type="text" inputmode="decimal" name="stop" value="${esc(v.stop || '')}"></label>
+        <label class="f"><span>目標價（自動建議）</span><input type="text" inputmode="decimal" name="target" value="${esc(v.target || '')}"></label>
+        <label class="f"><span>手續費＋稅（留白自動估）</span><input type="text" inputmode="decimal" name="fee" value="${esc(v.fee || '')}"></label>
+      </div>
+      <label class="f"><span>補充一句（選填）</span><input type="text" name="note" value="${esc(v.note || '')}"></label>
+      <div class="sec-title">${t ? '當時的分析報告' : '當下分析報告（存檔時一起保存）'}</div>
+      <div class="snap" id="snapBox">${esc(v.snap?.text || '輸入代號後自動產生…')}</div>`,
+    saveText: t ? '儲存' : '記錄',
+    onSave: (d, body) => {
+      const code = String(d.code || '').trim().toUpperCase(); if (!code) { toast('請輸入代號'); return false; }
+      if (!num(d.shares) || !num(d.price)) { toast('請填成交價與股數'); return false; }
+      const reasons = [...body.querySelectorAll('input[name=reasons]:checked')].map(x => x.value);
+      const rec = { date: d.date, code, name: d.name, side: d.side, price: d.price, shares: d.shares, fee: d.fee || '', reasons, plan: d.plan || '', conf: d.conf || '', stop: d.stop, target: d.target, note: d.note,
+        reason: [reasons.join('、'), d.note].filter(Boolean).join('；'), snap: (t && t.snap) || body._snap || null };
+      if (t) { Object.assign(t, rec); toast('已儲存'); return; }
+      const nt = { id: uid(), ...rec }; S.trades.push(nt);
+      setTimeout(() => askReview(nt), 250);
+    },
+    onDelete: t ? () => { S.trades = S.trades.filter(x => x.id !== id); save(); } : null,
+  });
+  const body = $('#modalBody'), f = n => body.querySelector(`[name=${n}]`);
+  const setShareBtns = () => {
+    const code = f('code').value.trim().toUpperCase(), tw = /^\d/.test(code), side = body.querySelector('[name=side]:checked').value;
+    const h = holdings().find(x => x.code === code);
+    const opts = (tw ? [['1 張', 1000], ['2 張', 2000], ['5 張', 5000], ['零股 100', 100]] : [['1 股', 1], ['5 股', 5], ['10 股', 10], ['50 股', 50]]);
+    if (side === '賣出' && h?.shares > 0) opts.unshift([`全部 ${fmt(h.shares)} 股`, h.shares], [`一半`, Math.floor(h.shares / (tw && h.shares >= 2000 ? 2000 : 2)) * (tw && h.shares >= 2000 ? 1000 : 1)]);
+    $('#shareBtns').innerHTML = opts.map(([l, n]) => `<button type="button" data-shares="${n}">${l}</button>`).join('');
+  };
+  body.addEventListener('click', e => { const b = e.target.closest('[data-shares]'); if (b) f('shares').value = b.dataset.shares; });
+  body.querySelectorAll('[name=side]').forEach(r => r.addEventListener('change', () => {
+    const side = body.querySelector('[name=side]:checked').value; v.reasons = [];
+    $('#reasonBox').innerHTML = reasonsHTML(side); $('#reasonLbl').textContent = side === '賣出' ? '為什麼賣（可複選）' : '為什麼買（可複選）'; setShareBtns();
+    if (body._q) { body._snap = makeSnapshot(f('code').value.trim().toUpperCase(), body._q, side); $('#snapBox').textContent = body._snap.text; }
+  }));
+  let timer;
+  const lookup = async () => {
+    const code = f('code').value.trim().toUpperCase(); setShareBtns();
+    if (!code || t) return;
+    $('#codeStat').innerHTML = '<span class="help">查詢中…</span>';
+    try {
+      const q = await quote(code); body._q = q;
+      if (!f('name').value || f('name')._auto) { f('name').value = q.name || ''; f('name')._auto = true; }
+      f('price').value = q.price;
+      const n = q.num, c = S.cards.find(x => String(x.code).toUpperCase() === code), vs = c ? valSummary(c) : {};
+      if (!f('stop').value) f('stop').value = n.support && n.support < q.price && n.support > q.price * 0.8 ? n.support : Math.round(q.price * 0.92 * 100) / 100;
+      if (!f('target').value) f('target').value = vs.avg && vs.avg > q.price ? Math.round(vs.avg * 100) / 100 : n.resistance > q.price ? n.resistance : '';
+      if (!f('shares').value) f('shares').value = /^\d/.test(code) ? 1000 : 1;
+      $('#codeStat').innerHTML = `<b>${esc(q.name || code)}</b>　現價 ${q.price}（${esc(q.priceDate)}）`;
+      body._snap = makeSnapshot(code, q, body.querySelector('[name=side]:checked').value);
+      $('#snapBox').textContent = body._snap.text;
+    } catch (e) { $('#codeStat').innerHTML = `<span class="down">查不到這個代號（${esc(e.message)}）</span>`; }
+  };
+  f('code').addEventListener('input', () => { clearTimeout(timer); f('name')._auto = true; timer = setTimeout(lookup, 600); });
+  f('name').addEventListener('input', () => { f('name')._auto = false; });
+  if (v.code && !t) lookup(); else setShareBtns();
+}
+function askReview(t) {
+  openModal({
+    title: '要順便建立覆盤紀錄嗎？',
+    body: `<div class="help" style="font-size:14px">會帶入：${esc(t.date)}｜${esc(t.side)} ${esc(t.code)} ${esc(t.name || '')}<br>理由：${esc(t.reason || '（未選）')}<br>當時的分析報告也會一起存進覆盤，之後回頭看就知道自己當時在想什麼。</div>`,
+    saveText: '建立覆盤',
+    onSave: () => {
+      const h = holdings().find(x => x.code === t.code);
+      S.reviews.push({ id: uid(), date: t.date, target: `${t.code} ${t.name || ''}`.trim(), decision: t.side, tradeId: t.id,
+        reason: `${t.reason || ''}${t.plan ? `（${t.plan}，信心${t.conf || ''}）` : ''}${t.snap ? '\n' + t.snap.text : ''}`,
+        result: '', lesson: '', lessonNote: t.side === '賣出' && h ? `賣出後已實現損益累計 ${fmt(h.realized)}` : '', writeback: '' });
+      toast('已建立覆盤，之後記得回來選「結果」與「學到什麼」');
+    },
+  });
+}
 const _editRecord = editRecord;
 editRecord = function (key, id) {
-  _editRecord(key, id);
-  if (key !== 'trades' || id) return;
-  const form = $('#modalForm'), orig = form.onsubmit;
-  form.onsubmit = ev => {
-    orig(ev);
-    const t = S.trades[S.trades.length - 1]; if (!t || t._asked) return; t._asked = true; save();
-    setTimeout(() => openModal({
-      title: '要順便建立覆盤紀錄嗎？',
-      body: `<div class="help" style="font-size:14px">會帶入：${esc(t.date)}｜${esc(t.side)} ${esc(t.code)} ${esc(t.name || '')}｜理由：${esc(t.reason || '（未填）')}。<br>結果與心得之後再補。</div>`,
-      saveText: '建立覆盤',
-      onSave: () => {
-        const h = holdings().find(x => x.code === String(t.code).toUpperCase());
-        S.reviews.push({ id: uid(), date: t.date, target: `${t.code} ${t.name || ''}`.trim(), decision: t.side, reason: t.reason || '', result: t.side === '賣出' && h ? `已實現損益累計 ${fmt(h.realized)}` : '', lesson: '', writeback: '' });
-        toast('已建立覆盤，稍後記得補上結果與心得');
-      },
-    }), 200);
-  };
+  if (key === 'trades') return openTradeForm({}, id);
+  return _editRecord(key, id);
 };
 
 /* ================= 分頁與啟動 ================= */

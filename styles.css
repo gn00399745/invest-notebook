@@ -290,3 +290,31 @@ button:disabled { opacity: .6; cursor: wait; }
 .chart { margin-bottom: 10px; }
 .card.alert { border: 2px solid var(--red); }
 .dcf { border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 6px; }
+.chipsel { display: flex; flex-wrap: wrap; gap: 6px; }
+.chipsel label { cursor: pointer; }
+.chipsel input { position: absolute; opacity: 0; pointer-events: none; }
+.chipsel span { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 14px; color: var(--text); background: var(--bg); }
+.chipsel input:checked + span { background: var(--navy-2); color: #fff; border-color: var(--navy-2); }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg label { flex: 1; text-align: center; cursor: pointer; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg span { display: block; padding: 9px 0; font-weight: 600; }
+.seg input:checked + span { background: var(--navy-2); color: #fff; }
+.seg label.sell input:checked + span { background: var(--red); }
+.qbtns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.qbtns button { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 5px 10px; font-size: 13px; cursor: pointer; }
+.snap { background: var(--bg); border-radius: 10px; padding: 10px 12px; font-size: 13px; white-space: pre-wrap; line-height: 1.6; border-left: 3px solid var(--gold); }
+.snap b { font-size: 14px; }
+.codestat { font-size: 13px; margin-top: 4px; min-height: 18px; }
+/* 教學 */
+.lchart { width: 100%; height: auto; display: block; background: var(--bg); border-radius: 8px; }
+.quiz { padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.quiz:last-of-type { border-bottom: 0; }
+.qq { font-weight: 600; margin-bottom: 6px; }
+.qo { display: flex; flex-direction: column; gap: 6px; }
+.qo button { text-align: left; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 8px 10px; cursor: pointer; font-size: 14px; }
+.qo button.right { border-color: var(--green); background: rgba(30,158,90,.12); }
+.qo button.wrong { border-color: var(--red); background: rgba(214,69,69,.1); }
+.pats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.pat { background: var(--bg); border-radius: 10px; padding: 8px; }
+.pat svg { width: 100%; height: auto; }

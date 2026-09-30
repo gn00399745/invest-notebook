@@ -154,10 +154,12 @@ const SCHEMAS = {
   reviews: { title: '覆盤紀錄', fields: [
     { k: 'date', l: '日期', t: 'date', d: today }, { k: 'target', l: '標的' },
     { k: 'decision', l: '決策', t: 'select', o: ['買進', '加碼', '減碼', '賣出', '觀望', '停損'] },
-    { k: 'reason', l: '當時理由', t: 'textarea' }, { k: 'result', l: '結果', t: 'textarea' },
-    { k: 'lesson', l: '學到什麼', t: 'textarea' },
+    { k: 'reason', l: '當時理由（交易時自動帶入）', t: 'textarea' },
+    { k: 'result', l: '結果', t: 'select', o: ['', '仍持有・獲利中', '仍持有・虧損中', '獲利出場', '停損出場', '打平出場', '沒有買（觀望）'] },
+    { k: 'lesson', l: '學到什麼（可複選）', t: 'chips', o: ['判斷正確，紀律執行', '進場太急／追高', '停損太慢', '太早賣出', '部位太大', '沒看財報就買', '被新聞或情緒影響', '應該分批進出', '運氣成分大', '總經判斷失準'] },
+    { k: 'lessonNote', l: '補充（選填）', t: 'textarea' },
     { k: 'writeback', l: '寫回哪個分頁', t: 'select', o: ['', '總經', '產業定位', '研究卡', 'ETF 健檢', '策略', '監控', '待驗主張'] }],
-    head: r => `${r.target || ''}　${r.decision || ''}`, meta: r => r.date, body: r => [r.reason && '理由：' + r.reason, r.result && '結果：' + r.result, r.lesson && '教訓：' + r.lesson].filter(Boolean).join('\n'),
+    head: r => `${r.target || ''}　${r.decision || ''}`, meta: r => r.date, body: r => [r.reason && '理由：' + r.reason.split('\n')[0], r.result && '結果：' + r.result, r.lesson && '教訓：' + r.lesson, r.lessonNote].filter(Boolean).join('\n'),
     sort: (a, b) => (b.date || '').localeCompare(a.date || '') },
   etfLog: { title: '健檢紀錄', fields: [
     { k: 'date', l: '日期', t: 'date', d: today }, { k: 'change', l: '與上次相比變了什麼', t: 'textarea' }, { k: 'action', l: '動作' }],
@@ -171,6 +173,7 @@ function fieldHTML(f, val) {
   let input;
   if (f.t === 'select') input = `<select ${name}>${f.o.map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
   else if (f.t === 'textarea') input = `<textarea ${name}>${esc(v)}</textarea>`;
+  else if (f.t === 'chips') { const sel = String(v || '').split('、'); input = `<input type="hidden" ${name} value=""><div class="chipsel">${f.o.map(o => `<label><input type="checkbox" ${name} value="${esc(o)}" ${sel.includes(o) ? 'checked' : ''}><span>${esc(o)}</span></label>`).join('')}</div>`; }
   else input = `<input type="${f.t || 'text'}" ${name} value="${esc(v)}">`;
   return `<label class="f"><span>${esc(f.l)}</span>${input}</label>`;
 }
@@ -185,7 +188,8 @@ function openModal({ title, body, onSave, onDelete, saveText = '儲存' }) {
   $('#modalCancel').onclick = () => dlg.close();
   $('#modalForm').onsubmit = e => {
     e.preventDefault();
-    const data = Object.fromEntries(new FormData($('#modalForm')).entries());
+    const fd = new FormData($('#modalForm')), data = {};
+    [...new Set(fd.keys())].forEach(k => { const all = fd.getAll(k); data[k] = all.length > 1 ? all.filter(Boolean).join('、') : all[0]; });
     if (onSave(data, $('#modalBody')) !== false) { dlg.close(); save(); render(); }
   };
   dlg.showModal();
