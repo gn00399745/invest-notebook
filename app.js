@@ -631,7 +631,8 @@ async function autoFillCard(c, quiet) {
     if (f.cur !== '' && (f.prev !== '' || !row.prev)) { row.cur = f.cur; row.prev = f.prev; row.src = f.src; }
   });
   set(c, 'finGap', d.finGap && '【自動】' + d.finGap);
-  (d.tech?.rows || []).forEach((t, i) => { const row = c.tech[i]; if (!row) return; if (isBlankish(row.judge) || !row.read || c.auto) { row.read = t.read; row.judge = t.judge; } });
+  const firstExample = c.example && !c.auto;
+  (d.tech?.rows || []).forEach((t, i) => { const row = c.tech[i]; if (!row) return; if (isBlankish(row.judge) || !row.read || c.auto || firstExample) { row.read = t.read; row.judge = t.judge; } });
   (d.chip || []).forEach((t, i) => { const row = c.chip[i]; if (!row || !t.d5) return; if (!row.d5 || c.auto || isBlankish(row.judge)) { row.d5 = t.d5; row.d20 = t.d20; row.judge = t.judge; } });
   if (!d.chip && d.chipNote && isBlankish(c.chip[0].judge)) c.chip[0].judge = d.chipNote;
   (d.val || []).forEach((v, i) => { const row = c.val[i]; if (row && (isBlankish(row.assume) || !row.fair || c.auto)) Object.assign(row, v); });
@@ -1062,6 +1063,7 @@ if ('serviceWorker' in navigator) window.addEventListener('load', () => navigato
 window.addEventListener('hashchange', () => { const p = location.hash.slice(1); if (p && p !== current) go(p); });
 if (S.examplesSeeded !== window.EXAMPLES?.version) { seedExamples(); save(); }
 macroAutoFill(); save();
+if (location.protocol.startsWith('http') && (!S.macro.fetchedAt || Date.now() - new Date(S.macro.fetchedAt) > 6 * 3600e3)) { render._tried = true; setTimeout(() => fetchMacro(true), 300); }
 // 範例卡第一次開啟時，在背景自動帶入最新資料
 setTimeout(async () => {
   if (!location.protocol.startsWith('http')) return;
