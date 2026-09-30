@@ -287,4 +287,4 @@ const _homeL = PAGES.home;
 PAGES.home = () => _homeL().replace('<div class="grid grid-2">', `<div class="card" style="border-left:4px solid var(--gold)"><div class="card-head"><h3 class="gold-bar">新手從這裡開始</h3><button class="btn-small" data-go="learn">技術分析教學 →</button></div>
   <div class="help" style="font-size:14px">1. 先上 9 堂技術分析課（每堂 3 分鐘，附小測驗）　2. 到「研究卡」輸入代號，自動帶入資料　3. 到「策略」算部位　4. 實際買賣時在「交易」記一筆，網站會保存當下的分析報告　5. 定期到「覆盤」檢討</div></div>
   <div class="grid grid-2">`);
-if (location.hash.slice(1) === 'learn' || current === 'learn') go('learn'); else if (current === 'home') render();
+if (window.__startPage === 'learn' || current === 'learn') go('learn'); else if (current === 'home') render();

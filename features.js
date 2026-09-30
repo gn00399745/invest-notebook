@@ -675,4 +675,5 @@ setTimeout(async () => {
   for (const c of S.cards.filter(c => c.example && (!c.auto || !c.spark))) { await autoFillCard(c, true); }
   checkMonitors(false);
 }, 1500);
-go(location.hash.slice(1) || 'home');
+window.__startPage = location.hash.slice(1);
+go(window.__startPage || 'home');
