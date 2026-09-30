@@ -18,9 +18,11 @@ const num = s => { const n = parseFloat(String(s).replace(/,/g, '')); return Num
 
 module.exports = async (req, res) => {
   const code = String(req.query.code || '').trim().toUpperCase().replace(/\.TW$/, '');
-  if (!/^\d{4,6}[A-Z]?$/.test(code)) { res.status(400).json({ error: '目前只支援台股 ETF 代號（例如 0050、00878、009816）' }); return; }
-  const id = `${code}.TW`, base = 'https://www.moneydj.com/ETF/X/Basic/';
-  const errors = []; const out = { code };
+  const tw = /^\d{4,6}[A-Z]?$/.test(code);
+  if (!tw && !/^[A-Z]{1,6}$/.test(code)) { res.status(400).json({ error: '請輸入台股 ETF（例如 0050、00878）或美股 ETF 代號（例如 VOO、QQQ、VT）' }); return; }
+  const id = tw ? `${code}.TW` : code, base = 'https://www.moneydj.com/ETF/X/Basic/';
+  const out0 = { market: tw ? '台股' : '美股' };
+  const errors = []; const out = { code, ...out0 };
   const [b4, b7, b7b] = await Promise.all(['Basic0004', 'Basic0007', 'Basic0007B'].map(p => page(`${base}${p}.xdjhtm?etfid=${id}`).catch(e => { errors.push(`${p}：${e.message}`); return ''; })));
 
   if (b4) {
@@ -41,14 +43,17 @@ module.exports = async (req, res) => {
     });
   });
   out.holdings = holdings;
-  const sectors = [];
-  if (b7) {
-    const sseen = new Set();
-    rows(b7).forEach(r => {
-      if (r.length === 4 && !r[0] && r[1] && num(r[3]) != null && !/^(台灣|美國|現金|中國|日本|香港)$/.test(r[1]) && !sseen.has(r[1])) { sseen.add(r[1]); sectors.push({ name: r[1], w: num(r[3]) }); }
-    });
-  }
-  out.sectors = sectors.sort((a, b) => b.w - a.w);
+  // 持股狀況頁有兩張分布表：第一張是國家／區域，第二張是產業
+  const groups = [];
+  if (b7) b7.split(/<table/i).forEach(t => {
+    const g = rows(t).filter(r => r.length === 4 && !r[0] && r[1] && num(r[3]) != null).map(r => ({ name: r[1], w: num(r[3]) }));
+    const uniq = []; const seen2 = new Set(); g.forEach(x => { if (!seen2.has(x.name)) { seen2.add(x.name); uniq.push(x); } });
+    if (uniq.length) groups.push(uniq);
+  });
+  const isRegion = g => g.some(x => /^(台灣|美國|日本|中國|英國|香港|加拿大|韓國|南韓|德國|法國|印度)$/.test(x.name));
+  const reg = groups.find(isRegion) || [], sec = groups.find(g => !isRegion(g)) || [];
+  out.countries = reg.filter(x => x.name !== '現金').sort((a, b) => b.w - a.w);
+  out.sectors = sec.filter(x => !/^(現金|流動資產)$/.test(x.name)).sort((a, b) => b.w - a.w);
   out.date = ((b7b || b7).match(/資料日期[：:]\s*([\d/]+)/) || [])[1] || '';
   out.errors = errors;
   const ok = holdings.length > 0;
