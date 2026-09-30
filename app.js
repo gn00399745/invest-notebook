@@ -93,6 +93,11 @@ function seedExamples(force) {
   });
   (E.etfLog || []).forEach(l => { if (!S.etfLog.some(x => x.date === l.date && x.change === l.change)) { S.etfLog.push({ id: uid(), ...l }); n++; } });
   (E.monitors || []).forEach(m => { if (!S.monitors.some(x => x.cond === m.cond)) { S.monitors.push({ id: uid(), ...m }); n++; } });
+  Object.entries(E.macroManual || {}).forEach(([name, v]) => { const r = S.macro.rows.find(x => x.name === name); if (r && !r.latest) { Object.assign(r, v); n++; } });
+  if (E.keywords && !S.macro.keywords) { S.macro.keywords = E.keywords; n++; }
+  (E.events || []).forEach(e => { if (!S.events.some(x => x.date === e.date && x.event === e.event)) { S.events.push({ id: uid(), ...e }); n++; } });
+  (E.impacts || []).forEach(e => { if (!S.impacts.some(x => x.event === e.event)) { S.impacts.push({ id: uid(), ...e }); n++; } });
+  (E.claims || []).forEach(e => { if (!S.claims.some(x => x.claim === e.claim)) { S.claims.push({ id: uid(), ...e }); n++; } });
   S.examplesSeeded = E.version;
   return n;
 }
@@ -310,6 +315,7 @@ PAGES.macro = () => `
   <div class="card">
     <h3 class="gold-bar">景氣象限判斷</h3>
     <div class="inline">
+      ${S.macro.growthAuto || S.macro.inflAuto ? '<div class="help" style="grid-column:1/-1">目前是依數據自動判斷，你可以直接改。</div>' : ''}
       <label class="f"><span>經濟成長動能</span><select data-bind="macro.growth">${['', '上升', '下降'].map(o => `<option ${o === S.macro.growth ? 'selected' : ''} value="${o}">${o || '請選擇'}</option>`).join('')}</select></label>
       <label class="f"><span>通膨趨勢</span><select data-bind="macro.inflation">${['', '上升', '下降'].map(o => `<option ${o === S.macro.inflation ? 'selected' : ''} value="${o}">${o || '請選擇'}</option>`).join('')}</select></label>
     </div>
@@ -351,6 +357,7 @@ function indCard(r, i) {
       <div class="ind-dir" data-dir="${i}">${dirOf(r)}</div>
     </div>
     ${extra}
+    ${!auto && r.src ? `<div class="ind-src">資料日期 ${esc(r.date || '')}（前值 ${esc(r.prevDate || '')}）· ${esc(r.src)}</div>` : ''}
     ${auto ? `<div class="ind-src">資料日期 ${esc(r.date)}（前值 ${esc(r.prevDate || '')}）· ${esc(r.src || '')}</div>` : ''}
     <input type="text" class="ind-imp" placeholder="對利率／市場的意涵" data-macro="${i}" data-f="implication" value="${esc(r.implication)}">
     <label class="ind-next"><span>下次公布</span><input type="date" data-macro="${i}" data-f="next" value="${esc(r.next)}"></label>
@@ -362,6 +369,55 @@ function inflationHint() {
   const inf = num(c.latest) > num(c.prev) ? '上升' : num(c.latest) < num(c.prev) ? '下降' : '持平';
   const weak = (num(u?.latest) > num(u?.prev)) || (num(n?.latest) < num(n?.prev));
   return `<div class="note">數據參考：CPI 年增 ${esc(c.prev)}% → ${esc(c.latest)}%，通膨偏<b>${inf}</b>；就業${weak ? '轉弱，成長動能偏<b>下降</b>' : '穩健，成長動能偏<b>上升</b>'}。象限仍由你判斷。</div>`;
+}
+// 下次公布日（官方時程：BLS、Fed、BEA）；過期自動換下一個
+const RELEASES = {
+  cpi: ['2026-10-14', '2026-11-10', '2026-12-10'], ppi: ['2026-10-15', '2026-11-13', '2026-12-11'],
+  nfp: ['2026-10-02', '2026-11-06', '2026-12-04'], unrate: ['2026-10-02', '2026-11-06', '2026-12-04'],
+  pce: ['2026-10-29', '2026-11-25', '2026-12-23'], ffr: ['2026-10-28', '2026-12-09'],
+};
+function nextRelease(key) {
+  const t = today();
+  if (key === 'claims') { const d = new Date(); d.setDate(d.getDate() + ((4 - d.getDay() + 7) % 7 || 7)); return d.toISOString().slice(0, 10); }
+  if (key === 'us10y' || key === 'usdtwd') { const d = new Date(); d.setDate(d.getDate() + (d.getDay() === 5 ? 3 : d.getDay() === 6 ? 2 : 1)); return d.toISOString().slice(0, 10); }
+  return (RELEASES[key] || []).find(x => x >= t) || '';
+}
+// 依數據方向自動產生白話意涵
+function autoImplication(r) {
+  const a = num(r.latest), b = num(r.prev); if (a == null || b == null) return '';
+  const up = a > b, dn = a < b;
+  const T = {
+    cpi: up ? '通膨升溫，Fed 降息空間變小，高估值成長股承壓' : dn ? '通膨降溫，有利利率回落與成長股評價' : `通膨持平在 ${a}%，${a > 2.5 ? '仍高於 2% 目標，Fed 不急著降息' : '接近目標，壓力不大'}`,
+    ppi: up ? '生產成本上升，可能轉嫁到 CPI，或壓縮企業毛利' : dn ? '生產成本回落，通膨壓力減輕' : '生產端成本持平',
+    pce: up ? 'Fed 最看重的通膨指標上升，偏鷹派訊號' : dn ? 'Fed 最看重的通膨指標下降，有利降息' : 'Fed 參考通膨持平',
+    nfp: a < 50 ? '新增就業很少，景氣降溫、降息機率上升' : up ? '就業增加變多，景氣熱，但降息可能延後' : dn ? '就業增加變少，勞動市場降溫' : '就業增幅持平',
+    unrate: up ? '失業率上升，衰退風險升高' : dn ? '失業率下降，勞動市場緊，薪資通膨壓力' : `失業率持平於 ${a}%，就業市場穩定`,
+    claims: up ? '新申請失業救濟人數增加，裁員轉多的早期訊號' : dn ? '申請人數減少，就業仍穩' : '申請人數持平',
+    ffr: up ? 'Fed 升息，資金成本上升，股票與債券評價承壓' : dn ? 'Fed 降息，資金轉寬鬆，有利股市' : '利率維持不變',
+    us10y: (up ? '長天期殖利率上升，成長股評價承壓、債券價格下跌' : dn ? '殖利率下滑，有利成長股與債券' : '殖利率持平') + (a >= 5 ? `；已在 ${a}% 高檔，股票相對債券的吸引力下降` : ''),
+    usdtwd: up ? '台幣貶值，出口股匯兌受惠，但外資可能匯出' : dn ? '台幣升值，外資匯入；出口商有匯損壓力' : '匯率持平',
+  };
+  return T[r.key] || '';
+}
+function macroAutoFill() {
+  S.macro.rows.forEach(r => {
+    if (r.key && r.date && (!r.implication || r.impAuto)) { const t = autoImplication(r); if (t) { r.implication = t; r.impAuto = true; } }
+    if (r.key && (!r.next || r.next < today())) { const n = nextRelease(r.key); if (n) r.next = n; }
+  });
+  const g = k => S.macro.rows.find(r => r.key === k);
+  const cpi = g('cpi'), ffr = g('ffr'), nfp = g('nfp'), un = g('unrate');
+  if (cpi?.date && ffr?.date && (!S.macro.fedNote || S.macro.fedNote.startsWith('【自動】'))) {
+    const hawk = num(cpi.latest) > 2.5;
+    S.macro.fedNote = `【自動】Fed 目標利率 ${ffr.extra?.replace(/^目標區間\s*/, '') || ffr.latest + '%'}${num(ffr.latest) > num(ffr.prev) ? '（上次為升息）' : num(ffr.latest) < num(ffr.prev) ? '（上次為降息）' : ''}；CPI 年增 ${cpi.latest}%，${hawk ? '通膨仍高於 2% 目標，立場偏鷹，短期不易降息' : '通膨接近目標，立場偏中性'}。`;
+  }
+  if (cpi?.date && (!S.macro.inflation || S.macro.inflAuto)) {
+    const a = num(cpi.latest), b = num(cpi.prev);
+    S.macro.inflation = a > b || (a === b && a > 2.5) ? '上升' : '下降'; S.macro.inflAuto = true;
+  }
+  if (nfp?.date && (!S.macro.growth || S.macro.growthAuto)) {
+    const weak = num(un?.latest) > num(un?.prev) || num(nfp.latest) < 50;
+    S.macro.growth = weak ? '下降' : '上升'; S.macro.growthAuto = true;
+  }
 }
 async function fetchMacro(silent) {
   if (S.macro.fetching) return;
@@ -379,6 +435,7 @@ async function fetchMacro(silent) {
       n++;
     });
     if (!n) throw new Error('資料來源暫時無回應');
+    macroAutoFill();
     S.macro.fetchedAt = j.updated; S.macro.fetchError = j.errors?.length ? '部分來源失敗：' + j.errors.join('；') : '';
     S.macro.noKey = !j.fredKey;
     if (!silent) toast(`已更新 ${n} 項指標`);
@@ -547,9 +604,9 @@ function newCardDialog() {
   });
 }
 const isBlankish = v => !v || /^示範|^【自動】|^請查詢|^待補/.test(String(v));
-async function autoFillCard(c) {
+async function autoFillCard(c, quiet) {
   if (!c.code) { toast('請先填代號'); return; }
-  toast('資料抓取中…（約 5～20 秒）');
+  if (!quiet) toast('資料抓取中…（約 5～20 秒）');
   const btn = $('#autoFill'); if (btn) { btn.disabled = true; btn.textContent = '抓取中…'; }
   let d;
   try {
@@ -557,7 +614,7 @@ async function autoFillCard(c) {
     d = await r.json();
     if (!r.ok && !d.price) throw new Error(d.errors?.join('；') || d.error || 'HTTP ' + r.status);
   } catch (e) {
-    toast('自動帶入失敗：' + (e.name === 'TimeoutError' ? '逾時' : e.message));
+    if (!quiet) toast('自動帶入失敗：' + (e.name === 'TimeoutError' ? '逾時' : e.message));
     if (btn) { btn.disabled = false; btn.textContent = '⚡ 自動帶入資料'; }
     return;
   }
@@ -571,7 +628,7 @@ async function autoFillCard(c) {
     const row = c.fin[i]; if (!row) return;
     const mine = row.src && !/自動|FinMind|SEC|待補|未揭露|同上|新台幣|百萬美元|億元/.test(row.src) && row.cur;
     if (mine) return;
-    if (f.cur !== '' || f.prev !== '') { row.cur = f.cur; row.prev = f.prev; row.src = f.src; }
+    if (f.cur !== '' && (f.prev !== '' || !row.prev)) { row.cur = f.cur; row.prev = f.prev; row.src = f.src; }
   });
   set(c, 'finGap', d.finGap && '【自動】' + d.finGap);
   (d.tech?.rows || []).forEach((t, i) => { const row = c.tech[i]; if (!row) return; if (isBlankish(row.judge) || !row.read || c.auto) { row.read = t.read; row.judge = t.judge; } });
@@ -596,8 +653,8 @@ async function autoFillCard(c) {
   ].filter(Boolean);
   c.auto = { at: d.updated || new Date().toISOString(), summary: lines.join('\n'), errors: d.errors || [] };
   save();
-  if (openCardId === c.id) render();
-  toast(d.errors?.length ? '已帶入，部分資料缺漏' : '已自動帶入');
+  if (openCardId === c.id || (current === 'cards' && !openCardId)) render();
+  if (!quiet) toast(d.errors?.length ? '已帶入，部分資料缺漏' : '已自動帶入');
 }
 function yoy(f, kind) {
   const a = num(f.cur), b = num(f.prev);
@@ -959,9 +1016,9 @@ document.addEventListener('click', e => {
 document.addEventListener('input', e => {
   const t = e.target;
   if (t.classList?.contains('cell-ta')) autoGrow(t);
-  if (t.dataset.bind) { setPath(S, t.dataset.bind, t.value); save(); return; }
+  if (t.dataset.bind) { setPath(S, t.dataset.bind, t.value); if (t.dataset.bind === 'macro.growth') S.macro.growthAuto = false; if (t.dataset.bind === 'macro.inflation') S.macro.inflAuto = false; save(); return; }
   if (t.dataset.macro != null) {
-    const r = S.macro.rows[+t.dataset.macro]; r[t.dataset.f] = t.value; save();
+    const r = S.macro.rows[+t.dataset.macro]; r[t.dataset.f] = t.value; if (t.dataset.f === 'implication') r.impAuto = false; save();
     const d = $(`[data-dir="${t.dataset.macro}"]`); if (d) d.innerHTML = dirOf(r); return;
   }
   if (t.dataset.layer != null) { S.layers[+t.dataset.layer] = t.value; save(); return; }
@@ -1004,4 +1061,10 @@ if ('serviceWorker' in navigator) window.addEventListener('load', () => navigato
 
 window.addEventListener('hashchange', () => { const p = location.hash.slice(1); if (p && p !== current) go(p); });
 if (S.examplesSeeded !== window.EXAMPLES?.version) { seedExamples(); save(); }
+macroAutoFill(); save();
+// 範例卡第一次開啟時，在背景自動帶入最新資料
+setTimeout(async () => {
+  if (!location.protocol.startsWith('http')) return;
+  for (const c of S.cards.filter(c => c.example && !c.auto)) { await autoFillCard(c, true); }
+}, 1500);
 go(location.hash.slice(1) || 'home');

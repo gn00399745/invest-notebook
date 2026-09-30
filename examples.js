@@ -1,7 +1,33 @@
 /* 範例資料：十二層產業範例公司 + 台積電、SpaceX 研究卡
    財報數字來自公司公告（日期見各欄來源）；標示「示範」者為說明填法用的假設，不是事實或建議。 */
 window.EXAMPLES = {
-  version: 2,
+  version: 3,
+  macroManual: {
+    '台灣景氣對策信號': { latest: '41', prev: '41', date: '2026-08', prevDate: '2026-07', unit: '分（紅燈 38～45）', src: '國發會（2026-09-29 公布）',
+      implication: '連續 9 個月紅燈、分數維持 41 分，景氣過熱區；AI 與雲端資本支出帶動，國發會預估 9 月仍為紅燈（9 月數據預計 10 月下旬公布）' },
+    '台灣出口年增率': { latest: '41', prev: '32.9', date: '2026-08', prevDate: '2026-07', unit: '% 年增', src: '財政部（2026-09-09 公布）',
+      implication: '8 月出口 824 億美元創單月新高，連續 34 個月正成長，電子零組件拉貨強勁；對台股科技股是基本面順風（9 月數據預計 10 月上旬公布）' },
+  },
+  keywords: '台積電、CoWoS、2 奈米、Fed、美債殖利率、關稅、美伊停火、SpaceX、Starlink、009816 定審',
+  events: [
+    { date: '2026-10-02', event: '美國 9 月非農就業與失業率', type: '經濟數據', targets: '全部美股、美債殖利率、SPCX' },
+    { date: '2026-10-14', event: '美國 9 月 CPI', type: '經濟數據', targets: '成長股評價、Fed 預期' },
+    { date: '2026-10-15', event: '美國 9 月 PPI', type: '經濟數據', targets: '通膨預期' },
+    { date: '2026-10-15', event: '台積電第三季法說會（台北時間 14:00）', type: '法說會', targets: '2330、009816、0050' },
+    { date: '2026-10-28', event: 'FOMC 利率決議（10/27–28 會議，台灣時間 10/29 凌晨）', type: '央行', targets: '全部持股、美元兌台幣' },
+    { date: '2026-10-29', event: '美國 9 月 PCE 物價與第三季 GDP 初估', type: '經濟數據', targets: 'Fed 預期' },
+    { date: '2026-11-03', event: 'SpaceX 第三季財報（預估日，公司未確認）', type: '財報', targets: 'SPCX' },
+    { date: '2026-11-10', event: '009816 定審審核基準日（依指數規則推算：11 月第 7 個交易日）', type: '其他', targets: '009816' },
+    { date: '2026-12-17', event: '台灣央行第四季理監事會', type: '央行', targets: '台股、新台幣、金融股' },
+  ],
+  impacts: [
+    { event: 'Fed 升息循環延續（9/16 已升至 3.75–4.00%）', path: '利率上升 → 折現率上升 → 高本益比科技股評價下修 → 台積電與台股 ETF 淨值承壓；金融股利差受惠', exposure: '2330、009816、0050、NVDA 類成長股', trigger: '美國 10 年期殖利率站上 5.5%，或 10/28 FOMC 再升息', watch: '美國 CPI、10 年期殖利率、FOMC 點陣圖' },
+    { event: '美國關稅政策變化／美伊停火談判（國發會列為主要風險）', path: '關稅上調 → 台灣出口與電子供應鏈訂單不確定 → 外資賣超台股 → 台幣貶值', exposure: '出口占比高的科技股、009816', trigger: '對半導體或伺服器課徵新關稅、停火破局導致油價大漲', watch: '台灣出口年增率、外資買賣超、油價' },
+  ],
+  claims: [
+    { date: '2026-09-30', claim: '外資連續買超後，股價較容易走強', def: '外資連續 5 日買超後，比較之後 20 個交易日報酬與加權指數', method: '近 5 年台股 50 大個股歷史資料回測', status: '待驗', conclusion: '' },
+    { date: '2026-09-30', claim: '台積電法說會後一週股價通常上漲', def: '法說會隔日起 5 個交易日報酬，是否多數為正且優於大盤', method: '近 20 次法說會資料統計', status: '待驗', conclusion: '' },
+  ],
   layers: [
     'Microsoft（Copilot）、Meta（廣告變現）、Salesforce、Adobe、Palantir',
     'OpenAI、Anthropic（未上市）、Google DeepMind（GOOGL）、Meta、xAI（併入 SpaceX／SPCX）',
