@@ -869,7 +869,7 @@ function calcStrategy() {
   S.dca = { m: $('#dca_m').value, y: $('#dca_y').value, r: $('#dca_r').value };
   save();
   const cap = g('ps_cap'), risk = g('ps_risk'), entry = g('ps_entry'), stop = g('ps_stop'), target = g('ps_target'), lot = g('ps_lot') || 1;
-  let html = '<span class="lead">輸入進場價與停損價。</span>';
+  let html = entry && stop && entry === stop ? '<span class="down">停損價不能等於進場價。停損價是「跌到這裡就認錯賣出」的價格，要比進場價低，例如進場 100、停損 92。</span>' : '<span class="lead">輸入進場價與停損價（停損價要比進場價低）。</span>';
   if (cap && risk && entry && stop && entry !== stop) {
     const riskAmt = cap * risk / 100, perShare = Math.abs(entry - stop);
     const shares = Math.floor(riskAmt / perShare / lot) * lot;

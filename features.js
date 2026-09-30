@@ -219,6 +219,47 @@ PAGES.strategy = () => _stratPage().replace('<h3 class="gold-bar">二、部位�
     計算器會告訴你最多買幾股：<b>可承受虧損 ÷ 每股虧損</b>。這樣就算停損出場，也只會虧掉你事先決定的金額。<br>
     <span class="help">也可以在研究卡按「用這檔算部位」，自動帶入現價、支撐與合理價。</span></div>`);
 
+/* ---------- 資產配置說明、預設類別、緊急預備金 ---------- */
+const ALLOC_PRESET = [
+  { name: '股票（台股與台股 ETF）', target: 40 }, { name: '股票（美股與海外 ETF）', target: 30 },
+  { name: '債券與固定收益（含儲蓄險解約金）', target: 20 }, { name: '投資用現金', target: 10 },
+];
+// 還沒填過市值的舊預設類別，自動換成新的說明版類別
+if (S.alloc && S.alloc.every(a => !a.value) && S.alloc.map(a => a.name).join() === '台股,美股,債券,現金') S.alloc = ALLOC_PRESET.map(a => ({ ...a, value: '' }));
+const _stratPage2 = PAGES.strategy;
+PAGES.strategy = () => {
+  const e = S.emergency || {}, need = (num(e.monthly) || 0) * (num(e.months) || 6), have = num(e.have) || 0;
+  const guide = `<h3 class="gold-bar">三、資產配置與再平衡</h3>
+    <div class="note"><b>這裡只放「投資用的錢」</b>，用來檢查比例有沒有跑掉、要不要再平衡。<br>
+      ✅ 放：台股、美股、ETF、債券、投資用現金與定存、儲蓄險或投資型保單（用目前解約金計算，歸「債券與固定收益」）<br>
+      ❌ 不放：自住房產（不能拆賣、也不會拿來再平衡）、醫療險與定期壽險（是保障不是資產）、緊急預備金（下面另外記）<br>
+      出租房產想看全貌，可以另外新增一類，但要知道它很難調整比例。</div>
+    <div class="help" style="margin:6px 0">怎麼填：① 類別名稱可直接改 ② 目標 % 合計 100 ③ 目前市值填現在的金額。股票市值可在「交易」頁按「帶入策略頁資產配置」自動填入。</div>
+    <div class="btn-row" style="margin-bottom:8px"><button class="btn-small ghost" id="allocPreset">套用建議類別</button></div>`;
+  const ef = `<div class="card"><h3 class="gold-bar">緊急預備金（不列入投資）</h3>
+    <div class="help">先留好一筆「就算失業或生病也能撐幾個月」的錢，放在活存或定存，不拿來投資。這樣股市大跌時，才不會被迫在低點賣股。常見建議是 6 個月生活費。</div>
+    <div class="inline" style="margin-top:8px">
+      <label class="f"><span>每月生活費</span><input type="number" inputmode="decimal" data-ef="monthly" value="${esc(e.monthly ?? '')}"></label>
+      <label class="f"><span>目標月數</span><input type="number" inputmode="decimal" data-ef="months" value="${esc(e.months ?? '6')}"></label>
+      <label class="f"><span>目前預備金</span><input type="number" inputmode="decimal" data-ef="have" value="${esc(e.have ?? '')}"></label>
+    </div>
+    <div class="result" id="efResult">${need ? `目標 ${fmt(need)} 元，目前 ${fmt(have)} 元，達成 <b class="${have >= need ? 'up' : 'down'}">${fmt(Math.min(100, have / need * 100), 0)}%</b>${have >= need ? '，已準備好。' : `，還差 ${fmt(need - have)} 元。建議先補足再加碼投資。`}` : '<span class="help">填入每月生活費即可計算。</span>'}</div></div>`;
+  return _stratPage2().replace('<h3 class="gold-bar">三、資產配置與再平衡</h3>', guide).replace('<div class="card">\n    <h3 class="gold-bar">四、定期定額試算</h3>', ef + '<div class="card">\n    <h3 class="gold-bar">四、定期定額試算</h3>');
+};
+document.addEventListener('click', e => {
+  if (e.target.id !== 'allocPreset') return;
+  const old = S.alloc || [];
+  S.alloc = ALLOC_PRESET.map(a => ({ ...a, value: '' }));
+  old.forEach(o => { if (o.value && !S.alloc.some(a => a.name === o.name)) S.alloc.push(o); });
+  save(); render(); toast('已套用建議類別（原本有填市值的類別會保留在下方）');
+});
+document.addEventListener('input', e => {
+  const k = e.target.dataset?.ef; if (!k) return;
+  S.emergency = S.emergency || {}; S.emergency[k] = e.target.value; save();
+  const x = S.emergency, need = (num(x.monthly) || 0) * (num(x.months) || 6), have = num(x.have) || 0, el = $('#efResult');
+  if (el) el.innerHTML = need ? `目標 ${fmt(need)} 元，目前 ${fmt(have)} 元，達成 <b class="${have >= need ? 'up' : 'down'}">${fmt(Math.min(100, have / need * 100), 0)}%</b>${have >= need ? '，已準備好。' : `，還差 ${fmt(need - have)} 元。建議先補足再加碼投資。`}` : '<span class="help">填入每月生活費即可計算。</span>';
+});
+
 /* ================= 五、監控條件：結構化與自動檢查 ================= */
 const METRICS = ['', '收盤價', 'RSI', '距 20 日均線 %', '距 60 日均線 %', '近 20 日漲跌 %'];
 SCHEMAS.monitors.fields = [
@@ -465,7 +506,7 @@ document.addEventListener('click', async e => {
       save(); render(); toast('已更新現價'); break; }
     case 'holdToAlloc': {
       const hs = holdings().filter(h => h.shares > 0); const by = {};
-      hs.forEach(h => { const v = (S.quotes?.[h.code]?.price ?? h.cost / h.shares) * h.shares * (h.market === '美股' ? fx() : 1); const cat = /^00/.test(h.code) ? '台股' : h.market; by[cat] = (by[cat] || 0) + v; });
+      hs.forEach(h => { const v = (S.quotes?.[h.code]?.price ?? h.cost / h.shares) * h.shares * (h.market === '美股' ? fx() : 1); const tw = /^\d/.test(h.code); const cat = S.alloc.find(a => tw ? /台股/.test(a.name) : /美股|海外/.test(a.name))?.name || (tw ? '台股' : '美股'); by[cat] = (by[cat] || 0) + v; });
       Object.entries(by).forEach(([cat, v]) => { let a = S.alloc.find(x => x.name === cat); if (!a) { a = { name: cat, target: 0, value: '' }; S.alloc.push(a); } a.value = String(Math.round(v)); });
       save(); go('strategy'); toast('已帶入持倉市值（現金、債券請自行填寫）'); break; }
   }
