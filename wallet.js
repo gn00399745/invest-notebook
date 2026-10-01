@@ -23,7 +23,7 @@ async function loadFx() {
 
 /* ---------- 分類 ---------- */
 const CATS = {
-  支出: [['餐飲', '🍱'], ['交通', '🚇'], ['居住', '🏠'], ['日用', '🧻'], ['購物', '🛍️'], ['娛樂', '🎬'], ['醫療', '🏥'], ['教育', '📚'], ['保險', '🛡️'], ['孝親', '👪'], ['旅遊', '✈️'], ['其他', '💳']],
+  支出: [['餐飲', '🍱'], ['交通', '🚇'], ['居住', '🏠'], ['日用', '🧻'], ['購物', '🛍️'], ['娛樂', '🎬'], ['醫療', '🏥'], ['教育', '📚'], ['保險', '🛡️'], ['社保扣繳', '🏛️'], ['孝親', '👪'], ['旅遊', '✈️'], ['其他', '💳']],
   收入: [['薪資', '💼'], ['獎金', '🎁'], ['股利', '💰'], ['利息', '🏦'], ['兼職', '🧑‍💻'], ['租金', '🏘️'], ['其他', '➕']],
 };
 const catIcon = (type, c) => (CATS[type] || []).find(x => x[0] === c)?.[1] || '•';
@@ -140,6 +140,7 @@ const DCA_HELP = '到期時首頁會出現「待確認」，按一下帶入當�
 const ESPP_HELP = '公司從薪水扣款、以市價折扣買股：到期時首頁會出現「待確認」，自動以「市價 × 折扣」算出認購價與股數，不會從存款帳戶扣錢。持股成本以實際認購價計算，所以折扣部分會直接顯示為帳面獲利。';
 function openRecurring(id, preKind) {
   const rec = id ? S.recurring.find(x => x.id === id) : null;
+  if (rec?.kind === '薪資單') return openPayslip(id);
   const v = Object.assign({ kind: preKind || '支出', freq: '月', day: '5', month: '1' }, rec || {});
   const catsHTML = k => (CATS[k] || []).map(([c, ic], i) => `<label><input type="radio" name="cat" value="${c}" ${(v.cat ? v.cat === c : i === 0) ? 'checked' : ''}><span><b>${ic}</b>${c}</span></label>`).join('');
   openModal({
@@ -197,6 +198,7 @@ function processRecurring() {
   S.recurring.forEach(r => {
     const from = r.lastRun || dayBefore(t);
     dueDates(r, from, t).forEach(d => {
+      if (r.kind === '薪資單') { n += postPayslip(r, d); return; }
       if (isInv(r.kind)) {
         if (!S.pendingDca.some(x => x.rid === r.id && x.date === d)) {
           const px = { id: uid(), rid: r.id, date: d, code: r.code, name: r.cname, amount: r.amount, acct: r.acct, kind: r.kind, disc: r.disc || '' };
@@ -220,6 +222,82 @@ function confirmDca(pid) {
   const tw = /^\d/.test(x.code);
   const shares = px ? (tw ? Math.floor(amt / px) : Math.floor(amt / px * 10000) / 10000) : '';
   openTradeForm({ code: x.code, name: x.name, side: '買進', date: x.date, price: px || '', shares: shares ? String(shares) : '', acct: x.acct, kind: '定期定額', pendingId: x.id, dcaAmt: amt, fee: tw ? '1' : '0' });
+}
+
+/* ---------- 薪資單：應發 − 扣繳 = 實領，實領分存多個帳戶 ---------- */
+const DED_DEFAULT = ['公保', '退撫', '健保'];
+function payslipCalc(r) {
+  const gross = num(r.gross) || 0, deds = (r.deds || []).filter(x => num(x.amount) > 0);
+  const dedT = deds.reduce((s, x) => s + num(x.amount), 0), net = gross - dedT;
+  const fixed = (r.splits || []).filter(x => !x.rest).reduce((s, x) => s + (num(x.amount) || 0), 0);
+  const splits = (r.splits || []).map(x => ({ ...x, amt: x.rest ? Math.max(0, net - fixed) : num(x.amount) || 0 }));
+  return { gross, deds, dedT, net, splits, left: net - splits.reduce((s, x) => s + x.amt, 0) };
+}
+function postPayslip(r, d) {
+  const c = payslipCalc(r); let n = 0;
+  const add = e => { const x = { id: uid(), date: d, ccy: 'TWD', auto: r.id, ...e }; S.ledger.push(x); applyLedger(x, 1); n++; };
+  c.splits.forEach(sp => { if (sp.amt > 0) add({ type: '收入', cat: '薪資', amount: String(sp.amt), acct: sp.acct || '', note: `${r.name} 實領→${acctById(sp.acct)?.name || '未指定帳戶'}` }); });
+  if (c.left > 0) add({ type: '收入', cat: '薪資', amount: String(c.left), acct: '', note: `${r.name} 實領（未分配帳戶）` });
+  if (c.dedT > 0) {
+    add({ type: '收入', cat: '薪資', amount: String(c.dedT), acct: '', note: `${r.name} 被扣繳部分（${c.deds.map(x => x.name).join('、')}）` });
+    c.deds.forEach(x => add({ type: '支出', cat: '社保扣繳', amount: String(num(x.amount)), acct: '', note: `${r.name} ${x.name}` }));
+  }
+  return n;
+}
+function payslipRow(r) {
+  const c = payslipCalc(r);
+  return `<div class="lrow" data-edit="recurring" data-id="${r.id}"><span class="l-ic">💼</span><span class="l-t"><b>${esc(r.name)}</b><em>每月 ${r.day} 號｜扣 ${c.deds.map(x => x.name).join('、') || '無'} ${fmt(c.dedT)}｜${c.splits.map(x => `${esc(acctById(x.acct)?.name || '?')} ${fmt(x.amt)}`).join('、')}</em></span><span class="l-v up">${fmt(c.gross)}</span></div>`;
+}
+function openPayslip(id) {
+  const rec = id ? S.recurring.find(x => x.id === id) : null;
+  const v = rec ? JSON.parse(JSON.stringify(rec)) : { name: '薪水', day: '1', gross: '', deds: DED_DEFAULT.map(name => ({ name, amount: '' })), splits: [] };
+  if (!v.splits.length) {
+    const gj = S.accounts.find(a => /公教/.test(a.name || '')), hq = S.accounts.find(a => a !== gj && /活存/.test(a.kind || '') && (a.ccy || 'TWD') === 'TWD');
+    v.splits = [{ acct: gj?.id || S.accounts[0]?.id || '', amount: '', rest: false }, { acct: hq?.id || S.accounts[1]?.id || '', amount: '', rest: true }];
+  }
+  const acctOpts = sel => `<option value="">（選帳戶）</option>` + S.accounts.map(a => `<option value="${a.id}" ${a.id === sel ? 'selected' : ''}>${esc(a.name || a.kind)}</option>`).join('');
+  const dedRow = x => `<div class="ps-row ded"><input type="text" class="d-name" value="${esc(x.name)}" placeholder="項目"><input type="text" class="d-amt" inputmode="decimal" value="${esc(x.amount || '')}" placeholder="金額"><button type="button" class="ps-x" title="移除">×</button></div>`;
+  const spRow = (x, i) => `<div class="ps-row sp"><select class="s-acct">${acctOpts(x.acct)}</select><input type="text" class="s-amt" inputmode="decimal" value="${x.rest ? '' : esc(x.amount || '')}" placeholder="${x.rest ? '其餘全部' : '固定金額'}" ${x.rest ? 'disabled' : ''}><label class="tog"><input type="radio" name="rest" value="${i}" ${x.rest ? 'checked' : ''}>其餘</label></div>`;
+  openModal({
+    title: rec ? '編輯薪資單' : '設定薪資單',
+    body: `<div class="help" style="font-size:13px;margin-bottom:8px">照薪資明細（例如公務人員薪資查詢、銓敘部或人事處的薪資單）填一次，之後每月發薪日自動記帳：收入以<b>應發金額</b>計，公保、退撫、健保記為「社保扣繳」支出，<b>實領</b>才存入帳戶。</div>
+      ${S.accounts.length < 2 ? `<div class="card alert" style="padding:10px;margin-bottom:8px"><div class="help" style="font-size:13px">要分開存入公教帳戶與活存，請先新增這兩個存款帳戶（填目前餘額）。</div><div class="btn-row" style="margin-top:6px"><button type="button" class="btn-small" data-act="addAcct">＋ 新增存款帳戶</button></div></div>` : ''}
+      <div class="inline"><label class="f"><span>名稱</span><input type="text" name="name" value="${esc(v.name)}"></label><label class="f"><span>每月發薪日</span><select name="day">${DAYS.map(o => `<option ${o === String(v.day) ? 'selected' : ''}>${o}</option>`).join('')}</select></label></div>
+      <label class="f"><span>應發金額（本俸＋專業加給＋主管加給等合計）</span><input type="text" name="gross" inputmode="decimal" value="${esc(v.gross)}" placeholder="0"></label>
+      <div class="sec-title">每月扣款</div><div id="psDed">${v.deds.map(dedRow).join('')}</div>
+      <button type="button" class="btn-small ghost" id="psDedAdd">＋ 其他扣款（所得稅、互助金、貸款…）</button>
+      <div class="sec-title">實領存入哪裡</div><div id="psSp">${v.splits.map(spRow).join('')}</div>
+      <button type="button" class="btn-small ghost" id="psSpAdd">＋ 再加一個帳戶</button>
+      <div class="snap" id="psSum" style="margin-top:10px"></div>`,
+    onSave: (d, body) => {
+      const r = read(body);
+      if (!(num(r.gross) > 0)) { toast('請填應發金額'); return false; }
+      const c = payslipCalc(r);
+      if (c.net < 0) { toast('扣款超過應發金額，請檢查'); return false; }
+      if (c.left < 0) { toast('分配到帳戶的金額超過實領，請檢查'); return false; }
+      if (!r.splits.some(x => x.acct)) { toast('請至少選一個存入帳戶'); return false; }
+      if (rec) Object.assign(rec, r); else S.recurring.push({ id: uid(), kind: '薪資單', freq: '月', ...r, lastRun: dayBefore(today()) });
+      processRecurring(); toast(`已設定：每月 ${r.day} 號自動記入實領 ${fmt(c.net)}`);
+    },
+    onDelete: rec ? () => { S.recurring = S.recurring.filter(x => x.id !== id); save(); toast('已刪除（已記的帳不受影響）'); } : null,
+  });
+  const body = $('#modalBody');
+  function read(b) {
+    const rows = [...b.querySelectorAll('.ps-row.sp')], restI = +(b.querySelector('[name=rest]:checked')?.value ?? -1);
+    return { name: b.querySelector('[name=name]').value.trim() || '薪水', day: b.querySelector('[name=day]').value, gross: b.querySelector('[name=gross]').value,
+      deds: [...b.querySelectorAll('.ps-row.ded')].map(x => ({ name: x.querySelector('.d-name').value.trim(), amount: x.querySelector('.d-amt').value })).filter(x => x.name || x.amount),
+      splits: rows.map((x, i) => ({ acct: x.querySelector('.s-acct').value, amount: x.querySelector('.s-amt').value, rest: i === restI })).filter(x => x.acct || x.amount || x.rest) };
+  }
+  const refresh = () => {
+    const c = payslipCalc(read(body));
+    body.querySelectorAll('.ps-row.sp').forEach((x, i) => { const r = x.querySelector('[name=rest]').checked, a = x.querySelector('.s-amt'); a.disabled = r; a.placeholder = r ? `其餘 ${fmt(c.splits[i]?.amt ?? 0)}` : '固定金額'; if (r) a.value = ''; });
+    $('#psSum').innerHTML = `應發 <b>${fmt(c.gross)}</b>　− 扣款 <b>${fmt(c.dedT)}</b>　= 實領 <b>${fmt(c.net)}</b><br>${c.splits.filter(x => x.acct || x.amt).map(x => `→ ${esc(acctById(x.acct)?.name || '未選帳戶')}：${fmt(x.amt)}`).join('<br>')}${c.left > 0 ? `<br><span class="down">還有 ${fmt(c.left)} 沒有指定帳戶</span>` : c.left < 0 ? `<br><span class="down">分配超過實領 ${fmt(-c.left)}</span>` : ''}`;
+  };
+  body.addEventListener('input', refresh); body.addEventListener('change', refresh);
+  body.addEventListener('click', e => { const x = e.target.closest('.ps-x'); if (x) { x.closest('.ps-row').remove(); refresh(); } });
+  $('#psDedAdd').onclick = () => { $('#psDed').insertAdjacentHTML('beforeend', dedRow({ name: '', amount: '' })); };
+  $('#psSpAdd').onclick = () => { const n = body.querySelectorAll('.ps-row.sp').length; $('#psSp').insertAdjacentHTML('beforeend', spRow({ acct: '', amount: '', rest: false }, n)); };
+  refresh();
 }
 
 /* ---------- 匯入券商庫存 ---------- */
@@ -334,7 +412,7 @@ PAGES.home = () => {
   const onboard = emptyAll ? `<div class="card onboard"><h3 class="gold-bar">3 步建立你的資產表（約 5 分鐘）</h3>
       <button class="step" data-act="addAcct"><b>1</b><span><strong>加入存款帳戶</strong><em>打開網銀 App，抄下每個帳戶的餘額</em></span></button>
       <button class="step" data-act="import"><b>2</b><span><strong>匯入股票／ETF 庫存</strong><em>照抄券商 App 庫存頁的代號、股數、均價</em></span></button>
-      <button class="step" data-act="recur"><b>3</b><span><strong>設定薪水、房租等固定收支</strong><em>之後每月自動記帳，只需記零星支出</em></span></button>
+      <button class="step" data-act="payslip"><b>3</b><span><strong>設定薪資單</strong><em>扣掉公保、退撫、健保，實領分別存入公教帳戶與活存，每月自動記帳</em></span></button>
       <div class="help" style="margin-top:6px">有保單、房產也可以加進來：按右下角 ＋。資料只存在這台裝置，記得定期到 ⚙︎ 匯出備份。</div></div>` : '';
   const hold = W.hs.map(h => `<div class="hcard">
       <div class="h-top"><div><b>${esc(h.code)}</b> <span>${esc(h.name || '')}</span></div><div class="h-mv">${fmt(h.mvT)}</div></div>
@@ -389,14 +467,14 @@ PAGES.ledger = () => {
   const groups = {};
   [...M.list].sort((a, b) => (b.date || '').localeCompare(a.date || '')).forEach(e => { (groups[e.date] = groups[e.date] || []).push(e); });
   const rows = Object.entries(groups).map(([d, es]) => `<div class="lday">${esc(d.slice(5).replace('-', '/'))}</div>` + es.map(e => `<div class="lrow" data-edit="ledger" data-id="${e.id}"><span class="l-ic">${catIcon(e.type, e.cat)}</span><span class="l-t"><b>${esc(e.note || e.cat)}</b><em>${esc(e.cat)}${e.acct && acctById(e.acct) ? '｜' + esc(acctById(e.acct).name) : ''}${e.auto ? '｜自動' : ''}</em></span><span class="l-v ${e.type === '收入' ? 'up' : 'down'}">${e.type === '收入' ? '+' : '−'}${money(num(e.amount), e.ccy || 'TWD')}</span></div>`).join('')).join('');
-  const rec = S.recurring.map(r => `<div class="lrow" data-edit="recurring" data-id="${r.id}"><span class="l-ic">${r.kind === '定期定額' ? '📈' : r.kind === '員工認股' ? '🏢' : catIcon(r.kind, r.cat)}</span><span class="l-t"><b>${esc(r.name)}</b><em>每${r.freq === '年' ? `年 ${r.month} 月` : '月'} ${r.day} 號${r.disc ? `｜市價 ${r.disc}%` : ''}${r.acct && acctById(r.acct) ? '｜' + esc(acctById(r.acct).name) : ''}</em></span><span class="l-v ${r.kind === '收入' ? 'up' : ''}">${fmt(num(r.amount))}</span></div>`).join('');
+  const rec = S.recurring.map(r => r.kind === '薪資單' ? payslipRow(r) : `<div class="lrow" data-edit="recurring" data-id="${r.id}"><span class="l-ic">${r.kind === '定期定額' ? '📈' : r.kind === '員工認股' ? '🏢' : catIcon(r.kind, r.cat)}</span><span class="l-t"><b>${esc(r.name)}</b><em>每${r.freq === '年' ? `年 ${r.month} 月` : '月'} ${r.day} 號${r.disc ? `｜市價 ${r.disc}%` : ''}${r.acct && acctById(r.acct) ? '｜' + esc(acctById(r.acct).name) : ''}</em></span><span class="l-v ${r.kind === '收入' ? 'up' : ''}">${fmt(num(r.amount))}</span></div>`).join('');
   return `<h2>收支</h2>
   <div class="mnav"><button class="btn-small ghost" data-act="mprev">‹</button><b>${m.replace('-', ' 年 ')} 月</b><button class="btn-small ghost" data-act="mnext">›</button></div>
   <div class="card"><div class="mstats"><div><em>收入</em><b class="up">${fmt(M.inc)}</b></div><div><em>支出</em><b class="down">${fmt(M.exp)}</b></div><div><em>結餘</em><b>${fmt(M.net)}</b></div><div><em>儲蓄率</em><b>${M.rate == null ? '—' : fmt(M.rate, 0) + '%'}</b></div></div>
     ${M.cats.length ? `<div style="margin-top:10px">${M.cats.map(([c, v]) => bar(c, v, M.cats[0][1], catIcon('支出', c))).join('')}</div>` : ''}
     <div class="btn-row" style="margin-top:10px"><button class="btn-primary" data-act="exp">＋ 記支出</button><button class="btn-ghost" data-act="inc">＋ 記收入</button></div></div>
   <div class="card"><h3 class="gold-bar">明細</h3>${rows || '<div class="empty">這個月還沒有紀錄。</div>'}</div>
-  <div class="card"><div class="card-head"><h3 class="gold-bar">固定收支與定期定額</h3><button class="btn-small" data-act="recur">＋ 新增</button></div>
+  <div class="card"><div class="card-head"><h3 class="gold-bar">固定收支與定期定額</h3><div class="btn-row"><button class="btn-small ghost" data-act="payslip">＋ 薪資單</button><button class="btn-small" data-act="recur">＋ 新增</button></div></div>
     ${rec || '<div class="empty">把薪水、房租、手機費、保費、定期定額設成固定項目，到了扣款日會自動記帳，你只需要記零星花費。</div>'}</div>`;
 };
 
@@ -421,8 +499,8 @@ go = function (page) { _goW(page); const g = groupOf(current); document.querySel
 
 /* ---------- 動作 ---------- */
 function sheet(kind) {
-  const all = [['exp', '➖', '記支出'], ['inc', '➕', '記收入'], ['buy', '📈', '買進股票／ETF'], ['sell', '📉', '賣出'], ['import', '📋', '匯入券商庫存'], ['recur', '🔁', '固定收支／定期定額'], ['espp', '🏢', '員工認股（折價買）'], ['addAcct', '🏦', '存款帳戶'], ['addIns', '🛡️', '保單'], ['addProp', '🏠', '房產']];
-  const list = kind === 'asset' ? all.slice(7).concat([all[4]]) : all;
+  const all = [['exp', '➖', '記支出'], ['inc', '➕', '記收入'], ['buy', '📈', '買進股票／ETF'], ['sell', '📉', '賣出'], ['import', '📋', '匯入券商庫存'], ['payslip', '💼', '薪資單（扣繳＋分帳戶）'], ['recur', '🔁', '固定收支／定期定額'], ['espp', '🏢', '員工認股（折價買）'], ['addAcct', '🏦', '存款帳戶'], ['addIns', '🛡️', '保單'], ['addProp', '🏠', '房產']];
+  const list = kind === 'asset' ? all.slice(8).concat([all[4]]) : all;
   openModal({ title: kind === 'asset' ? '新增資產' : '要記什麼？', noSave: true, body: `<div class="tiles sm">${list.map(([a, ic, t]) => `<button type="button" class="tile" data-act="${a}"><i>${ic}</i><b>${t}</b></button>`).join('')}</div>` });
 }
 document.addEventListener('click', e => {
@@ -447,6 +525,7 @@ document.addEventListener('click', e => {
     case 'sell': return openTradeForm({ side: '賣出' });
     case 'import': return openImport();
     case 'recur': return openRecurring(null);
+    case 'payslip': return openPayslip(null);
     case 'espp': return openTradeForm({ side: '買進', kind: '員工認股', esppDisc: 85, acct: '', fee: '0', note: '員工認股（市價 85%）' });
     case 'addAcct': return editAsset('accounts');
     case 'addIns': return editAsset('insurance');

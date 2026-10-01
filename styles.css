@@ -407,3 +407,9 @@ details.adv summary { cursor: pointer; font-size: 14px; color: var(--muted); fon
 }
 [hidden] { display: none !important; }
 .seg4 span { font-size: 13px; padding: 9px 2px; }
+.ps-row { display: grid; grid-template-columns: 1fr 1fr 28px; gap: 6px; margin-bottom: 6px; align-items: center; }
+.ps-row.sp { grid-template-columns: 1.3fr 1fr auto; }
+.ps-row input, .ps-row select { min-width: 0; width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+.ps-row input:disabled { background: var(--bg); }
+.ps-x { border: 0; background: transparent; color: var(--muted); font-size: 20px; cursor: pointer; }
+.ps-row .tog { white-space: nowrap; }
