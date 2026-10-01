@@ -102,8 +102,16 @@ const MARKETS = {
   eu: [['^STOXX50E', '歐洲斯托克 50'], ['EURUSD=X', '歐元兌美元']], hk: [['^HSI', '恒生指數'], ['HKD=X', '美元兌港幣']], kr: [['^KS11', '韓國綜合'], ['KRW=X', '美元兌韓元']],
 };
 
+const YUA = { 'User-Agent': 'Mozilla/5.0 (invest-notebook; personal research tool)' };
+async function yjson(url) { const r = await fetch(url, { headers: YUA, signal: T(12000) }); if (!r.ok) throw new Error('Yahoo HTTP ' + r.status); return r.json(); }
 async function yspark(syms) {
-  const j = await getJSON(`https://query1.finance.yahoo.com/v8/finance/spark?symbols=${syms.map(encodeURIComponent).join(',')}&range=3mo&interval=1d`, 12000);
+  let j;
+  try { j = await yjson(`https://query1.finance.yahoo.com/v8/finance/spark?symbols=${syms.map(encodeURIComponent).join(',')}&range=3mo&interval=1d`); }
+  catch (e) {
+    j = {}; // 備援：逐檔查詢
+    for (const sym of syms) { try { const c = (await yjson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=3mo&interval=1d`)).chart.result[0]; j[sym] = { timestamp: c.timestamp, close: c.indicators.quote[0].close }; } catch (err) { /* 略過 */ } }
+    if (!Object.keys(j).length) throw e;
+  }
   const out = {};
   Object.entries(j).forEach(([sym, v]) => {
     const c = (v.close || []).map((x, i) => [v.timestamp[i], x]).filter(x => x[1] != null); if (c.length < 2) return;
