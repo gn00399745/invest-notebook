@@ -358,7 +358,7 @@ function fmtVal(r) {
 function indCard(r, i) {
   const auto = !!r.key && !!r.date;
   const extra = r.extra ? `<div class="ind-extra">${esc(r.extra)}</div>` : '';
-  return `<div class="ind">
+  return `<div class="ind"${!r.key && /台灣/.test(r.name) ? ' hidden' : ''}>
     <div class="ind-top"><div><div class="ind-name">${esc(r.name)}</div><div class="ind-hint">${esc(r.hint || '')}</div></div>
       ${auto ? '<span class="pill green">自動</span>' : (r.key === 'pce' || r.key === 'claims') && S.macro.noKey ? '<span class="pill" title="在 Vercel 設定 FRED_API_KEY 後可自動取得">需 FRED 金鑰</span>' : r.key ? '' : '<span class="pill">手動</span>'}</div>
     <div class="ind-vals">
@@ -431,7 +431,7 @@ function macroAutoFill() {
 }
 async function fetchMacro(silent) {
   if (S.macro.fetching) return;
-  S.macro.fetching = true; if (current === 'macro') $('#macroStatus').innerHTML = macroStatus();
+  S.macro.fetching = true; if (current === 'macro' && $('#macroStatus')) $('#macroStatus').innerHTML = macroStatus();
   try {
     const r = await fetch('api/macro', { signal: AbortSignal.timeout(90000) });
     if (!r.ok) throw new Error('HTTP ' + r.status);

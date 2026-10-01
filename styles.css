@@ -590,3 +590,56 @@ details.adv summary { cursor: pointer; font-size: 14px; color: var(--muted); fon
 .rh-hbtn { margin-left: auto; display: flex; gap: 6px; }
 .rh-hbtn button { background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
 .rc-sec .met .t-read { border-style: dashed; background: transparent; }
+
+/* ================= 總經：各國圖卡 ================= */
+.w-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.w-head h2 { margin: 0; }
+.w-st { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.w-err summary { cursor: pointer; display: inline; }
+.w-tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 0 12px; padding-bottom: 2px; }
+.w-tabs::-webkit-scrollbar { display: none; }
+.w-tabs button { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 58px; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 12px; padding: 6px 8px; font-size: 12px; cursor: pointer; }
+.w-tabs button span { font-size: 20px; line-height: 1.1; }
+.w-tabs button.on { background: var(--navy-2); color: #fff; border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; font-weight: 700; }
+.w-hero { background: radial-gradient(120% 140% at 100% 0%, #24487d 0%, var(--navy-2) 38%, var(--navy) 100%); color: #fff; border-radius: 20px; padding: 16px; margin-bottom: 12px; box-shadow: 0 10px 30px rgba(11,31,58,.22); }
+.w-hero-t { display: flex; gap: 12px; align-items: center; }
+.w-flag { font-size: 40px; line-height: 1; }
+.w-name { font-size: 24px; font-weight: 800; color: var(--gold-2); }
+.w-rel { font-size: 13px; color: #c7d2e4; line-height: 1.5; }
+.w-mkts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 12px; }
+.w-mkt { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); border-radius: 12px; padding: 8px 10px; display: grid; grid-template-columns: 1fr auto; gap: 0 8px; align-items: center; }
+.w-mkt em { font-style: normal; font-size: 11px; color: #c7d2e4; grid-column: 1 / -1; }
+.w-mkt b { font-size: 19px; grid-column: 1 / -1; }
+.w-mkt span { font-size: 12px; font-weight: 700; display: flex; gap: 4px; align-items: baseline; } .w-mkt small { font-weight: 400; color: #c7d2e4; font-size: 10px; }
+.w-hero .up { color: #6ee7a8; } .w-hero .down { color: #ff9a9a; }
+.w-mkt .w-spark { grid-column: 1 / -1; height: 26px; margin-top: 4px; }
+.w-spark { width: 100%; height: 30px; display: block; }
+.w-spark path { fill: none; stroke: var(--gold); stroke-width: 1.8; vector-effect: non-scaling-stroke; }
+.w-spark.lt path { stroke: var(--gold-2); }
+.w-imf { margin-top: 12px; background: rgba(255,255,255,.06); border-radius: 12px; padding: 8px 10px; }
+.w-imf-h { font-size: 12px; font-weight: 700; color: var(--gold-2); margin-bottom: 4px; } .w-imf-h small { color: #c7d2e4; font-weight: 400; }
+.w-bar { display: grid; grid-template-columns: 40px 1fr 48px 40px; gap: 8px; align-items: center; font-size: 12px; margin: 3px 0; }
+.w-bar div { height: 8px; border-radius: 99px; background: rgba(255,255,255,.1); overflow: hidden; } .w-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), var(--gold-2)); border-radius: 99px; }
+.w-bar b { text-align: right; } .w-bar em { font-style: normal; color: #c7d2e4; text-align: right; }
+.wt-v { display: flex; align-items: baseline; gap: 4px; } .wt-v b { font-size: 26px; font-weight: 800; } .wt-v em { font-style: normal; font-size: 12px; color: var(--muted); }
+.met-p i { font-style: normal; font-weight: 700; } .met-p i.u { color: var(--red); } .met-p i.d { color: var(--green); }
+.wt-t { font-size: 12px; color: var(--text); line-height: 1.5; }
+.wt-s { font-size: 11px; color: var(--muted); } .wt-s a { color: var(--muted); }
+.met.sig-red { border-top-color: #d64545; } .met.sig-yr { border-top-color: #e8833a; } .met.sig-green { border-top-color: var(--green); } .met.sig-yb { border-top-color: #d4b400; } .met.sig-blue { border-top-color: #3b82c4; }
+.sigp.sig-red { background: rgba(214,69,69,.15); color: #d64545; } .sigp.sig-yr { background: rgba(232,131,58,.15); color: #e8833a; } .sigp.sig-green { background: rgba(30,158,90,.14); color: var(--green); } .sigp.sig-yb { background: rgba(212,180,0,.16); color: #a68b00; } .sigp.sig-blue { background: rgba(59,130,196,.15); color: #3b82c4; }
+.w-tiles { margin-bottom: 12px; }
+.w-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.w-eco { text-align: left; border: 1px solid var(--line); border-top: 4px solid var(--line); background: var(--card); border-radius: 14px; padding: 12px; cursor: pointer; color: var(--text); font: inherit; }
+.w-eco.pos { border-top-color: var(--green); } .w-eco.neg { border-top-color: var(--red); } .w-eco.neu { border-top-color: var(--yellow); }
+.w-eco.sig-red { border-top-color: #d64545; } .w-eco.sig-yr { border-top-color: #e8833a; } .w-eco.sig-green { border-top-color: var(--green); } .w-eco.sig-blue { border-top-color: #3b82c4; } .w-eco.sig-yb { border-top-color: #d4b400; }
+.w-eco-h { display: flex; justify-content: space-between; align-items: center; font-size: 16px; margin-bottom: 8px; }
+.w-eco-g { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+.w-eco-g em { display: block; font-style: normal; font-size: 11px; color: var(--muted); } .w-eco-g b { font-size: 16px; }
+.w-cmp-r { display: grid; grid-template-columns: 82px 1fr 50px; gap: 8px; align-items: center; font-size: 13px; margin: 6px 0; }
+.w-cmp-b { display: grid; gap: 2px; } .w-cmp-b i, .w-legend i { display: block; height: 6px; border-radius: 99px; }
+.w-cmp-b i.y0, .w-legend i.y0 { background: #98a4b8; } .w-cmp-b i.y1, .w-legend i.y1 { background: var(--gold); } .w-cmp-b i.y2, .w-legend i.y2 { background: var(--navy-2); }
+.w-cmp-r b { text-align: right; }
+.w-legend { display: flex; gap: 12px; align-items: center; font-size: 12px; margin-top: 6px; flex-wrap: wrap; } .w-legend span { display: flex; gap: 4px; align-items: center; } .w-legend i { width: 14px; }
+.w-fc { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 6px; }
+.w-mkt { grid-template-columns: auto auto; justify-content: start; gap: 0 10px; }
+.w-mkt span { white-space: nowrap; font-size: 11px; }
