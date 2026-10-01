@@ -69,17 +69,34 @@ function sparkPath(sp, W, H) {
   return cl.map((v, i) => `${i ? 'L' : 'M'}${(i * W / (cl.length - 1)).toFixed(1)},${(H - 2 - (v - lo) * (H - 4) / (hi - lo || 1)).toFixed(1)}`).join('');
 }
 const chg20 = c => { const sp = c.spark; if (!sp || sp.length < 21) return null; const a = sp[sp.length - 21][1], b = sp[sp.length - 1][1]; return (b / a - 1) * 100; };
+/* 持股 → 研究卡同步 */
+const holdOf = code => holdings().find(h => h.shares > 0 && h.code === String(code || '').toUpperCase());
+let syncBusy = false;
+async function syncHoldCards() {
+  const miss = holdings().filter(h => h.shares > 0 && !S.cards.some(c => String(c.code).toUpperCase() === h.code));
+  if (!miss.length) return 0;
+  const made = miss.map(h => { const c = blankCard(); c.code = h.code; c.name = h.name || ''; c.market = /^\d/.test(h.code) ? '台股' : '美股'; c.fromHold = true; S.cards.push(c); return c; });
+  save(); toast(`已為 ${made.length} 檔持股建立研究卡，資料帶入中…`);
+  if (current === 'cards' && !openCardId) render();
+  if (!syncBusy && location.protocol.startsWith('http')) { syncBusy = true; for (const c of made) { try { await autoFillCard(c, true); } catch (e) { /* 略過 */ } } syncBusy = false; }
+  return made.length;
+}
 PAGES.cards = () => {
   if (openCardId) { const c = S.cards.find(x => x.id === openCardId); if (c) return cardEditor(c); openCardId = null; }
-  const list = [...S.cards].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  if (holdings().some(h => h.shares > 0 && !S.cards.some(x => String(x.code).toUpperCase() === h.code))) setTimeout(syncHoldCards, 50);
+  const flt = S.rcFilter || '全部', held = c => !!holdOf(c.code);
+  const list = [...S.cards].filter(c => flt === '全部' || (flt === '持有中' ? held(c) : !held(c)))
+    .sort((a, b) => (held(b) - held(a)) || (b.date || '').localeCompare(a.date || ''));
+  const nHeld = S.cards.filter(held).length;
   return `<h2>個股研究卡</h2>
   <p class="lead">先在「產業地位」確認公司站在哪一層，再建卡研究財報、估值、技術與籌碼，最後寫下結論與「證明我錯」的條件。</p>
+  <div class="chips">${['全部', '持有中', '觀察中'].map(k => `<button class="chip ${k === flt ? 'on' : ''}" data-rcf="${k}">${k}${k === '持有中' ? ` ${nHeld}` : k === '觀察中' ? ` ${S.cards.length - nHeld}` : ''}</button>`).join('')}</div>
   <div class="rc-grid">
     <button class="rc-new" id="newCard"><span>＋</span><b>研究一檔新標的</b><em>輸入代號，自動帶入財報、股價、籌碼</em></button>
     ${list.map(c => {
       const vs = valSummary(c), g = c.lights.filter(l => l.c === '綠').length, r = c.lights.filter(l => l.c === '紅').length, ch = chg20(c), f = findLayer(c.layer);
       return `<button class="rc-item" data-card="${c.id}">
-        <div class="rc-i-top"><span class="rc-code">${esc(c.code)}</span>${c.example ? '<span class="pill gold">範例</span>' : ''}<span class="spacer"></span>${lightsHTML(c)}</div>
+        <div class="rc-i-top"><span class="rc-code">${esc(c.code)}</span>${held(c) ? '<span class="pill green">持有中</span>' : ''}${c.example ? '<span class="pill gold">範例</span>' : ''}<span class="spacer"></span>${lightsHTML(c)}</div>
         <div class="rc-i-name">${esc(c.name || '（未命名）')}</div>
         <div class="rc-i-layer">${esc(f ? `${f.ch.name}・${f.i + 1} ${f.l.n}` : c.layer || '未定位')}</div>
         ${c.spark ? `<svg class="rc-i-spark" viewBox="0 0 120 30" preserveAspectRatio="none"><path d="${sparkPath(c.spark, 120, 30)}"/></svg>` : ''}
@@ -92,6 +109,17 @@ PAGES.cards = () => {
 };
 
 /* ---------- 研究卡內頁 ---------- */
+const GUIDE_F = [['guidance', '🧭', '管理層指引', '營收、毛利率區間；上修或下修多少'], ['quotes', '💬', '關鍵原話', '標日期'], ['qa', '🙋', '分析師問答重點', '分析師最關心什麼'], ['assumptions', '🔁', '轉成估值假設', '例如：明年營收成長 20%']];
+const TECH_IC = ['📐', '🌡️', '〰️', '📏', '🔺', '🧱', '📊'];
+const CHIP_IC = ['🌏', '🏢', '🏦', '💳', '🐻', '🎯', '👔'];
+const SIG_L = { pos: '偏多', neg: '偏空', neu: '中性' };
+const sig = t => { t = String(t || ''); if (!t || /^示範/.test(t)) return ''; if (/空頭|偏空|偏弱|轉弱|死亡交叉|跌破|賣超|過熱|偏熱|量增價跌|高估|下修/.test(t)) return 'neg'; if (/多頭|偏多|偏強|轉強|黃金交叉|站上|買超|突破|量增價漲|低估|上修|多方/.test(t)) return 'pos'; return 'neu'; };
+// 籌碼數字：法人買超為正向；融資增加、融券增加視為風險
+const numSig = (v, i) => { const n = num(String(v || '').replace(/[^\d.+-]/g, '')); if (n == null || n === 0) return ''; const good = i === 3 || i === 4 ? n < 0 : n > 0; return good ? 'pos' : 'neg'; };
+const upOf = (c, i) => { const f = num(c.val[i].fair), p = num(c.price); return f && p ? (f / p - 1) * 100 : null; };
+const upChip = (c, i) => { const u = upOf(c, i); return u == null ? '—' : `<span class="${u >= 0 ? 'up' : 'down'}">${pct(u)}</span>`; };
+const sigOfUp = (c, i) => { const u = upOf(c, i); return u == null ? '' : u >= 10 ? 'pos' : u <= -10 ? 'neg' : 'neu'; };
+
 const LIGHT_C = ['綠', '黃', '紅'];
 const DIM_IC = ['🏭', '📊', '🎤', '💰', '📈', '🏦'];
 const SEC_LESSON = [['ma', '均線'], ['trend', '支撐壓力'], ['rsi', 'RSI'], ['macd', 'MACD'], ['bb', '布林通道'], ['volume', '成交量'], ['pattern', '型態']];
@@ -134,6 +162,8 @@ cardEditor = function (c) {
     <div class="rh-score">${c.lights.map((l, i) => `<a class="rh-dim ${esc(l.c)}" href="#sec-lights"><i></i>${DIMENSIONS[i].replace('／資金', '')}</a>`).join('')}</div>
     <div class="rh-sum"><span class="s-g">綠 ${g}</span><span class="s-y">黃 ${y}</span><span class="s-r">紅 ${r}</span><span class="rh-date">研究日 ${esc(c.date)}</span></div>
     ${valGauge(c, vs)}
+    ${(() => { const h = holdOf(c.code); if (!h) return ''; const q = S.quotes?.[h.code]?.price ?? num(c.price); const mv = q ? q * h.shares : null, pl = mv != null ? mv - h.cost : null;
+      return `<div class="rh-hold"><span>💼 我持有 <b>${shf(h.shares)}</b> 股・均價 ${fmt(h.cost / h.shares, 2)}</span>${pl != null ? `<span class="${pl >= 0 ? 'up' : 'down'}">${pl >= 0 ? '+' : ''}${fmt(pl)}（${pct(pl / h.cost * 100)}）</span>` : ''}<span class="rh-hbtn"><button data-hbuy="${esc(h.code)}">加碼</button><button data-hsell="${esc(h.code)}">賣出</button></span></div>`; })()}
   </section>
   ${c.example ? '<div class="note">範例卡：財報數字附來源日期；標「示範」的是填法示意，不是事實或投資建議。</div>' : ''}
   ${c.auto ? `<details class="rc-auto"><summary>📋 自動資料摘要・${esc(new Date(c.auto.at).toLocaleDateString('zh-TW'))}</summary><div class="r-body" style="white-space:pre-wrap;color:var(--text)">${esc(c.auto.summary)}</div>${c.auto.errors?.length ? `<div class="help down">部分資料抓取失敗：${esc(c.auto.errors.join('；'))}</div>` : ''}</details>` : ''}
@@ -163,15 +193,19 @@ cardEditor = function (c) {
   </details>
 
   <details class="rc-sec" id="sec-guide" open>${secHead('3', 'guide', '法說會與管理層指引', guideDone, 4)}
+    <div class="met-grid wide">${GUIDE_F.map(([k, ic, l, ph]) => `<div class="met ${filled([c[k]]) ? 'done' : ''}"><div class="met-h"><span>${ic} ${l}</span><span class="pill ${filled([c[k]]) ? 'green' : ''}">${filled([c[k]]) ? '已填' : '待填'}</span></div>
+      ${k === 'guidance' ? `<div class="gdir">${['上修', '維持', '下修'].map((d, j) => `<button type="button" class="gd ${['綠', '黃', '紅'][j]} ${c.guideDir === d ? 'on' : ''}" data-gdir="${d}">${['▲', '■', '▼'][j]} ${d}</button>`).join('')}</div>` : ''}
+      ${ta(k, c[k], ph)}</div>`).join('')}</div>
     ${srcLinks(c, 'guide')}
-    <div class="two">${[['guidance', '管理層指引', '營收、毛利率區間；上修或下修多少'], ['quotes', '關鍵原話', '標日期'], ['qa', '分析師問答重點', ''], ['assumptions', '轉成估值假設', '例如：明年營收成長 20%']].map(([k, l, ph]) => `<label class="f"><span>${l}</span>${ta(k, c[k], ph)}</label>`).join('')}</div>
   </details>
 
   <details class="rc-sec" id="sec-val" open>${secHead('4', 'val', '估值（三法交叉）', valDone, 3)}
-    <div class="val-grid">${VAL_ROWS.map((nm, i) => `<div class="valm"><div class="met-h"><span>${['相對估值', 'DCF 現金流折現', '分析師共識'][i]}</span>${tip(HELP.val[i])}</div>
-      <div class="valm-f"><em>合理價</em>${inp(`val.${i}.fair`, c.val[i].fair, 'class="met-v" inputmode="decimal" placeholder="—"')}</div>
-      ${ta(`val.${i}.assume`, c.val[i].assume, '關鍵假設')}${inp(`val.${i}.note`, c.val[i].note, 'class="met-s" placeholder="備註"')}</div>`).join('')}</div>
-    <div class="result" id="valResult">${valResultHTML(c, vs)}</div>
+    <div class="met-grid">${VAL_ROWS.map((nm, i) => `<div class="met ${sigOfUp(c, i)}"><div class="met-h"><span>${['📏 相對估值', '🧮 DCF', '👥 分析師共識'][i]}</span>${tip(HELP.val[i])}</div>
+      ${inp(`val.${i}.fair`, c.val[i].fair, 'class="met-v" inputmode="decimal" placeholder="合理價"')}
+      <div class="met-p"><span>vs 現價</span><b data-vup="${i}">${upChip(c, i)}</b></div>
+      ${ta(`val.${i}.assume`, c.val[i].assume, '關鍵假設')}${inp(`val.${i}.note`, c.val[i].note, 'class="met-s" placeholder="備註"')}</div>`).join('')}
+      <div class="met sum"><div class="met-h"><span>⚖️ 三法平均</span></div><div class="met-v big" id="valAvg">${vs.avg == null ? '—' : fmt(vs.avg, 1)}</div><div class="met-p"><span>潛在空間</span><b id="valUp">${vs.upside == null ? '—' : `<span class="${vs.upside >= 0 ? 'up' : 'down'}">${pct(vs.upside)}</span>`}</b></div><div class="help" id="valSpread">${vs.min ? `區間 ${fmt(vs.min, 0)}～${fmt(vs.max, 0)}${vs.max / vs.min > 1.3 ? '・<span class="down">差距大，檢查假設</span>' : ''}` : '填兩個以上合理價即可比較'}</div></div></div>
+    <div id="valResult" hidden>${valResultHTML(c, vs)}</div>
     ${srcLinks(c, 'val')}
     <details class="rc-sub"><summary>🧮 DCF 試算器</summary>${dcfHTML(c)}</details>
     <label class="f" style="margin-top:8px"><span>三法差距大時，哪個假設最脆弱？</span>${ta('valCheck', c.valCheck)}</label>
@@ -179,13 +213,17 @@ cardEditor = function (c) {
 
   <details class="rc-sec" id="sec-tech" open>${secHead('5', 'tech', '技術面', techDone, 7)}
     ${chartHTML(c)}
-    <div class="trows">${TECH_ROWS.map((nm, i) => `<div class="trow"><div class="met-h"><span>${nm}</span>${tip(HELP.tech[i])}</div>${inp(`tech.${i}.read`, c.tech[i].read, 'class="t-read" placeholder="讀數"')}${ta(`tech.${i}.judge`, c.tech[i].judge, '判讀')}</div>`).join('')}</div>
+    <div class="met-grid wide">${TECH_ROWS.map((nm, i) => { const sg = sig(c.tech[i].judge); return `<div class="met ${sg}"><div class="met-h"><span>${TECH_IC[i]} ${nm}</span>${sg ? `<span class="sigp ${sg}">${SIG_L[sg]}</span>` : ''}${tip(HELP.tech[i])}</div>
+      ${ta(`tech.${i}.read`, c.tech[i].read, '讀數').replace('class="cell-ta" rows="2"', 'class="cell-ta t-read" rows="1"')}${ta(`tech.${i}.judge`, c.tech[i].judge, '判讀').replace('rows="2"', 'rows="1"')}</div>`; }).join('')}</div>
     <div class="tech-links"><span>看不懂指標？</span>${SEC_LESSON.map(([id, l]) => `<button class="chip" data-lesson-go="${id}">${l}</button>`).join('')}</div>
     <button class="btn-small" id="cardToBt">用歷史股價回測這檔的訊號 ›</button>
   </details>
 
   <details class="rc-sec" id="sec-chip" ${c.market === '美股' ? '' : 'open'}>${secHead('6', 'chip', '籌碼面' + (c.market === '美股' ? '（台股適用）' : ''), chipDone, 7)}
-    <div class="trows">${CHIP_ROWS.map((nm, i) => `<div class="trow chip3"><div class="met-h"><span>${nm}</span>${tip(HELP.chip[i])}</div><div class="c2"><label><em>5 日</em>${inp(`chip.${i}.d5`, c.chip[i].d5)}</label><label><em>20 日</em>${inp(`chip.${i}.d20`, c.chip[i].d20)}</label></div>${ta(`chip.${i}.judge`, c.chip[i].judge, '判讀')}</div>`).join('')}</div>
+    <div class="met-grid">${CHIP_ROWS.map((nm, i) => { const x = c.chip[i], sg = sig(x.judge) || numSig(x.d20, i); return `<div class="met ${sg}"><div class="met-h"><span>${CHIP_IC[i]} ${nm}</span>${tip(HELP.chip[i])}</div>
+      <div class="met-p"><span>5 日</span>${inp(`chip.${i}.d5`, x.d5, `class="met-v mid ${numSig(x.d5, i)}" placeholder="—"`)}</div>
+      <div class="met-p"><span>20 日</span>${inp(`chip.${i}.d20`, x.d20, `class="mid2 ${numSig(x.d20, i)}" placeholder="—"`)}</div>
+      ${ta(`chip.${i}.judge`, x.judge, '判讀').replace('rows="2"', 'rows="1"')}</div>`; }).join('')}</div>
   </details>
 
   <details class="rc-sec" id="sec-end" open>${secHead('7', 'end', '結論與行動', endDone, 4)}
@@ -202,7 +240,7 @@ cardEditor = function (c) {
 };
 
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-light],[data-tip],[data-golayer],[data-lesson-go],#cardToBt,.rc-toc a,.rh-dim');
+  const t = e.target.closest('[data-light],[data-tip],[data-golayer],[data-lesson-go],[data-rcf],[data-gdir],#cardToBt,.rc-toc a,.rh-dim');
   if (!t) return;
   const c = S.cards.find(x => x.id === openCardId);
   if (t.dataset.light != null && c) {
@@ -210,6 +248,8 @@ document.addEventListener('click', e => {
     const y = scrollY; render(); scrollTo(0, y); return;
   }
   if (t.dataset.tip != null) { t.parentElement.classList.toggle('show'); return; }
+  if (t.dataset.rcf) { S.rcFilter = t.dataset.rcf; save(); render(); return; }
+  if (t.dataset.gdir && c) { c.guideDir = c.guideDir === t.dataset.gdir ? '' : t.dataset.gdir; const L = c.lights[2]; if (c.guideDir && (!L.c || L.auto || L.fromGuide)) { L.c = { 上修: '綠', 維持: '黃', 下修: '紅' }[c.guideDir]; L.fromGuide = true; } save(); const y = scrollY; render(); scrollTo(0, y); return; }
   if (t.dataset.golayer != null) { const f = findLayer(t.dataset.golayer); if (f) S.chainTab = f.ch.id; go('industry'); return; }
   if (t.dataset.lessonGo) { S.learnLesson = t.dataset.lessonGo; if (c?.code) S.learnCode = c.code; save(); go('learn'); return; }
   if (t.id === 'cardToBt' && c) { S.bt = Object.assign(S.bt || { rule: 'rsiLow', N: 30, hold: 20 }, { code: c.code }); save(); go('claims'); setTimeout(() => document.getElementById('bt_code')?.scrollIntoView({ block: 'center' }), 50); return; }
@@ -222,7 +262,13 @@ document.addEventListener('click', e => {
 document.addEventListener('input', e => {
   const p = e.target.dataset?.cardF; if (!p || !/^val\.\d+\.fair$|^price$/.test(p)) return;
   const c = S.cards.find(x => x.id === openCardId); const old = document.querySelector('.gauge'); if (!c) return;
-  const html = valGauge(c, valSummary(c)); if (old) old.outerHTML = html || '<div class="gauge"></div>';
+  const vs = valSummary(c), html = valGauge(c, vs); if (old) old.outerHTML = html || '<div class="gauge"></div>';
+  document.querySelectorAll('[data-vup]').forEach(el => { el.innerHTML = upChip(c, +el.dataset.vup); });
+  const A = document.getElementById('valAvg'), U = document.getElementById('valUp'), SP = document.getElementById('valSpread');
+  if (A) A.textContent = vs.avg == null ? '—' : fmt(vs.avg, 1);
+  if (U) U.innerHTML = vs.upside == null ? '—' : `<span class="${vs.upside >= 0 ? 'up' : 'down'}">${pct(vs.upside)}</span>`;
+  if (SP) SP.innerHTML = vs.min ? `區間 ${fmt(vs.min, 0)}～${fmt(vs.max, 0)}${vs.max / vs.min > 1.3 ? '・<span class="down">差距大，檢查假設</span>' : ''}` : '填兩個以上合理價即可比較';
 });
 document.addEventListener('click', e => { if (e.target.closest('summary button')) e.preventDefault(); }, true);
 go(current);
+setTimeout(() => { if (holdings().some(h => h.shares > 0 && !S.cards.some(c => String(c.code).toUpperCase() === h.code))) syncHoldCards(); }, 2500);

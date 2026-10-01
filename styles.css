@@ -569,3 +569,24 @@ details.adv summary { cursor: pointer; font-size: 14px; color: var(--muted); fon
   .dim-dots { gap: 6px; margin: 6px 0; }
   .dim textarea.cell-ta { font-size: 12px; padding: 6px; }
 }
+/* 研究卡：圖卡化（法說、估值、技術、籌碼） */
+.met-grid.wide { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.met { border-top: 4px solid var(--line); }
+.met.pos, .met.done { border-top-color: var(--green); } .met.neg { border-top-color: var(--red); } .met.neu { border-top-color: var(--yellow); }
+.met.sum { background: linear-gradient(135deg, rgba(201,162,74,.14), rgba(19,48,90,.08)); border-top-color: var(--gold); }
+.met .met-v.big { font-size: 24px; font-weight: 800; }
+.rc-sec .met textarea.cell-ta { font-size: 13px; background: var(--card); }
+.rc-sec .met .t-read { font-weight: 700; font-size: 14px; }
+.sigp { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 99px; margin-left: auto; margin-right: 4px; }
+.sigp.pos { background: rgba(30,158,90,.14); color: var(--green); } .sigp.neg { background: rgba(214,69,69,.14); color: var(--red); } .sigp.neu { background: rgba(212,154,0,.14); color: var(--yellow); }
+.rc-sec .met-v.mid { font-size: 17px !important; }
+.rc-sec input.pos { color: var(--green); } .rc-sec input.neg { color: var(--red); }
+.rc-sec .met-p input.mid2 { font-weight: 700; }
+.gdir { display: flex; gap: 6px; }
+.gd { flex: 1; border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 5px 0; font-size: 13px; font-weight: 700; cursor: pointer; color: var(--muted); }
+.gd.on.綠 { background: var(--green); color: #fff; border-color: var(--green); } .gd.on.黃 { background: var(--yellow); color: #fff; border-color: var(--yellow); } .gd.on.紅 { background: var(--red); color: #fff; border-color: var(--red); }
+.rh-hold { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); font-size: 13px; }
+.rh-hold b { color: var(--gold-2); }
+.rh-hbtn { margin-left: auto; display: flex; gap: 6px; }
+.rh-hbtn button { background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.rc-sec .met .t-read { border-style: dashed; background: transparent; }
