@@ -365,7 +365,7 @@ module.exports = async (req, res) => {
       if (bars.length < 30) throw new Error('股價資料不足');
       const t = technicals(bars);
       res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=7200');
-      res.status(200).json({ code, name, price: t.num.last, priceDate: bars[bars.length - 1].d, market: /^\d/.test(code) ? '台股' : '美股', num: t.num });
+      res.status(200).json({ code, name, price: t.num.last, prev: bars.length > 1 ? bars[bars.length - 2].c : null, priceDate: bars[bars.length - 1].d, market: /^\d/.test(code) ? '台股' : '美股', num: t.num });
     } catch (e) { res.status(502).json({ code, error: e.message }); }
     return;
   }
