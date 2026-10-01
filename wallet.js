@@ -135,28 +135,36 @@ function openLedger(pre = {}, id) {
 }
 
 /* ---------- 固定收支與定期定額 ---------- */
+const isInv = k => k === '定期定額' || k === '員工認股';
+const DCA_HELP = '到期時首頁會出現「待確認」，按一下帶入當天價格，確認後才計入持股。';
+const ESPP_HELP = '公司從薪水扣款、以市價折扣買股：到期時首頁會出現「待確認」，自動以「市價 × 折扣」算出認購價與股數，不會從存款帳戶扣錢。持股成本以實際認購價計算，所以折扣部分會直接顯示為帳面獲利。';
 function openRecurring(id, preKind) {
   const rec = id ? S.recurring.find(x => x.id === id) : null;
   const v = Object.assign({ kind: preKind || '支出', freq: '月', day: '5', month: '1' }, rec || {});
   const catsHTML = k => (CATS[k] || []).map(([c, ic], i) => `<label><input type="radio" name="cat" value="${c}" ${(v.cat ? v.cat === c : i === 0) ? 'checked' : ''}><span><b>${ic}</b>${c}</span></label>`).join('');
   openModal({
     title: rec ? '編輯固定收支' : '設定固定收支／定期定額',
-    body: `<div class="seg" style="margin-bottom:10px">${['支出', '收入', '定期定額'].map(k => `<label><input type="radio" name="kind" value="${k}" ${v.kind === k ? 'checked' : ''}><span>${k === '定期定額' ? '定期定額' : '固定' + k}</span></label>`).join('')}</div>
-      <div id="rcDca" ${v.kind === '定期定額' ? '' : 'hidden'}><div class="inline"><label class="f"><span>代號</span><input type="text" name="code" value="${esc(v.code || '')}" placeholder="0050、VOO…" autocapitalize="characters"></label><label class="f"><span>名稱（自動）</span><input type="text" name="cname" value="${esc(v.cname || '')}"></label></div>
-        <div class="help">到期時首頁會出現「待確認」，按一下帶入當天價格，確認後才計入持股。</div></div>
-      <div id="rcCat" ${v.kind === '定期定額' ? 'hidden' : ''}><label class="f"><span>名稱</span><input type="text" name="name" value="${esc(v.name || '')}" placeholder="例如：薪水、房租、手機費、Netflix"></label><div class="catgrid" id="rcCats">${catsHTML(v.kind)}</div></div>
-      <label class="f" style="margin-top:10px"><span>每次金額</span><input type="text" inputmode="decimal" name="amount" value="${esc(v.amount || '')}" placeholder="0"></label>
+    body: `<div class="seg seg4" style="margin-bottom:10px">${['支出', '收入', '定期定額', '員工認股'].map(k => `<label><input type="radio" name="kind" value="${k}" ${v.kind === k ? 'checked' : ''}><span>${isInv(k) ? k : '固定' + k}</span></label>`).join('')}</div>
+      <div id="rcDca" ${isInv(v.kind) ? '' : 'hidden'}><div class="inline"><label class="f"><span>代號</span><input type="text" name="code" value="${esc(v.code || '')}" placeholder="0050、VOO…" autocapitalize="characters"></label><label class="f"><span>名稱（自動）</span><input type="text" name="cname" value="${esc(v.cname || '')}"></label></div>
+        <div id="rcEspp" ${v.kind === '員工認股' ? '' : 'hidden'}><label class="f"><span>認購價 = 市價的幾 %</span><input type="text" inputmode="decimal" name="disc" value="${esc(v.disc || '85')}"></label>
+          <label class="tog" style="margin:4px 0 6px"><input type="checkbox" name="asIncome" value="1" ${v.asIncome !== '' ? 'checked' : ''}> 扣款金額同時記為「薪資」收入（你的固定薪水若填實領金額，請勾選）</label></div>
+        <div class="help" id="rcHelp">${v.kind === '員工認股' ? ESPP_HELP : DCA_HELP}</div></div>
+      <div id="rcCat" ${isInv(v.kind) ? 'hidden' : ''}><label class="f"><span>名稱</span><input type="text" name="name" value="${esc(v.name || '')}" placeholder="例如：薪水、房租、手機費、Netflix"></label><div class="catgrid" id="rcCats">${catsHTML(v.kind)}</div></div>
+      <label class="f" style="margin-top:10px"><span id="rcAmtL">${v.kind === '員工認股' ? '每次從薪水扣多少錢' : '每次金額'}</span><input type="text" inputmode="decimal" name="amount" value="${esc(v.amount || '')}" placeholder="0"></label>
       <div class="inline"><label class="f"><span>頻率</span><select name="freq">${['月', '年'].map(o => `<option value="${o}" ${v.freq === o ? 'selected' : ''}>每${o}</option>`).join('')}</select></label>
         <label class="f" id="rcMonth" ${v.freq === '年' ? '' : 'hidden'}><span>月份</span><select name="month">${Array.from({ length: 12 }, (_, i) => `<option ${String(i + 1) === String(v.month) ? 'selected' : ''}>${i + 1}</option>`).join('')}</select></label>
         <label class="f"><span>每${v.freq === '年' ? '年該月' : '月'}幾號</span><select name="day">${DAYS.map(o => `<option ${o === String(v.day) ? 'selected' : ''}>${o}</option>`).join('')}</select></label>
-        ${acctSelectHTML(v.acct, '扣款／入帳帳戶')}</div>
+        <div id="rcAcct" ${v.kind === '員工認股' ? 'hidden' : ''}>${acctSelectHTML(v.acct, '扣款／入帳帳戶')}</div></div>
       <div class="help">從今天以後的日期才會自動記帳，不會補記過去。</div>`,
     onSave: (d, body) => {
       const amount = num(d.amount); if (!amount) { toast('請輸入金額'); return false; }
       const kind = d.kind, code = String(d.code || '').trim().toUpperCase();
-      if (kind === '定期定額' && !code) { toast('請輸入代號'); return false; }
-      const r = { kind, amount: String(amount), freq: d.freq, month: d.month, day: d.day, acct: d.acct || '', ccy: acctById(d.acct)?.ccy || (kind === '定期定額' ? ccyOf(code) : 'TWD'),
-        code: kind === '定期定額' ? code : '', cname: d.cname || '', name: kind === '定期定額' ? `定期定額 ${code} ${d.cname || ''}`.trim() : (d.name || d.cat), cat: kind === '定期定額' ? '' : d.cat };
+      if (isInv(kind) && !code) { toast('請輸入代號'); return false; }
+      const espp = kind === '員工認股', disc = num(d.disc) || 85;
+      if (espp && (disc <= 0 || disc > 100)) { toast('折扣請填 1～100，例如 85'); return false; }
+      const r = { kind, amount: String(amount), freq: d.freq, month: d.month, day: d.day, acct: espp ? '' : d.acct || '', ccy: espp ? 'TWD' : acctById(d.acct)?.ccy || (isInv(kind) ? ccyOf(code) : 'TWD'),
+        code: isInv(kind) ? code : '', cname: d.cname || '', name: isInv(kind) ? `${kind} ${code} ${d.cname || ''}`.trim() : (d.name || d.cat), cat: isInv(kind) ? '' : d.cat,
+        disc: espp ? String(disc) : '', asIncome: espp ? (d.asIncome ? '1' : '') : '' };
       if (rec) Object.assign(rec, r); else S.recurring.push({ id: uid(), ...r, lastRun: dayBefore(today()) });
       processRecurring(); toast('已設定');
     },
@@ -165,7 +173,9 @@ function openRecurring(id, preKind) {
   const body = $('#modalBody'), f = n => body.querySelector(`[name=${n}]`);
   body.querySelectorAll('[name=kind]').forEach(r => r.addEventListener('change', () => {
     const k = body.querySelector('[name=kind]:checked').value; v.cat = '';
-    $('#rcDca').hidden = k !== '定期定額'; $('#rcCat').hidden = k === '定期定額'; if (k !== '定期定額') $('#rcCats').innerHTML = catsHTML(k);
+    $('#rcDca').hidden = !isInv(k); $('#rcCat').hidden = isInv(k); if (!isInv(k)) $('#rcCats').innerHTML = catsHTML(k);
+    $('#rcEspp').hidden = k !== '員工認股'; $('#rcAcct').hidden = k === '員工認股'; $('#rcHelp').textContent = k === '員工認股' ? ESPP_HELP : DCA_HELP;
+    $('#rcAmtL').textContent = k === '員工認股' ? '每次從薪水扣多少錢' : '每次金額';
   }));
   f('freq').addEventListener('change', () => { $('#rcMonth').hidden = f('freq').value !== '年'; });
   let tm; f('code').addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(async () => { try { const q = await quote(f('code').value.trim()); f('cname').value = q.name || ''; } catch (e) { /* ignore */ } }, 600); });
@@ -187,8 +197,12 @@ function processRecurring() {
   S.recurring.forEach(r => {
     const from = r.lastRun || dayBefore(t);
     dueDates(r, from, t).forEach(d => {
-      if (r.kind === '定期定額') {
-        if (!S.pendingDca.some(x => x.rid === r.id && x.date === d)) { S.pendingDca.push({ id: uid(), rid: r.id, date: d, code: r.code, name: r.cname, amount: r.amount, acct: r.acct }); p++; }
+      if (isInv(r.kind)) {
+        if (!S.pendingDca.some(x => x.rid === r.id && x.date === d)) {
+          const px = { id: uid(), rid: r.id, date: d, code: r.code, name: r.cname, amount: r.amount, acct: r.acct, kind: r.kind, disc: r.disc || '' };
+          if (r.kind === '員工認股' && r.asIncome) { const e = { id: uid(), date: d, type: '收入', cat: '薪資', amount: r.amount, acct: '', ccy: 'TWD', note: `員工認股扣款 ${r.code}`, auto: r.id }; S.ledger.push(e); px.ledgerId = e.id; n++; }
+          S.pendingDca.push(px); p++;
+        }
       } else {
         const e = { id: uid(), date: d, type: r.kind, cat: r.cat || '其他', amount: r.amount, acct: r.acct || '', ccy: r.ccy || 'TWD', note: r.name, auto: r.id };
         S.ledger.push(e); applyLedger(e, 1); n++;
@@ -196,11 +210,13 @@ function processRecurring() {
     });
     r.lastRun = t;
   });
-  if (n || p) { save(); setTimeout(() => toast([n && `已自動記入 ${n} 筆固定收支`, p && `${p} 筆定期定額待確認`].filter(Boolean).join('，')), 600); }
+  if (n || p) { save(); setTimeout(() => toast([n && `已自動記入 ${n} 筆固定收支`, p && `${p} 筆定期定額／員工認股待確認`].filter(Boolean).join('，')), 600); }
 }
 function confirmDca(pid) {
   const x = S.pendingDca.find(y => y.id === pid); if (!x) return;
-  const px = S.quotes?.[x.code]?.price, amt = num(x.amount) || 0;
+  const amt = num(x.amount) || 0;
+  if (x.kind === '員工認股') return openTradeForm({ code: x.code, name: x.name, side: '買進', date: x.date, price: '', shares: '', acct: '', kind: '員工認股', pendingId: x.id, dcaAmt: amt, esppDisc: num(x.disc) || 85, fee: '0', note: `員工認股（市價 ${x.disc || 85}%）` });
+  const px = S.quotes?.[x.code]?.price;
   const tw = /^\d/.test(x.code);
   const shares = px ? (tw ? Math.floor(amt / px) : Math.floor(amt / px * 10000) / 10000) : '';
   openTradeForm({ code: x.code, name: x.name, side: '買進', date: x.date, price: px || '', shares: shares ? String(shares) : '', acct: x.acct, kind: '定期定額', pendingId: x.id, dcaAmt: amt, fee: tw ? '1' : '0' });
@@ -314,7 +330,7 @@ PAGES.home = () => {
   const parts = [{ l: '現金與存款', v: W.cash }, { l: '台股', v: W.tw }, { l: '美股／海外', v: W.us }, { l: '儲蓄險', v: W.savIns }, { l: '投資型保單', v: W.invIns }];
   if (S.showProp) parts.push({ l: '房產淨值', v: W.prop - W.loan });
   const alerts = S.monAlerts?.length ? `<div class="card alert"><div class="card-head"><h3 class="gold-bar">⚠ 監控條件觸發</h3><button class="btn-small ghost" id="clearAlerts">知道了</button></div>${S.monAlerts.map(a => `<div>${esc(a)}</div>`).join('')}</div>` : '';
-  const pend = S.pendingDca.length ? `<div class="card alert"><h3 class="gold-bar">定期定額待確認</h3>${S.pendingDca.map(x => `<div class="pend"><span>${esc(x.date.slice(5))}　<b>${esc(x.code)}</b> ${esc(x.name || '')}　${fmt(num(x.amount))} 元</span><span class="btn-row"><button class="btn-small" data-dca="${x.id}">確認入帳</button><button class="btn-small ghost" data-dcaskip="${x.id}">這期沒扣</button></span></div>`).join('')}<div class="help">確認時會帶入現價與估計股數，請對照券商的成交通知修改。</div></div>` : '';
+  const pend = S.pendingDca.length ? `<div class="card alert"><h3 class="gold-bar">待確認的買進</h3>${S.pendingDca.map(x => `<div class="pend"><span>${esc(x.date.slice(5))}　<span class="pill ${x.kind === '員工認股' ? 'gold' : ''}">${esc(x.kind || '定期定額')}</span> <b>${esc(x.code)}</b> ${esc(x.name || '')}　${fmt(num(x.amount))} 元</span><span class="btn-row"><button class="btn-small" data-dca="${x.id}">確認入帳</button><button class="btn-small ghost" data-dcaskip="${x.id}">這期沒扣</button></span></div>`).join('')}<div class="help">確認時會帶入現價（員工認股為市價 × 折扣）與估計股數，請對照券商成交通知或公司的認股通知修改。</div></div>` : '';
   const onboard = emptyAll ? `<div class="card onboard"><h3 class="gold-bar">3 步建立你的資產表（約 5 分鐘）</h3>
       <button class="step" data-act="addAcct"><b>1</b><span><strong>加入存款帳戶</strong><em>打開網銀 App，抄下每個帳戶的餘額</em></span></button>
       <button class="step" data-act="import"><b>2</b><span><strong>匯入股票／ETF 庫存</strong><em>照抄券商 App 庫存頁的代號、股數、均價</em></span></button>
@@ -373,7 +389,7 @@ PAGES.ledger = () => {
   const groups = {};
   [...M.list].sort((a, b) => (b.date || '').localeCompare(a.date || '')).forEach(e => { (groups[e.date] = groups[e.date] || []).push(e); });
   const rows = Object.entries(groups).map(([d, es]) => `<div class="lday">${esc(d.slice(5).replace('-', '/'))}</div>` + es.map(e => `<div class="lrow" data-edit="ledger" data-id="${e.id}"><span class="l-ic">${catIcon(e.type, e.cat)}</span><span class="l-t"><b>${esc(e.note || e.cat)}</b><em>${esc(e.cat)}${e.acct && acctById(e.acct) ? '｜' + esc(acctById(e.acct).name) : ''}${e.auto ? '｜自動' : ''}</em></span><span class="l-v ${e.type === '收入' ? 'up' : 'down'}">${e.type === '收入' ? '+' : '−'}${money(num(e.amount), e.ccy || 'TWD')}</span></div>`).join('')).join('');
-  const rec = S.recurring.map(r => `<div class="lrow" data-edit="recurring" data-id="${r.id}"><span class="l-ic">${r.kind === '定期定額' ? '📈' : catIcon(r.kind, r.cat)}</span><span class="l-t"><b>${esc(r.name)}</b><em>每${r.freq === '年' ? `年 ${r.month} 月` : '月'} ${r.day} 號${r.acct && acctById(r.acct) ? '｜' + esc(acctById(r.acct).name) : ''}</em></span><span class="l-v ${r.kind === '收入' ? 'up' : ''}">${fmt(num(r.amount))}</span></div>`).join('');
+  const rec = S.recurring.map(r => `<div class="lrow" data-edit="recurring" data-id="${r.id}"><span class="l-ic">${r.kind === '定期定額' ? '📈' : r.kind === '員工認股' ? '🏢' : catIcon(r.kind, r.cat)}</span><span class="l-t"><b>${esc(r.name)}</b><em>每${r.freq === '年' ? `年 ${r.month} 月` : '月'} ${r.day} 號${r.disc ? `｜市價 ${r.disc}%` : ''}${r.acct && acctById(r.acct) ? '｜' + esc(acctById(r.acct).name) : ''}</em></span><span class="l-v ${r.kind === '收入' ? 'up' : ''}">${fmt(num(r.amount))}</span></div>`).join('');
   return `<h2>收支</h2>
   <div class="mnav"><button class="btn-small ghost" data-act="mprev">‹</button><b>${m.replace('-', ' 年 ')} 月</b><button class="btn-small ghost" data-act="mnext">›</button></div>
   <div class="card"><div class="mstats"><div><em>收入</em><b class="up">${fmt(M.inc)}</b></div><div><em>支出</em><b class="down">${fmt(M.exp)}</b></div><div><em>結餘</em><b>${fmt(M.net)}</b></div><div><em>儲蓄率</em><b>${M.rate == null ? '—' : fmt(M.rate, 0) + '%'}</b></div></div>
@@ -405,8 +421,8 @@ go = function (page) { _goW(page); const g = groupOf(current); document.querySel
 
 /* ---------- 動作 ---------- */
 function sheet(kind) {
-  const all = [['exp', '➖', '記支出'], ['inc', '➕', '記收入'], ['buy', '📈', '買進股票／ETF'], ['sell', '📉', '賣出'], ['import', '📋', '匯入券商庫存'], ['recur', '🔁', '固定收支／定期定額'], ['addAcct', '🏦', '存款帳戶'], ['addIns', '🛡️', '保單'], ['addProp', '🏠', '房產']];
-  const list = kind === 'asset' ? all.slice(6).concat([all[4]]) : all;
+  const all = [['exp', '➖', '記支出'], ['inc', '➕', '記收入'], ['buy', '📈', '買進股票／ETF'], ['sell', '📉', '賣出'], ['import', '📋', '匯入券商庫存'], ['recur', '🔁', '固定收支／定期定額'], ['espp', '🏢', '員工認股（折價買）'], ['addAcct', '🏦', '存款帳戶'], ['addIns', '🛡️', '保單'], ['addProp', '🏠', '房產']];
+  const list = kind === 'asset' ? all.slice(7).concat([all[4]]) : all;
   openModal({ title: kind === 'asset' ? '新增資產' : '要記什麼？', noSave: true, body: `<div class="tiles sm">${list.map(([a, ic, t]) => `<button type="button" class="tile" data-act="${a}"><i>${ic}</i><b>${t}</b></button>`).join('')}</div>` });
 }
 document.addEventListener('click', e => {
@@ -418,7 +434,7 @@ document.addEventListener('click', e => {
   if (t.dataset.hsell) return openTradeForm({ code: t.dataset.hsell, side: '賣出' });
   if (t.dataset.hdet) return holdingDetail(t.dataset.hdet);
   if (t.dataset.dca) return confirmDca(t.dataset.dca);
-  if (t.dataset.dcaskip) { S.pendingDca = S.pendingDca.filter(x => x.id !== t.dataset.dcaskip); save(); render(); return toast('已略過這一期'); }
+  if (t.dataset.dcaskip) { const sk = S.pendingDca.find(x => x.id === t.dataset.dcaskip); if (sk?.ledgerId) S.ledger = S.ledger.filter(e => e.id !== sk.ledgerId); S.pendingDca = S.pendingDca.filter(x => x.id !== t.dataset.dcaskip); save(); render(); return toast('已略過這一期'); }
   if (t.id === 'walletToAlloc') {
     const W = wealth(), set = (re, v) => { const a = S.alloc.find(x => re.test(x.name)); if (a) a.value = String(Math.round(v)); };
     set(/台股/, W.tw); set(/美股|海外/, W.us + W.invIns); set(/債券|固定/, W.savIns); set(/現金/, W.cash);
@@ -431,6 +447,7 @@ document.addEventListener('click', e => {
     case 'sell': return openTradeForm({ side: '賣出' });
     case 'import': return openImport();
     case 'recur': return openRecurring(null);
+    case 'espp': return openTradeForm({ side: '買進', kind: '員工認股', esppDisc: 85, acct: '', fee: '0', note: '員工認股（市價 85%）' });
     case 'addAcct': return editAsset('accounts');
     case 'addIns': return editAsset('insurance');
     case 'addProp': return editAsset('property');

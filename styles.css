@@ -406,3 +406,4 @@ details.adv summary { cursor: pointer; font-size: 14px; color: var(--muted); fon
   .legend { flex: 1 1 100%; min-width: 0; }
 }
 [hidden] { display: none !important; }
+.seg4 span { font-size: 13px; padding: 9px 2px; }

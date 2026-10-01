@@ -628,12 +628,12 @@ function openTradeForm(pre = {}, id) {
     try {
       const q = await quote(code); body._q = q;
       if (!f('name').value || f('name')._auto) { f('name').value = q.name || ''; f('name')._auto = true; }
-      if (!f('price').value || f('price')._auto) { f('price').value = q.price; f('price')._auto = true; }
+      if (!f('price').value || f('price')._auto) { f('price').value = v.esppDisc ? Math.round(q.price * v.esppDisc) / 100 : q.price; f('price')._auto = true; }
       const n = q.num, c = S.cards.find(x => String(x.code).toUpperCase() === code), vs = c ? valSummary(c) : {};
       if (!f('stop').value) f('stop').value = n.support && n.support < q.price && n.support > q.price * 0.8 ? n.support : Math.round(q.price * 0.92 * 100) / 100;
       if (!f('target').value) f('target').value = vs.avg && vs.avg > q.price ? Math.round(vs.avg * 100) / 100 : n.resistance > q.price ? n.resistance : '';
-      if (!f('shares').value) f('shares').value = v.dcaAmt ? (/^\d/.test(code) ? Math.floor(v.dcaAmt / q.price) : Math.floor(v.dcaAmt / q.price * 10000) / 10000) : /^\d/.test(code) ? 1000 : 1;
-      $('#codeStat').innerHTML = `<b>${esc(q.name || code)}</b>　現價 ${q.price}（${esc(q.priceDate)}）`;
+      if (!f('shares').value) f('shares').value = v.dcaAmt ? (/^\d/.test(code) ? Math.floor(v.dcaAmt / (num(f('price').value) || q.price)) : Math.floor(v.dcaAmt / (num(f('price').value) || q.price) * 10000) / 10000) : /^\d/.test(code) ? 1000 : 1;
+      $('#codeStat').innerHTML = `<b>${esc(q.name || code)}</b>　現價 ${q.price}（${esc(q.priceDate)}）${v.esppDisc ? `<br>員工認股價 = 市價 ${q.price} × ${v.esppDisc}% = <b>${Math.round(q.price * v.esppDisc) / 100}</b>（請以公司公告的認購價為準）` : ''}`;
       body._snap = makeSnapshot(code, q, body.querySelector('[name=side]:checked').value);
       $('#snapBox').textContent = body._snap.text;
     } catch (e) { $('#codeStat').innerHTML = `<span class="down">查不到這個代號（${esc(e.message)}）</span>`; }
