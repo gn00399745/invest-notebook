@@ -411,8 +411,8 @@ function holdings() {
     const sh = num(t.shares) || 0, px = num(t.price) || 0, fee = t.fee !== '' && t.fee != null ? num(t.fee) || 0 : estFee(t);
     if (t.side === '賣出') {
       const avg = p.shares ? p.cost / p.shares : 0, q = Math.min(sh, p.shares);
-      p.realized += q * px - fee - avg * q; p.cost -= avg * q; p.shares -= q;
-    } else { p.shares += sh; p.cost += sh * px + fee; }
+      p.realized += q * px - fee - avg * q; p.cost -= avg * q; p.shares = Math.round((p.shares - q) * 1e6) / 1e6; if (p.shares <= 0) { p.shares = 0; p.cost = 0; }
+    } else { p.shares = Math.round((p.shares + sh) * 1e6) / 1e6; p.cost += sh * px + fee; }
     if (t.name) p.name = t.name;
   });
   return Object.values(pos);
@@ -426,7 +426,7 @@ PAGES.trades = () => {
   const realized = hs.reduce((s, h) => s + twd(h, h.realized), 0);
   const rows = live.map(h => {
     const v = val(h), mv = v != null ? v * h.shares : null, pl = mv != null ? mv - h.cost : null;
-    return `<tr><td><b>${esc(h.code)}</b> ${esc(h.name || '')}</td><td class="num">${fmt(h.shares)}</td><td class="num">${fmt(h.cost / h.shares, 2)}</td>
+    return `<tr><td><b>${esc(h.code)}</b> ${esc(h.name || '')}</td><td class="num">${shf(h.shares)}</td><td class="num">${fmt(h.cost / h.shares, 2)}</td>
       <td class="num">${v != null ? fmt(v, 2) : '—'}</td><td class="num">${mv != null ? fmt(mv) : '—'}</td>
       <td class="num ${pl >= 0 ? 'up' : 'down'}">${pl != null ? `${fmt(pl)}（${pct(pl / h.cost * 100)}）` : '—'}</td>
       <td class="num">${tot ? pct(twd(h, mv ?? h.cost) / tot * 100).replace('+', '') : '—'}</td></tr>`;
@@ -557,7 +557,7 @@ function makeSnapshot(code, q, side) {
     if (c.verdict) lines.push(`結論：${c.verdict.replace(/^【[^】]+】/, '')}`);
   } else lines.push('【研究卡】尚未建立（建議先研究再交易）');
   if (qd) lines.push(`【總經】${qd.name}`);
-  if (h && h.shares > 0) lines.push(`【交易前持倉】${fmt(h.shares)} 股，平均成本 ${fmt(h.cost / h.shares, 2)}`);
+  if (h && h.shares > 0) lines.push(`【交易前持倉】${shf(h.shares)} 股，平均成本 ${fmt(h.cost / h.shares, 2)}`);
   return { at: new Date().toISOString(), text: lines.join('\n'), signal: t ? `${t.signal}（${t.trend}、RSI ${t.rsi}）` : '', num: n || null };
 }
 function openTradeForm(pre = {}, id) {
@@ -576,7 +576,7 @@ function openTradeForm(pre = {}, id) {
         <label class="f"><span>成交價（預設現價）</span><input type="text" inputmode="decimal" name="price" value="${esc(v.price || '')}"></label>
       </div>
       <div class="codestat" id="codeStat"></div>
-      <label class="f"><span>股數</span><input type="text" inputmode="numeric" name="shares" value="${esc(v.shares || '')}"></label>
+      <label class="f"><span>股數</span><input type="text" inputmode="decimal" name="shares" placeholder="可輸入小數，例如 12.3456" value="${esc(v.shares || '')}"></label>
       <div class="qbtns" id="shareBtns"></div>
       ${window.acctSelectHTML ? acctSelectHTML(v.acct, '扣款／入帳帳戶（選填，會自動增減餘額）') : ''}
       <details class="adv" ${t && (v.reasons || []).length ? 'open' : ''}><summary>進階：買賣理由、停損停利、當下分析報告（選填）</summary>
@@ -602,7 +602,7 @@ function openTradeForm(pre = {}, id) {
       if (t) { Object.assign(t, rec); toast('已儲存'); return; }
       const nt = { id: uid(), ...rec }; S.trades.push(nt);
       if (pre.pendingId) S.pendingDca = (S.pendingDca || []).filter(x => x.id !== pre.pendingId);
-      if (reasons.length) setTimeout(() => askReview(nt), 250); else toast(`已記錄：${rec.side} ${code} ${fmt(num(rec.shares))} 股`);
+      if (reasons.length) setTimeout(() => askReview(nt), 250); else toast(`已記錄：${rec.side} ${code} ${shf(num(rec.shares))} 股`);
     },
     onDelete: t ? () => { if (window.tradeCash) tradeCash(t, null); S.trades = S.trades.filter(x => x.id !== id); save(); } : null,
   });
@@ -611,7 +611,7 @@ function openTradeForm(pre = {}, id) {
     const code = f('code').value.trim().toUpperCase(), tw = /^\d/.test(code), side = body.querySelector('[name=side]:checked').value;
     const h = holdings().find(x => x.code === code);
     const opts = (tw ? [['1 張', 1000], ['2 張', 2000], ['5 張', 5000], ['零股 100', 100]] : [['1 股', 1], ['5 股', 5], ['10 股', 10], ['50 股', 50]]);
-    if (side === '賣出' && h?.shares > 0) opts.unshift([`全部 ${fmt(h.shares)} 股`, h.shares], [`一半`, Math.floor(h.shares / (tw && h.shares >= 2000 ? 2000 : 2)) * (tw && h.shares >= 2000 ? 1000 : 1)]);
+    if (side === '賣出' && h?.shares > 0) opts.unshift([`全部 ${shf(h.shares)} 股`, h.shares], [`一半`, h.shares % 1 ? Math.round(h.shares / 2 * 1e4) / 1e4 : Math.floor(h.shares / (tw && h.shares >= 2000 ? 2000 : 2)) * (tw && h.shares >= 2000 ? 1000 : 1)]);
     $('#shareBtns').innerHTML = opts.map(([l, n]) => `<button type="button" data-shares="${n}">${l}</button>`).join('');
   };
   body.addEventListener('click', e => { const b = e.target.closest('[data-shares]'); if (b) f('shares').value = b.dataset.shares; });

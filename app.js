@@ -8,6 +8,7 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const num = v => { const n = parseFloat(String(v ?? '').replace(/,/g, '')); return isFinite(n) ? n : null; };
 const fmt = (n, d = 0) => n == null || !isFinite(n) ? '—' : n.toLocaleString('zh-TW', { minimumFractionDigits: d, maximumFractionDigits: d });
+const shf = n => n == null || !isFinite(n) ? '—' : (Math.round(n * 1e4) / 1e4).toLocaleString('zh-TW', { maximumFractionDigits: 4 });
 const pct = (n, d = 1) => n == null || !isFinite(n) ? '—' : (n > 0 ? '+' : '') + n.toFixed(d) + '%';
 
 /* ---------- 預設資料 ---------- */

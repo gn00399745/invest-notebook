@@ -242,7 +242,7 @@ function holdingDetail(code) {
   const list = S.trades.filter(t => String(t.code).toUpperCase() === code).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   openModal({
     title: `${code} 的紀錄`, noSave: true,
-    body: list.map(t => `<div class="rec" data-edit="trades" data-id="${t.id}"><div class="r-top"><span class="r-title">${esc(t.side)} ${fmt(num(t.shares), num(t.shares) % 1 ? 4 : 0)} 股 @ ${esc(t.price)}</span>${t.kind ? `<span class="pill">${esc(t.kind)}</span>` : ''}</div><div class="r-meta">${esc(t.date)}${t.reason ? '｜' + esc(t.reason) : ''}</div></div>`).join('') +
+    body: list.map(t => `<div class="rec" data-edit="trades" data-id="${t.id}"><div class="r-top"><span class="r-title">${esc(t.side)} ${shf(num(t.shares))} 股 @ ${esc(t.price)}</span>${t.kind ? `<span class="pill">${esc(t.kind)}</span>` : ''}</div><div class="r-meta">${esc(t.date)}${t.reason ? '｜' + esc(t.reason) : ''}</div></div>`).join('') +
       '<div class="help" style="margin-top:8px">點一筆可以修改或刪除。要調整股數或均價，直接修改「庫存匯入」那一筆最簡單。</div>',
   });
 }
@@ -322,7 +322,7 @@ PAGES.home = () => {
       <div class="help" style="margin-top:6px">有保單、房產也可以加進來：按右下角 ＋。資料只存在這台裝置，記得定期到 ⚙︎ 匯出備份。</div></div>` : '';
   const hold = W.hs.map(h => `<div class="hcard">
       <div class="h-top"><div><b>${esc(h.code)}</b> <span>${esc(h.name || '')}</span></div><div class="h-mv">${fmt(h.mvT)}</div></div>
-      <div class="h-mid"><span>${fmt(h.shares, h.shares % 1 ? 4 : 0)} 股　均價 ${fmt(h.cost / h.shares, 2)}　現價 ${h.priced ? fmt(h.px, 2) : '—'}</span></div>
+      <div class="h-mid"><span>${shf(h.shares)} 股　均價 ${fmt(h.cost / h.shares, 2)}　現價 ${h.priced ? fmt(h.px, 2) : '—'}</span></div>
       <div class="h-bot"><span>損益 ${signed(h.plT)}（${pct(h.plP)}）${h.chg != null ? `　今日 <span class="${h.chg >= 0 ? 'up' : 'down'}">${pct(h.chg, 2)}</span>` : ''}</span>
         <span class="btn-row"><button class="btn-small" data-hbuy="${esc(h.code)}">加碼</button><button class="btn-small ghost" data-hsell="${esc(h.code)}">賣出</button><button class="btn-small ghost" data-hdet="${esc(h.code)}">明細</button></span></div></div>`).join('');
   const other = [
