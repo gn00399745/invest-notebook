@@ -102,6 +102,23 @@ const MARKETS = {
   eu: [['^STOXX50E', '歐洲斯托克 50'], ['EURUSD=X', '歐元兌美元']], hk: [['^HSI', '恒生指數'], ['HKD=X', '美元兌港幣']], kr: [['^KS11', '韓國綜合'], ['KRW=X', '美元兌韓元']],
 };
 
+async function yspark(syms) {
+  const j = await getJSON(`https://query1.finance.yahoo.com/v8/finance/spark?symbols=${syms.map(encodeURIComponent).join(',')}&range=3mo&interval=1d`, 12000);
+  const out = {};
+  Object.entries(j).forEach(([sym, v]) => {
+    const c = (v.close || []).map((x, i) => [v.timestamp[i], x]).filter(x => x[1] != null); if (c.length < 2) return;
+    const last = c[c.length - 1][1], prev = c[c.length - 2][1], m1 = c[Math.max(0, c.length - 22)][1];
+    out[sym] = { sym, price: r2(last, last < 10 ? 4 : 2), chg1d: r2((last / prev - 1) * 100), chg1m: r2((last / m1 - 1) * 100), spark: c.slice(-60).map(x => r2(x[1], 4)), date: new Date(c[c.length - 1][0] * 1000).toISOString().slice(0, 10) };
+  });
+  return out;
+}
+// IMF 擋雲端主機時的備援：世界經濟展望數值快照（2026-10-02 擷取）
+const IMF_SNAPSHOT = {
+  NGDP_RPCH: { TWN: { 2025: 8.7, 2026: 5.2, 2027: 3 }, USA: { 2025: 2.1, 2026: 2.3, 2027: 2.1 }, CHN: { 2025: 5, 2026: 4.4, 2027: 4 }, JPN: { 2025: 1.2, 2026: 0.7, 2027: 0.6 }, EURO: { 2025: 1.4, 2026: 1.1, 2027: 1.2 }, HKG: { 2025: 3.5, 2026: 2.4, 2027: 2.4 }, KOR: { 2025: 1, 2026: 1.9, 2027: 2.1 } },
+  PCPIPCH: { TWN: { 2025: 1.7, 2026: 1.5, 2027: 1.6 }, USA: { 2025: 2.7, 2026: 3.2, 2027: 2.1 }, CHN: { 2025: 0, 2026: 1.2, 2027: 1.5 }, JPN: { 2025: 3.2, 2026: 2.2, 2027: 2.3 }, EURO: { 2025: 2.1, 2026: 2.6, 2027: 2.2 }, HKG: { 2025: 1.4, 2026: 2.1, 2027: 1.8 }, KOR: { 2025: 2.1, 2026: 2.5, 2027: 1.9 } },
+  snapshot: '2026-10-02',
+};
+
 /* ---------- 其他官方來源 ---------- */
 async function hkTable(id) { const j = await getJSON(`https://www.censtatd.gov.hk/api/get.php?id=${id}&lang=en&full_series=1`, 20000); return j.dataSet || []; }
 const hkPts = (rows, f) => rows.filter(f).map(x => ({ d: /^\d{6}$/.test(x.period) ? `${x.period.slice(0, 4)}-${x.period.slice(4)}` : x.period, v: num(x.figure) })).filter(p => p.v != null).sort((a, b) => b.d.localeCompare(a.d));
@@ -140,12 +157,12 @@ async function tier() {
 
 module.exports = async (req, res) => {
   const errors = [];
-  const safe = async (label, f) => { try { return await f(); } catch (e) { errors.push(`${label}：${e.message}`); return null; } };
+  const safe = async (label, f) => { try { return await f(); } catch (e) { if (label !== 'IMF') errors.push(`${label}：${e.message}`); return null; } };
   const [tw, cpiO, cliO, imfD, tierD, jpCPI, jpUn, jpRate, jp10, euHICP, euUn, euRate, eu10, euGDP, hkCPI, hkLF, hkGDP, krUn] = await Promise.all([
     safe('台灣', () => taiwan(errors)),
     safe('OECD CPI', () => oecd('OECD.SDD.TPS,DSD_PRICES@DF_PRICES_ALL,1.0', 'CHN+KOR+USA.M.N.CPI.PA._T.N.GY', 24)),
     safe('OECD 領先指標', () => oecd('OECD.SDD.STES,DSD_STES@DF_CLI,4.1', 'CHN+JPN+USA+KOR+G4E.M.LI...AA...H', 24)),
-    safe('IMF', imf), safe('台經院', tier), safe('日本 CPI', japanCPI),
+    safe('IMF', imf).then(x => x || IMF_SNAPSHOT), safe('台經院', tier), safe('日本 CPI', japanCPI),
     safe('日本失業率', () => fred('LRHUTTTTJPM156S')), safe('日本短期利率', () => fred('IRSTCI01JPM156N')), safe('日本 10 年債', () => fred('IRLTLT01JPM156N')),
     safe('歐元區 HICP', () => fred('CP0000EZ19M086NEST', 40)), safe('歐元區失業率', () => eurostat('une_rt_m', 'geo=EA21&s_adj=SA&age=TOTAL&sex=T&unit=PC_ACT&lastTimePeriod=24')),
     safe('ECB 利率', () => fred('ECBDFR', 800)), safe('德國 10 年債', () => fred('IRLTLT01DEM156N')),
@@ -154,9 +171,8 @@ module.exports = async (req, res) => {
     safe('韓國失業率', () => fred('LRHUTTTTKRM156S')),
   ]);
   const mk = {};
-  await Promise.all(Object.entries(MARKETS).map(async ([e, list]) => {
-    mk[e] = (await Promise.all(list.map(async ([sym, name]) => { const q = await safe(`行情 ${name}`, () => yq(sym)); return q && { ...q, name }; }))).filter(Boolean);
-  }));
+  const spark = await safe('市場行情', () => yspark(Object.values(MARKETS).flat().map(m => m[0])));
+  Object.entries(MARKETS).forEach(([e, list]) => { mk[e] = list.map(([sym, name]) => spark?.[sym] && { ...spark[sym], name }).filter(Boolean); });
   const L = arr => arr.filter(Boolean);
   const O = 'OECD', OCLI = 'OECD 綜合領先指標（100 為長期趨勢）';
   const eco = {
