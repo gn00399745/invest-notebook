@@ -21,7 +21,7 @@
     <span class="logo">📈</span>
     <div>
       <div class="title">AI 投資筆記</div>
-      <div class="subtitle">總經 → 產業 → 個股 → 策略 → 覆盤</div>
+      <div class="subtitle">記帳・資產・投資研究</div>
     </div>
   </div>
   <div class="top-actions">
@@ -31,15 +31,11 @@
 </header>
 
 <nav class="tabs" id="tabs">
-  <button data-go="home" class="active">總覽</button>
-  <button data-go="macro">總經</button>
-  <button data-go="industry">產業定位</button>
-  <button data-go="cards">研究卡</button>
-  <button data-go="etf">ETF 健檢</button>
-  <button data-go="strategy">策略</button>
-  <button data-go="monitor">監控</button>
-  <button data-go="claims">待驗主張</button>
-  <button data-go="review">覆盤</button>
+  <button data-go="home" data-tab="home" class="active"><i>💰</i><span>資產</span></button>
+  <button data-go="ledger" data-tab="ledger"><i>🧾</i><span>收支</span></button>
+  <button data-go="cards" data-tab="research"><i>🔍</i><span>研究</span></button>
+  <button data-go="macro" data-tab="market"><i>🌐</i><span>市場</span></button>
+  <button data-go="more" data-tab="more"><i>☰</i><span>更多</span></button>
 </nav>
 
 <main id="view"></main>
@@ -65,5 +61,6 @@
 <script src="app.js"></script>
 <script src="features.js"></script>
 <script src="learn.js"></script>
+<script src="wallet.js"></script>
 </body>
 </html>

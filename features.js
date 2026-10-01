@@ -502,7 +502,7 @@ document.addEventListener('click', async e => {
     case 'refreshQuotes': {
       const codes = holdings().filter(h => h.shares > 0).map(h => h.code); S.quotes = S.quotes || {};
       toast('更新現價中…');
-      for (const c of codes) { try { const d = await quote(c); S.quotes[c] = { price: d.price, date: d.priceDate }; } catch (err) { /* skip */ } }
+      for (const c of codes) { try { const d = await quote(c); S.quotes[c] = { price: d.price, prev: d.prev, date: d.priceDate, t: Date.now() }; } catch (err) { /* skip */ } }
       save(); render(); toast('已更新現價'); break; }
     case 'holdToAlloc': {
       const hs = holdings().filter(h => h.shares > 0); const by = {};
@@ -578,6 +578,8 @@ function openTradeForm(pre = {}, id) {
       <div class="codestat" id="codeStat"></div>
       <label class="f"><span>股數</span><input type="text" inputmode="numeric" name="shares" value="${esc(v.shares || '')}"></label>
       <div class="qbtns" id="shareBtns"></div>
+      ${window.acctSelectHTML ? acctSelectHTML(v.acct, '扣款／入帳帳戶（選填，會自動增減餘額）') : ''}
+      <details class="adv" ${t && (v.reasons || []).length ? 'open' : ''}><summary>進階：買賣理由、停損停利、當下分析報告（選填）</summary>
       <label class="f" style="margin-top:10px"><span id="reasonLbl">${v.side === '賣出' ? '為什麼賣（可複選）' : '為什麼買（可複選）'}</span><div class="chipsel" id="reasonBox">${reasonsHTML(v.side)}</div></label>
       <label class="f"><span>持有計畫</span><div class="chipsel">${PLANS.map(o => `<label><input type="radio" name="plan" value="${esc(o)}" ${v.plan === o ? 'checked' : ''}><span>${esc(o)}</span></label>`).join('')}</div></label>
       <label class="f"><span>信心程度</span><div class="seg">${['低', '中', '高'].map(o => `<label><input type="radio" name="conf" value="${o}" ${v.conf === o ? 'checked' : ''}><span>${o}</span></label>`).join('')}</div></label>
@@ -588,19 +590,21 @@ function openTradeForm(pre = {}, id) {
       </div>
       <label class="f"><span>補充一句（選填）</span><input type="text" name="note" value="${esc(v.note || '')}"></label>
       <div class="sec-title">${t ? '當時的分析報告' : '當下分析報告（存檔時一起保存）'}</div>
-      <div class="snap" id="snapBox">${esc(v.snap?.text || '輸入代號後自動產生…')}</div>`,
+      <div class="snap" id="snapBox">${esc(v.snap?.text || '輸入代號後自動產生…')}</div></details>`,
     saveText: t ? '儲存' : '記錄',
     onSave: (d, body) => {
       const code = String(d.code || '').trim().toUpperCase(); if (!code) { toast('請輸入代號'); return false; }
       if (!num(d.shares) || !num(d.price)) { toast('請填成交價與股數'); return false; }
       const reasons = [...body.querySelectorAll('input[name=reasons]:checked')].map(x => x.value);
       const rec = { date: d.date, code, name: d.name, side: d.side, price: d.price, shares: d.shares, fee: d.fee || '', reasons, plan: d.plan || '', conf: d.conf || '', stop: d.stop, target: d.target, note: d.note,
-        reason: [reasons.join('、'), d.note].filter(Boolean).join('；'), snap: (t && t.snap) || body._snap || null };
+        reason: [reasons.join('、'), d.note].filter(Boolean).join('；'), snap: (t && t.snap) || body._snap || null, kind: v.kind || '', acct: d.acct || '' };
+      if (window.tradeCash) tradeCash(t, rec);
       if (t) { Object.assign(t, rec); toast('已儲存'); return; }
       const nt = { id: uid(), ...rec }; S.trades.push(nt);
-      setTimeout(() => askReview(nt), 250);
+      if (pre.pendingId) S.pendingDca = (S.pendingDca || []).filter(x => x.id !== pre.pendingId);
+      if (reasons.length) setTimeout(() => askReview(nt), 250); else toast(`已記錄：${rec.side} ${code} ${fmt(num(rec.shares))} 股`);
     },
-    onDelete: t ? () => { S.trades = S.trades.filter(x => x.id !== id); save(); } : null,
+    onDelete: t ? () => { if (window.tradeCash) tradeCash(t, null); S.trades = S.trades.filter(x => x.id !== id); save(); } : null,
   });
   const body = $('#modalBody'), f = n => body.querySelector(`[name=${n}]`);
   const setShareBtns = () => {
@@ -624,11 +628,11 @@ function openTradeForm(pre = {}, id) {
     try {
       const q = await quote(code); body._q = q;
       if (!f('name').value || f('name')._auto) { f('name').value = q.name || ''; f('name')._auto = true; }
-      f('price').value = q.price;
+      if (!f('price').value || f('price')._auto) { f('price').value = q.price; f('price')._auto = true; }
       const n = q.num, c = S.cards.find(x => String(x.code).toUpperCase() === code), vs = c ? valSummary(c) : {};
       if (!f('stop').value) f('stop').value = n.support && n.support < q.price && n.support > q.price * 0.8 ? n.support : Math.round(q.price * 0.92 * 100) / 100;
       if (!f('target').value) f('target').value = vs.avg && vs.avg > q.price ? Math.round(vs.avg * 100) / 100 : n.resistance > q.price ? n.resistance : '';
-      if (!f('shares').value) f('shares').value = /^\d/.test(code) ? 1000 : 1;
+      if (!f('shares').value) f('shares').value = v.dcaAmt ? (/^\d/.test(code) ? Math.floor(v.dcaAmt / q.price) : Math.floor(v.dcaAmt / q.price * 10000) / 10000) : /^\d/.test(code) ? 1000 : 1;
       $('#codeStat').innerHTML = `<b>${esc(q.name || code)}</b>　現價 ${q.price}（${esc(q.priceDate)}）`;
       body._snap = makeSnapshot(code, q, body.querySelector('[name=side]:checked').value);
       $('#snapBox').textContent = body._snap.text;
@@ -659,11 +663,6 @@ editRecord = function (key, id) {
 };
 
 /* ================= 分頁與啟動 ================= */
-(function addTradesTab() {
-  const nav = $('#tabs'); if (!nav || nav.querySelector('[data-go="trades"]')) return;
-  const b = document.createElement('button'); b.dataset.go = 'trades'; b.textContent = '交易';
-  nav.insertBefore(b, nav.querySelector('[data-go="monitor"]'));
-})();
 
 window.addEventListener('hashchange', () => { const p = location.hash.slice(1); if (p && p !== current) go(p); });
 if (S.examplesSeeded !== window.EXAMPLES?.version) { seedExamples(); save(); }

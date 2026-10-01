@@ -71,6 +71,7 @@ function defaultState() {
     ],
     rules: '1. 每筆交易最大虧損不超過總資金 1%\n2. 進場前先寫下「證明我錯的條件」\n3. 單一個股不超過總資產 10%\n4. 配置偏離目標超過 5 個百分點才再平衡',
     monitors: [], claims: [], reviews: [], trades: [],
+    accounts: [], insurance: [], property: [], ledger: [], recurring: [], pendingDca: [],
     report: { watchlist: '', content: '當天公布財報的關注公司、台股籌碼摘要、隔日美股與匯率', schedule: '' },
     backtest: {},
   };
@@ -174,12 +175,16 @@ function fieldHTML(f, val) {
   if (f.t === 'select') input = `<select ${name}>${f.o.map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
   else if (f.t === 'textarea') input = `<textarea ${name}>${esc(v)}</textarea>`;
   else if (f.t === 'chips') { const sel = String(v || '').split('、'); input = `<input type="hidden" ${name} value=""><div class="chipsel">${f.o.map(o => `<label><input type="checkbox" ${name} value="${esc(o)}" ${sel.includes(o) ? 'checked' : ''}><span>${esc(o)}</span></label>`).join('')}</div>`; }
-  else input = `<input type="${f.t || 'text'}" ${name} value="${esc(v)}">`;
-  return `<label class="f"><span>${esc(f.l)}</span>${input}</label>`;
+  else if (f.t === 'money') input = `<input type="text" inputmode="decimal" ${name} value="${esc(v)}" placeholder="${esc(f.ph || '0')}">`;
+  else input = `<input type="${f.t || 'text'}" ${name} value="${esc(v)}" ${f.ph ? `placeholder="${esc(f.ph)}"` : ''}>`;
+  return `<label class="f"><span>${esc(f.l)}</span>${input}${f.h ? `<div class="help">${esc(f.h)}</div>` : ''}</label>`;
 }
 
-function openModal({ title, body, onSave, onDelete, saveText = '儲存' }) {
+function openModal({ title, body, onSave, onDelete, saveText = '儲存', noSave = false }) {
   const dlg = $('#modal');
+  if (dlg.open) dlg.close();
+  $('#modalSave').hidden = noSave;
+  $('#modalCancel').textContent = noSave ? '關閉' : '取消';
   $('#modalTitle').textContent = title;
   $('#modalBody').innerHTML = body;
   $('#modalSave').textContent = saveText;
@@ -984,7 +989,7 @@ function autoGrow(el) { el.style.height = 'auto'; el.style.height = el.scrollHei
 function render() {
   if ((current === 'macro' || current === 'home') && !S.macro.fetching && location.protocol.startsWith('http') &&
       (!S.macro.fetchedAt || Date.now() - new Date(S.macro.fetchedAt) > 6 * 3600e3) && !render._tried) { render._tried = true; setTimeout(() => fetchMacro(true), 50); }
-  $('#view').innerHTML = PAGES[current]();
+  $('#view').innerHTML = (window.subNav ? window.subNav(current) : '') + PAGES[current]();
   stackTables($('#view'));
   document.querySelectorAll('#view textarea.cell-ta').forEach(autoGrow);
   if (current === 'strategy') calcStrategy();

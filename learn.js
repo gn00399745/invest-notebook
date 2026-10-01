@@ -277,10 +277,6 @@ document.addEventListener('click', e => {
     save(); render();
   }
 });
-(function addLearnTab() {
-  const nav = $('#tabs'); if (!nav || nav.querySelector('[data-go="learn"]')) return;
-  const b = document.createElement('button'); b.dataset.go = 'learn'; b.textContent = '教學'; nav.appendChild(b);
-})();
 const _goLearn = go;
 go = function (page) { _goLearn(page); if (page === 'learn' && !learnCache[S.learnCode || '2330']) loadLearn(S.learnCode || '2330'); };
 const _homeL = PAGES.home;
