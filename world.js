@@ -77,7 +77,7 @@ function mktRow(ms) {
 function imfBars(e) {
   const g = S.world?.imf?.NGDP_RPCH?.[e.imf], c = S.world?.imf?.PCPIPCH?.[e.imf]; if (!g) return '';
   const ys = ['2025', '2026', '2027'], max = Math.max(...ys.map(y => Math.abs(g[y] || 0)), 1);
-  return `<div class="w-imf"><div class="w-imf-h">IMF 預測　<small>經濟成長｜通膨</small></div>${ys.map(y => `<div class="w-bar"><span>${y}</span><div><i style="width:${Math.max(3, Math.abs(g[y] || 0) / max * 100)}%"></i></div><b>${g[y] ?? '—'}%</b><em>${c?.[y] != null ? c[y] + '%' : ''}</em></div>`).join('')}</div>`;
+  return `<div class="w-imf"><div class="w-imf-h">IMF 預測　<small>經濟成長｜通膨${S.world?.imf?.snapshot ? `（${S.world.imf.snapshot} 版本）` : ''}</small></div>${ys.map(y => `<div class="w-bar"><span>${y}</span><div><i style="width:${Math.max(3, Math.abs(g[y] || 0) / max * 100)}%"></i></div><b>${g[y] ?? '—'}%</b><em>${c?.[y] != null ? c[y] + '%' : ''}</em></div>`).join('')}</div>`;
 }
 function hero(e, extra = '') {
   const eco = S.world?.economies?.[e.id];
@@ -136,7 +136,7 @@ PAGES.macro = () => {
 };
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-wtab],#worldRefresh'); if (!t) return;
-  if (t.id === 'worldRefresh') { loadWorld(true); if (S.macroTab === 'us') fetchMacro(false); return; }
+  if (t.id === 'worldRefresh') { loadWorld(true); fetchMacro(S.macroTab !== 'us'); return; }
   S.macroTab = t.dataset.wtab; save(); render(); window.scrollTo(0, 0);
 });
 if (current === 'macro') render();
