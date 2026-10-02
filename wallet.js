@@ -258,9 +258,13 @@ function missingThisMonth() {
     return d <= t && !S.ledger.some(e => e.auto === r.id && ym(e.date || '') === m) ? { r, d } : null;
   }).filter(Boolean);
 }
+function skippedCard() {
+  const m = ym(today()), sk = S.recurring.filter(r => (r.skipM || []).includes(m));
+  return sk.length ? `<div class="card"><div class="help" style="font-size:13px">${sk.map(r => `本月已略過「${esc(r.name)}」<button class="btn-small ghost" data-bfunskip="${r.id}" style="margin-left:6px">恢復</button>`).join('<br>')}</div></div>` : '';
+}
 function missingCard() {
-  const ms = missingThisMonth(); if (!ms.length) return '';
-  return `<div class="card alert"><h3 class="gold-bar">這個月還沒記的固定收支</h3>${ms.map(({ r, d }) => `<div class="pend"><span>${esc(d.slice(5).replace('-', '/'))}　<b>${esc(r.name)}</b>　${r.kind === '薪資單' ? `應發 ${fmt(num(r.gross))}（含${(r.deds || []).filter(x => num(x.amount) > 0).map(x => x.name).join('、') || '扣繳'}）` : fmt(num(r.amount))}</span><span class="btn-row"><button class="btn-small" data-backfill="${r.id}">補記</button><button class="btn-small ghost" data-bfskip="${r.id}">這個月不用</button></span></div>`).join('')}<div class="help">設定時這個月的日子已經過了，所以沒有自動記。按「補記」會照設定記入本月（薪資單會一併記入公保、退撫、健保等扣繳支出）；如果存款餘額已經包含這筆，可以選擇只記收支、不改餘額。</div></div>`;
+  const ms = missingThisMonth(); if (!ms.length) return skippedCard();
+  return `<div class="card alert"><h3 class="gold-bar">這個月還沒記的固定收支</h3>${ms.map(({ r, d }) => `<div class="pend"><span>${esc(d.slice(5).replace('-', '/'))}　<b>${esc(r.name)}</b>　${r.kind === '薪資單' ? `應發 ${fmt(num(r.gross))}（含${(r.deds || []).filter(x => num(x.amount) > 0).map(x => x.name).join('、') || '扣繳'}）` : fmt(num(r.amount))}</span><span class="btn-row"><button class="btn-small" data-backfill="${r.id}">補記</button><button class="btn-small ghost" data-bfskip="${r.id}">這個月不用</button></span></div>`).join('')}<div class="help">設定時這個月的日子已經過了，所以沒有自動記。按「補記」會照設定記入本月（薪資單會一併記入公保、退撫、健保等扣繳支出）；如果存款餘額已經包含這筆，可以選擇只記收支、不改餘額。</div></div>` + skippedCard();
 }
 function confirmDca(pid) {
   const x = S.pendingDca.find(y => y.id === pid); if (!x) return;
@@ -678,7 +682,7 @@ function sheet(kind) {
   openModal({ title: kind === 'asset' ? '新增資產' : '要記什麼？', noSave: true, body: `<div class="tiles sm">${list.map(([a, ic, t]) => `<button type="button" class="tile" data-act="${a}"><i>${ic}</i><b>${t}</b></button>`).join('')}</div>` });
 }
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-act],[data-hbuy],[data-hsell],[data-hdet],[data-dca],[data-dcaskip],[data-backfill],[data-bfgo],[data-bfskip],[data-cardedit],[data-cardrc],[data-cardpay],[data-cardadd],#fab,#qRefresh,#walletToAlloc');
+  const t = e.target.closest('[data-act],[data-hbuy],[data-hsell],[data-hdet],[data-dca],[data-dcaskip],[data-backfill],[data-bfgo],[data-bfskip],[data-bfunskip],[data-cardedit],[data-cardrc],[data-cardpay],[data-cardadd],#fab,#qRefresh,#walletToAlloc');
   if (!t) return;
   if (t.dataset.backfill) {
     const r = S.recurring.find(x => x.id === t.dataset.backfill), mm = missingThisMonth().find(x => x.r.id === t.dataset.backfill); if (!r || !mm) return;
@@ -689,7 +693,8 @@ document.addEventListener('click', e => {
         <button type="button" class="tile" data-bfgo="${r.id}" data-nobal=""><i>➕</i><b>還沒有（記收支，並${inc ? '加到' : '從'}存款${inc ? '' : '扣掉'}）</b><em>例如：餘額是發薪前填的</em></button></div>` });
   }
   if (t.dataset.bfgo) { const r = S.recurring.find(x => x.id === t.dataset.bfgo), mm = missingThisMonth().find(x => x.r.id === t.dataset.bfgo); $('#modal').close(); if (r && mm) { const n = postRecurring(r, mm.d, { noBal: !!t.dataset.nobal }); save(); render(); toast(`已補記 ${n} 筆（${r.name}）${t.dataset.nobal ? '，存款餘額不變' : ''}`); } return; }
-  if (t.dataset.bfskip) { const r = S.recurring.find(x => x.id === t.dataset.bfskip); if (r) { r.skipM = [...(r.skipM || []), ym(today())].slice(-12); save(); render(); } return; }
+  if (t.dataset.bfskip) { const r = S.recurring.find(x => x.id === t.dataset.bfskip); if (r) { r.skipM = [...(r.skipM || []), ym(today())].slice(-12); save(); render(); toast('已略過，可在同一位置按「恢復」'); } return; }
+  if (t.dataset.bfunskip) { const r = S.recurring.find(x => x.id === t.dataset.bfunskip); if (r) { r.skipM = (r.skipM || []).filter(x => x !== ym(today())); save(); render(); toast('已恢復，可以補記了'); } return; }
   if (t.dataset.cardedit) return openCard(t.dataset.cardedit);
   if (t.dataset.cardrc) return openReconcile(t.dataset.cardrc, t.dataset.k);
   if (t.dataset.cardpay) return openCardPay(t.dataset.cardpay, t.dataset.k);
