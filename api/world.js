@@ -119,6 +119,8 @@ async function yspark(syms) {
     for (const sym of syms) { try { const c = (await yjson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=1y&interval=1d`)).chart.result[0]; j[sym] = { timestamp: c.timestamp, close: c.indicators.quote[0].close }; } catch (err) { /* 略過 */ } }
     if (!Object.keys(j).length) throw e;
   }
+  // spark 沒回的代號改逐檔查
+  for (const sym of syms.filter(x => !j[x]?.close?.length)) { try { const c = (await yjson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=1y&interval=1d`)).chart.result[0]; j[sym] = { timestamp: c.timestamp, close: c.indicators.quote[0].close }; } catch (err) { /* 略過 */ } }
   const out = {};
   Object.entries(j).forEach(([sym, v]) => {
     const c = (v.close || []).map((x, i) => [v.timestamp[i], x]).filter(x => x[1] != null); if (c.length < 2) return;
@@ -209,6 +211,7 @@ module.exports = async (req, res) => {
       hkCPI && ind('cpi', '綜合 CPI 年增率', hkPts(hkCPI, x => x.sv === 'CC_CM_1920' && x.freq === 'M' && /Year-on-year/.test(x.svDesc)), { src: '香港政府統計處' }),
       hkLF && ind('unemp', '失業率（季調）', hkPts(hkLF, x => x.sv === 'SAUR' && !x.SEX && x.freq === 'M3M'), { src: '香港政府統計處' })]) },
     kr: { indicators: L([ind('cpi', 'CPI 年增率', cpiO?.KOR, { src: O }), ind('unemp', '失業率', monthly(krUn || []), { src: 'OECD（FRED）' }), ind('cli', '領先指標（OECD）', cliO?.KOR, { src: OCLI, unit: '點' })]) },
+    in: { indicators: [] },
     us: { indicators: L([ind('cli', '領先指標（OECD）', cliO?.USA, { src: OCLI, unit: '點' })]) },
   };
   Object.keys(eco).forEach(k => { eco[k].markets = mk[k] || []; });
