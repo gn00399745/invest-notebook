@@ -214,14 +214,14 @@ cardEditor = function (c) {
   <details class="rc-sec" id="sec-tech" open>${secHead('5', 'tech', '技術面', techDone, 7)}
     ${chartHTML(c)}
     <div class="met-grid wide">${TECH_ROWS.map((nm, i) => { const sg = sig(c.tech[i].judge); return `<div class="met ${sg}"><div class="met-h"><span>${TECH_IC[i]} ${nm}</span>${sg ? `<span class="sigp ${sg}">${SIG_L[sg]}</span>` : ''}${tip(HELP.tech[i])}</div>
-      ${ta(`tech.${i}.read`, c.tech[i].read, '讀數').replace('class="cell-ta" rows="2"', 'class="cell-ta t-read" rows="1"')}${ta(`tech.${i}.judge`, c.tech[i].judge, '判讀').replace('rows="2"', 'rows="1"')}</div>`; }).join('')}</div>
+      ${techViz(i, c)}${ta(`tech.${i}.read`, c.tech[i].read, '讀數').replace('class="cell-ta" rows="2"', 'class="cell-ta t-read" rows="1"')}${ta(`tech.${i}.judge`, c.tech[i].judge, '判讀').replace('rows="2"', 'rows="1"')}</div>`; }).join('')}</div>
     <div class="tech-links"><span>看不懂指標？</span>${SEC_LESSON.map(([id, l]) => `<button class="chip" data-lesson-go="${id}">${l}</button>`).join('')}</div>
     <button class="btn-small" id="cardToBt">用歷史股價回測這檔的訊號 ›</button>
   </details>
 
   <details class="rc-sec" id="sec-chip" ${c.market === '美股' ? '' : 'open'}>${secHead('6', 'chip', '籌碼面' + (c.market === '美股' ? '（台股適用）' : ''), chipDone, 7)}
     <div class="met-grid">${CHIP_ROWS.map((nm, i) => { const x = c.chip[i], sg = sig(x.judge) || numSig(x.d20, i); return `<div class="met ${sg}"><div class="met-h"><span>${CHIP_IC[i]} ${nm}</span>${tip(HELP.chip[i])}</div>
-      <div class="met-p"><span>5 日</span>${inp(`chip.${i}.d5`, x.d5, `class="met-v mid ${numSig(x.d5, i)}" placeholder="—"`)}</div>
+      ${chipViz(x, i)}<div class="met-p"><span>5 日</span>${inp(`chip.${i}.d5`, x.d5, `class="met-v mid ${numSig(x.d5, i)}" placeholder="—"`)}</div>
       <div class="met-p"><span>20 日</span>${inp(`chip.${i}.d20`, x.d20, `class="mid2 ${numSig(x.d20, i)}" placeholder="—"`)}</div>
       ${ta(`chip.${i}.judge`, x.judge, '判讀').replace('rows="2"', 'rows="1"')}</div>`; }).join('')}</div>
   </details>
@@ -272,3 +272,118 @@ document.addEventListener('input', e => {
 document.addEventListener('click', e => { if (e.target.closest('summary button')) e.preventDefault(); }, true);
 go(current);
 setTimeout(() => { if (holdings().some(h => h.shares > 0 && !S.cards.some(c => String(c.code).toUpperCase() === h.code))) syncHoldCards(); }, 2500);
+
+/* ---------- 選股雷達：營收動能 × 技術強勢 ---------- */
+FLOWS[0].steps.unshift(['radar', '選股雷達']);
+const RADAR_P = [
+  ['綜合', '綜合分數', () => true, '營收、趨勢、新高、相對強度、量能加總'],
+  ['營收', '營收爆發', x => x.revYoY >= 30 && x.cumYoY >= 10, '月營收年增 ≥30%、累計年增 ≥10%'],
+  ['突破', '技術突破', x => x.dist != null && x.dist >= -3 && x.trend === '多頭排列', '多頭排列且距 52 週高點 3% 內'],
+  ['回檔', '成長股回檔', x => x.revYoY >= 20 && x.trend !== '季線之下' && x.bias20 != null && x.bias20 < 3 && x.dist != null && x.dist <= -8, '營收仍強，股價回到月線附近、離高點 8% 以上'],
+  ['價值', '成長＋合理本益比', x => x.revYoY >= 20 && x.pe > 0 && x.pe <= 20, '營收年增 ≥20% 且本益比 ≤20'],
+];
+let radarBusy = false;
+async function loadRadar(force) {
+  if (radarBusy || !location.protocol.startsWith('http')) return;
+  if (!force && S.radar && Date.now() - (S.radarAt || 0) < 6 * 3600e3) return;
+  radarBusy = true; function chipViz(x, i) {
+  const a = num(String(x.d5 || '').replace(/[^\d.+-]/g, '')), b = num(String(x.d20 || '').replace(/[^\d.+-]/g, '')); if (a == null && b == null) return '';
+  const rows = [{ l: '5 日', v: a }, { l: '20 日', v: b }].filter(r => r.v != null), inv = i === 3 || i === 4; // 融資、融券增加視為風險
+  const mx = Math.max(...rows.map(r => Math.abs(r.v)), 1e-9);
+  return `<div class="tv-dv sm">${rows.map(r => `<div class="tv-dr"><span>${r.l}</span><div class="tv-dt"><i class="tv-0"></i><i class="tv-db ${(r.v < 0) !== inv ? 'n' : 'p'}" style="${r.v < 0 ? `right:50%;width:${Math.abs(r.v) / mx * 50}%` : `left:50%;width:${r.v / mx * 50}%`}"></i></div></div>`).join('')}</div>`;
+}
+if (current === 'radar') render();
+  try {
+    const j = await (await fetch('api/radar' + (force ? '?t=' + Date.now() : ''), { signal: AbortSignal.timeout(90000) })).json();
+    if (!j.list) throw new Error('格式錯誤');
+    S.radar = j; S.radarAt = Date.now(); save(); if (force) toast(`已篩出 ${j.list.length} 檔`);
+  } catch (e) { toast('選股雷達更新失敗：' + e.message); }
+  radarBusy = false; if (current === 'radar') { const y = scrollY; render(); scrollTo(0, y); }
+}
+const bar5 = (v, lo, hi, good) => { if (v == null) return '<i class="rb-n">—</i>'; const w = Math.max(3, Math.min(100, (v - lo) / (hi - lo) * 100)); return `<span class="rb"><i class="${good ? 'g' : v < 0 ? 'r' : ''}" style="width:${w}%"></i></span>`; };
+PAGES.radar = () => {
+  setTimeout(() => loadRadar(false), 30);
+  const R = S.radar, p = RADAR_P.find(x => x[0] === (S.radarP || '綜合')) || RADAR_P[0], mk = S.radarMkt || '全部';
+  const list = (R?.list || []).filter(p[2]).filter(x => mk === '全部' || x.mkt === mk);
+  const ym = R?.revYM ? `${+R.revYM.slice(0, 3) + 1911} 年 ${+R.revYM.slice(3)} 月` : '';
+  const mine = code => S.cards.find(c => String(c.code) === code);
+  const rows = list.map((x, i) => `<div class="rd">
+    <div class="rd-h"><span class="rd-rank">${i + 1}</span><div class="rd-id"><b>${esc(x.code)} ${esc(x.name)}</b><em>${esc(x.mkt)}・${esc(x.ind || '—')}${x.pe ? `・本益比 ${x.pe}` : ''}</em></div>
+      <div class="rd-px"><b>${fmt(x.close, x.close < 100 ? 2 : 1)}</b>${x.r1m != null ? `<em class="${x.r1m >= 0 ? 'up' : 'down'}">近 1 月 ${pct(x.r1m)}</em>` : ''}</div>
+      <div class="rd-sc ${x.score >= 70 ? 'hi' : x.score >= 50 ? 'mid' : ''}"><b>${x.score}</b><em>分</em></div></div>
+    ${x.spark?.length > 2 ? `<svg class="rd-spark" viewBox="0 0 300 34" preserveAspectRatio="none"><path d="${sparkPath(x.spark.map((v, k) => [k, v]), 300, 34)}"/></svg>` : ''}
+    <div class="rd-m">
+      <div><em>月營收年增</em>${bar5(x.revYoY, 0, 100, x.revYoY >= 30)}<b class="${x.revYoY >= 0 ? 'up' : 'down'}">${x.revYoY == null ? '—' : pct(x.revYoY, 0)}</b></div>
+      <div><em>累計營收年增</em>${bar5(x.cumYoY, 0, 60, x.cumYoY >= 20)}<b class="${x.cumYoY >= 0 ? 'up' : 'down'}">${x.cumYoY == null ? '—' : pct(x.cumYoY, 0)}</b></div>
+      <div><em>距 52 週高點</em>${bar5(x.dist == null ? null : 30 + x.dist, 0, 30, x.dist >= -3)}<b>${x.dist == null ? '—' : x.dist >= -0.5 ? '新高' : pct(x.dist, 1)}</b></div>
+      <div><em>3 個月強於大盤</em>${bar5(x.rs, -20, 50, x.rs >= 10)}<b class="${x.rs >= 0 ? 'up' : 'down'}">${x.rs == null ? '—' : (x.rs >= 0 ? '+' : '') + fmt(x.rs, 1) + ' 點'}</b></div>
+      <div><em>量比（5 日 / 60 日）</em>${bar5(x.vr, 0, 2.5, x.vr >= 1.5)}<b>${x.vr == null ? '—' : x.vr + ' 倍'}</b></div>
+    </div>
+    <div class="rd-tags">${(x.tags || []).map(t => `<span class="pill green">${esc(t)}</span>`).join('')}${x.trend && !x.tags?.includes(x.trend) ? `<span class="pill">${esc(x.trend)}</span>` : ''}${(x.warn || []).map(t => `<span class="pill red">${esc(t)}</span>`).join('')}</div>
+    <div class="btn-row">${mine(x.code) ? `<button class="btn-small ghost" data-card="${mine(x.code).id}" data-go-card="1">看研究卡 ›</button>` : `<button class="btn-small" data-radarcard="${esc(x.code)}" data-n="${esc(x.name)}">建研究卡驗證</button>`}
+      <a class="btn-small ghost" href="https://tw.stock.yahoo.com/quote/${esc(x.code)}.${x.mkt === '上櫃' ? 'TWO' : 'TW'}/revenue" target="_blank" rel="noopener">營收明細</a></div>
+  </div>`).join('');
+  return `<h2>選股雷達</h2>
+  <p class="lead">「飆股」通常同時具備兩件事：<b>基本面有新變化</b>（營收突然大幅成長）＋ <b>股價已經開始反映</b>（多頭排列、創新高、強於大盤、量增）。雷達每天從上市櫃全部股票篩一遍，給你值得研究的名單。</p>
+  <div class="card"><div class="rd-steps">${[['1', '營收動能', '月營收年增、累計年增'], ['2', '趨勢轉強', '站上均線、多頭排列'], ['3', '相對強勢', '逼近新高、強於大盤'], ['4', '量能確認', '近 5 日量放大'], ['5', '研究卡驗證', '產業、財報、估值、籌碼']].map(([n, t, s]) => `<div><b>${n}</b><span>${t}</span><em>${s}</em></div>`).join('')}</div>
+    <div class="help">分數滿分 100：營收 30、趨勢 20、新高 15、相對強度 15、量能 10；離月線太遠（短線漲多）會扣分。</div></div>
+  <div class="chips">${RADAR_P.map(([k, l]) => `<button class="chip ${k === p[0] ? 'on' : ''}" data-radarp="${k}">${l}</button>`).join('')}</div>
+  <div class="chips sm">${['全部', '上市', '上櫃'].map(k => `<button class="chip ${k === mk ? 'on' : ''}" data-radarmkt="${k}">${k}</button>`).join('')}<span class="spacer"></span><button class="btn-small ghost" id="radarRefresh">${radarBusy ? '篩選中…' : '↻ 重新篩選'}</button></div>
+  <div class="help" style="margin:-4px 0 10px">${esc(p[3])}${R ? `｜${list.length} 檔` : ''}</div>
+  ${R ? rows || '<div class="card empty">這個條件目前沒有符合的股票，換一個條件看看。</div>' : `<div class="card empty">${radarBusy ? '正在篩選上市櫃全部股票…（約 20～40 秒）' : '按「重新篩選」開始。'}</div>`}
+  ${R ? `<div class="help" style="margin-top:10px">營收資料：${ym}（每月 10 日前公布上月營收）｜全市場 ${R.universe} 檔、成交值 2,000 萬以上 ${R.liquid} 檔｜加權指數近 3 個月 ${R.idx3m == null ? '—' : pct(R.idx3m)}｜更新 ${new Date(R.updated).toLocaleString('zh-TW', { hour12: false })}${R.errors?.length ? `<br><span class="down">${R.errors.map(esc).join('；')}</span>` : ''}<br>來源：證交所、櫃買中心 OpenAPI，Yahoo Finance。篩選結果是研究的起點，不是買進建議；強勢股波動大，建卡時先寫好「證明我錯」的條件與停損。</div>` : ''}`;
+};
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-radarp],[data-radarmkt],#radarRefresh,[data-radarcard]'); if (!t) return;
+  if (t.dataset.radarp) { S.radarP = t.dataset.radarp; save(); return render(); }
+  if (t.dataset.radarmkt) { S.radarMkt = t.dataset.radarmkt; save(); return render(); }
+  if (t.id === 'radarRefresh') return loadRadar(true);
+  if (t.dataset.radarcard) {
+    const c = blankCard(); c.code = t.dataset.radarcard; c.name = t.dataset.n || ''; c.market = '台股'; c.fromRadar = true;
+    const x = S.radar?.list?.find(y => y.code === c.code); if (x) c.thesis = `【選股雷達 ${new Date().toLocaleDateString('zh-TW')}】${x.score} 分：${[...(x.tags || []), ...(x.warn || [])].join('、')}。月營收年增 ${x.revYoY ?? '—'}%、累計年增 ${x.cumYoY ?? '—'}%。`;
+    S.cards.push(c); openCardId = c.id; save(); go('cards'); setTimeout(() => autoFillCard(c), 50);
+  }
+});
+
+/* ---------- 技術指標視覺化（像通膨比較圖：一眼看出位置） ---------- */
+const tn = (s, re) => { const m = String(s || '').match(re); return m ? num(m[1].replace(/,/g, '')) : null; };
+function rangeBar(lo, hi, v, o = {}) {
+  // 一條刻度：lo～hi，標出 v；zones：[[from, to, cls]]；ticks：[[value, label]]
+  if (lo == null || hi == null || v == null || hi <= lo) return '';
+  const X = x => Math.max(0, Math.min(100, (x - lo) / (hi - lo) * 100));
+  return `<div class="tv-rg"><div class="tv-tr">${(o.zones || []).map(([a, b, cl]) => `<i class="tv-z ${cl}" style="left:${X(a)}%;width:${X(b) - X(a)}%"></i>`).join('')}${(o.ticks || []).map(([t]) => `<i class="tv-tk" style="left:${X(t)}%"></i>`).join('')}<i class="tv-dot" style="left:${X(v)}%"><span>${esc(o.label ?? fmt(v, v < 100 ? 2 : 0))}</span></i></div>
+    <div class="tv-ax">${(o.ticks || []).map(([t, l]) => `<span style="left:${X(t)}%">${esc(l)}</span>`).join('')}</div></div>`;
+}
+function devBars(rows, unit = '%') {
+  // 正負長條（以 0 為中心）
+  const mx = Math.max(...rows.map(r => Math.abs(r.v || 0)), 0.1);
+  return `<div class="tv-dv">${rows.map(r => r.v == null ? '' : `<div class="tv-dr"><span>${esc(r.l)}</span><div class="tv-dt"><i class="tv-0"></i><i class="tv-db ${r.v < 0 ? 'n' : 'p'}" style="${r.v < 0 ? `right:50%;width:${Math.abs(r.v) / mx * 50}%` : `left:50%;width:${r.v / mx * 50}%`}"></i></div><b class="${r.v < 0 ? 'down' : 'up'}">${r.v > 0 ? '+' : ''}${fmt(r.v, Math.abs(r.v) < 10 ? 2 : 1)}${unit}</b></div>`).join('')}</div>`;
+}
+function techViz(i, c) {
+  const rd = c.tech[i]?.read || '', px = num(c.price) ?? tn(c.tech[0]?.read, /價\s*([\d.,]+)/);
+  try {
+    if (i === 0) { const p = tn(rd, /價\s*([\d.,]+)/) ?? px; if (!p) return '';
+      const ms = [['MA20 月線', tn(rd, /MA20\s*([\d.,]+)/)], ['MA60 季線', tn(rd, /MA60\s*([\d.,]+)/)], ['MA120 半年線', tn(rd, /MA120\s*([\d.,]+)/)]].filter(m => m[1]);
+      return ms.length ? `<div class="tv"><div class="tv-cap">股價比各均線高（+）或低（−）多少</div>${devBars(ms.map(([l, m]) => ({ l, v: (p / m - 1) * 100 })))}</div>` : ''; }
+    if (i === 1) { const r = tn(rd, /RSI\(?\d*\)?\s*([\d.]+)/); return r == null ? '' : `<div class="tv">${rangeBar(0, 100, r, { label: 'RSI ' + fmt(r, 0), zones: [[0, 30, 'cold'], [70, 100, 'hot']], ticks: [[0, '0'], [30, '30 超賣'], [50, '50'], [70, '70 超買'], [100, '100']] })}</div>`; }
+    if (i === 2) { const d = tn(rd, /DIF\s*(-?[\d.]+)/), sgl = tn(rd, /訊號\s*(-?[\d.]+)/), h = tn(rd, /柱\s*(-?[\d.]+)/); if (d == null) return '';
+      return `<div class="tv"><div class="tv-cap">柱狀體 = DIF − 訊號線；由負翻正常是轉強訊號</div>${devBars([{ l: 'DIF 快線', v: d }, { l: '訊號線', v: sgl }, { l: '柱狀體', v: h }], '')}</div>`; }
+    if (i === 3) { const up = tn(rd, /上軌\s*([\d.,]+)/), mid = tn(rd, /中軌\s*([\d.,]+)/), lo = tn(rd, /下軌\s*([\d.,]+)/); if (!up || !lo || !px) return '';
+      const pb = (px - lo) / (up - lo) * 100, pad = (up - lo) * 0.15;
+      return `<div class="tv">${rangeBar(lo - pad, up + pad, px, { label: `現價 ${fmt(px, 2)}`, zones: [[lo - pad, lo, 'cold'], [up, up + pad, 'hot']], ticks: [[lo, '下軌'], [mid, '中軌'], [up, '上軌']] })}<div class="tv-cap">位置 %B ${fmt(pb, 0)}%（0% = 下軌、100% = 上軌）</div></div>`; }
+    if (i === 4) { const m = rd.match(/52\s*週\s*([\d.,]+)\s*～\s*([\d.,]+)/); if (!m || !px) return ''; const lo = num(m[1].replace(/,/g, '')), hi = num(m[2].replace(/,/g, ''));
+      return `<div class="tv">${rangeBar(lo, hi, px, { label: `現價 ${fmt(px, 2)}`, ticks: [[lo, '52 週低'], [hi, '52 週高']] })}<div class="tv-cap">距高點 ${pct((px / hi - 1) * 100)}、距低點 ${pct((px / lo - 1) * 100)}</div></div>`; }
+    if (i === 5) { const sp = tn(rd, /支撐\s*([\d.,]+)/), rs = tn(rd, /壓力\s*([\d.,]+)/); if (!sp || !rs || !px) return ''; const pad = (rs - sp) * 0.1;
+      return `<div class="tv">${rangeBar(sp - pad, rs + pad, px, { label: `現價 ${fmt(px, 2)}`, zones: [[sp - pad, sp, 'cold'], [rs, rs + pad, 'hot']], ticks: [[sp, '支撐 ' + fmt(sp, 0)], [rs, '壓力 ' + fmt(rs, 0)]] })}</div>`; }
+    if (i === 6) { const v5 = tn(rd, /5\s*日均量\s*([\d.,]+)/), v20 = tn(rd, /20\s*日均量\s*([\d.,]+)/); if (!v5 || !v20) return ''; const r = v5 / v20;
+      return `<div class="tv">${rangeBar(0, 2.5, Math.min(r, 2.5), { label: `量比 ${fmt(r, 2)} 倍`, zones: [[0, 0.7, 'cold'], [1.5, 2.5, 'hot']], ticks: [[0, '0'], [0.7, '量縮'], [1, '1 倍'], [1.5, '量增'], [2.5, '2.5']] })}<div class="tv-cap">近 5 日平均成交量是 20 日平均的幾倍</div></div>`; }
+  } catch (e) { /* 讀數格式不符時不畫圖 */ }
+  return '';
+}
+function chipViz(x, i) {
+  const a = num(String(x.d5 || '').replace(/[^\d.+-]/g, '')), b = num(String(x.d20 || '').replace(/[^\d.+-]/g, '')); if (a == null && b == null) return '';
+  const rows = [{ l: '5 日', v: a }, { l: '20 日', v: b }].filter(r => r.v != null), inv = i === 3 || i === 4; // 融資、融券增加視為風險
+  const mx = Math.max(...rows.map(r => Math.abs(r.v)), 1e-9);
+  return `<div class="tv-dv sm">${rows.map(r => `<div class="tv-dr"><span>${r.l}</span><div class="tv-dt"><i class="tv-0"></i><i class="tv-db ${(r.v < 0) !== inv ? 'n' : 'p'}" style="${r.v < 0 ? `right:50%;width:${Math.abs(r.v) / mx * 50}%` : `left:50%;width:${r.v / mx * 50}%`}"></i></div></div>`).join('')}</div>`;
+}
+if (current === 'radar') render();

@@ -666,7 +666,7 @@ PAGES.more = () => `<h2>更多功能</h2>
 /* ---------- 分頁群組 ---------- */
 const GROUPS = {
   home: [['home', '資產']], ledger: [['ledger', '收支']],
-  research: [['cards', '研究卡'], ['industry', '產業定位'], ['etf', 'ETF 健檢'], ['claims', '待驗主張'], ['learn', '技術教學']],
+  research: [['radar', '選股雷達'], ['cards', '研究卡'], ['industry', '產業定位'], ['etf', 'ETF 健檢'], ['claims', '待驗主張'], ['learn', '技術教學']],
   market: [['macro', '總經'], ['monitor', '監控'], ['overview', '研究總覽']],
   more: [['more', '全部'], ['strategy', '策略'], ['trades', '交易紀錄'], ['review', '覆盤'], ['settings', '設定']],
 };
