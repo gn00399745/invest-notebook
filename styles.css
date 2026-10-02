@@ -763,3 +763,34 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .rd-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 8px; }
 @media (max-width: 420px) { .rd-steps em { display: none; } }
 .tv-dv.sm { margin: 2px 0 6px; } .tv-dv.sm .tv-dr { grid-template-columns: 34px 1fr; font-size: 11px; color: var(--muted); }
+/* 季節性圖 */
+.sea { width: 100%; height: auto; display: block; }
+.sea line { stroke: var(--line); stroke-width: 1; } .sea line.z { stroke: var(--muted); }
+.sea text { font-size: 8.5px; fill: var(--muted); }
+.sea .sl { fill: none; stroke-width: 1.5; } .sea .sl.cur { stroke: var(--text); stroke-width: 2.6; }
+.sea circle.cur { fill: var(--text); } .sea .curt { font-size: 10px; font-weight: 700; fill: var(--text); }
+.sea .today { stroke: var(--gold); stroke-dasharray: 3 3; }
+.sea .sea-box { fill: rgba(214,69,69,.07); stroke: var(--red); stroke-width: 1; }
+.sea .sea-note { font-size: 9px; fill: var(--red); font-weight: 700; }
+.sea-leg { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.sea-leg button { display: flex; align-items: center; gap: 5px; font-size: 12px; border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 999px; padding: 4px 10px; cursor: pointer; opacity: .55; }
+.sea-leg button.on { opacity: 1; color: var(--text); }
+.sea-leg i { width: 14px; height: 4px; border-radius: 9px; display: block; }
+.w-rates small { display: block; font-size: 11px; color: var(--muted); }
+/* 進出場時機 */
+.tm-clock { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+.tm-q { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; opacity: .55; }
+.tm-q.on { opacity: 1; border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+.tm-q b { display: block; font-size: 14px; } .tm-q em { display: block; font-style: normal; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.tm-q .pill { font-size: 10px; margin: 2px 2px 0 0; }
+.tm-ph { font-size: 13px; line-height: 1.55; padding: 8px 10px; background: var(--bg); border-radius: 10px; margin-bottom: 6px; }
+.tm-a { border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 8px; cursor: pointer; }
+.tm-a.pos { border-left-color: var(--green); } .tm-a.neg { border-left-color: var(--red); } .tm-a.gold { border-left-color: var(--gold); } .tm-a.neu { border-left-color: #98a4b8; }
+.tm-ah { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; } .tm-ah b { font-size: 15px; }
+.tm-st { margin-left: auto; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 999px; background: var(--bg); }
+.tm-st.pos { background: rgba(30,158,90,.15); color: var(--green); } .tm-st.neg { background: rgba(214,69,69,.13); color: var(--red); } .tm-st.gold { background: rgba(201,162,74,.2); color: #8a6a1c; }
+.tm-why { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; } .tm-why i { font-style: normal; margin: 0; }
+.tm-do { font-size: 13px; line-height: 1.5; }
+.tg-h { font-weight: 800; margin: 12px 0 6px; font-size: 15px; }
+.tg { background: var(--bg); border-radius: 10px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; }
+.tg ul { margin: 4px 0 0; padding-left: 18px; line-height: 1.6; }
