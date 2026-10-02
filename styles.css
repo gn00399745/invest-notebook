@@ -703,3 +703,20 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .gt.as .gt-r > span:first-child { overflow: visible; word-break: break-word; }
 .gt.as .w-spark { width: 100%; max-width: 80px; }
 .gt.cal .gt-r > span { white-space: normal; }
+/* 付款方式、信用卡對帳 */
+.paymix { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.paymix b { color: var(--text); }
+.lrow.xfer .l-v { color: var(--muted); }
+.cc { border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+.cc-h { cursor: pointer; margin-bottom: 8px; } .cc-h b { font-size: 15px; } .cc-h em { display: block; font-style: normal; font-size: 12px; color: var(--muted); }
+.cc-g { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.cc-g > div { background: var(--bg); border-radius: 10px; padding: 8px 10px; }
+.cc-g em { display: block; font-style: normal; font-size: 11px; color: var(--muted); }
+.cc-g b { display: block; font-size: 18px; margin: 2px 0; }
+.cc-g small { font-size: 11px; color: var(--muted); }
+.rc-list { max-height: 46vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; }
+.rc-it { display: grid; grid-template-columns: 22px 44px 1fr auto; gap: 8px; align-items: center; padding: 9px 10px; border-bottom: 1px solid var(--line); font-size: 14px; cursor: pointer; }
+.rc-it:last-child { border-bottom: 0; }
+.rc-it span { color: var(--muted); font-size: 12px; } .rc-it b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .rc-it em { font-style: normal; font-variant-numeric: tabular-nums; }
+.rc-it:has(input:checked) { background: rgba(30,158,90,.08); }
+.appver { text-align: center; font-size: 12px; color: var(--muted); margin: 16px 0 4px; }

@@ -1076,6 +1076,16 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferr
 $('#installBtn').addEventListener('click', async () => {
   if (!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; $('#installBtn').hidden = true;
 });
-if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+const APP_VER = '2026.10.02b';
+if ('serviceWorker' in navigator) window.addEventListener('load', () => {
+  // 有新版本時自動套用：回到 App 時檢查更新，新的 Service Worker 接手後重新載入一次
+  const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadCtl && !reloaded) { reloaded = true; location.reload(); } });
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    const chk = () => reg.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') chk(); });
+    setInterval(chk, 30 * 60e3);
+  }).catch(() => {});
+});
 
 // 啟動流程移到 features.js 最後（確保新功能已載入）
