@@ -9,8 +9,34 @@ const { readXlsx } = require('./_xlsx');
 
 const UA = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140 Safari/537.36', 'Accept-Language': 'zh-TW,zh;q=0.9' };
 const T = ms => AbortSignal.timeout(ms || 15000);
-async function text(url, ms) { const r = await fetch(url, { headers: UA, signal: T(ms) }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }
-async function bin(url, ms) { const r = await fetch(url, { headers: UA, signal: T(ms || 25000) }); if (!r.ok) throw new Error('HTTP ' + r.status); return Buffer.from(await r.arrayBuffer()); }
+const why = e => e.cause?.code ? `${e.message}（${e.cause.code}）` : e.message;
+const UAS = [UA, { 'User-Agent': 'Mozilla/5.0 (invest-notebook; personal research tool)', 'Accept-Language': 'zh-TW' }, { 'User-Agent': 'curl/8.7.1', Accept: '*/*' }];
+async function get(url, ms, multi) {
+  let last;
+  for (const h of multi ? UAS : [UA]) {
+    try { const r = await fetch(url, { headers: { Accept: 'text/html,application/xhtml+xml,*/*', ...h }, signal: T(ms) }); if (r.ok) return r; last = new Error('HTTP ' + r.status); }
+    catch (e) { last = new Error(why(e)); }
+  }
+  throw last;
+}
+async function text(url, ms, multi) { return (await get(url, ms, multi)).text(); }
+// 部分政府網站未送完整憑證鏈（Node 不會自動補中繼憑證），僅對以下公開統計檔案主機改用不驗證憑證的下載
+const CHAIN_FIX = ['ws.dgbas.gov.tw'];
+function httpsBuf(url, ms, hops = 0) {
+  const https = require('https');
+  return new Promise((ok, no) => {
+    const req = https.get(url, { headers: UA, rejectUnauthorized: false, timeout: ms }, r => {
+      if (r.statusCode >= 300 && r.statusCode < 400 && r.headers.location && hops < 3) { r.resume(); return ok(httpsBuf(new URL(r.headers.location, url).href, ms, hops + 1)); }
+      if (r.statusCode !== 200) { r.resume(); return no(new Error('HTTP ' + r.statusCode)); }
+      const cs = []; r.on('data', c => cs.push(c)); r.on('end', () => ok(Buffer.concat(cs))); r.on('error', no);
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout'))); req.on('error', no);
+  });
+}
+async function bin(url, ms, multi) {
+  try { return Buffer.from(await (await get(url, ms || 25000, multi)).arrayBuffer()); }
+  catch (e) { if (CHAIN_FIX.includes(new URL(url).hostname)) return httpsBuf(url, ms || 25000); throw e; }
+}
 const strip = h => h.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 const num = s => { const n = parseFloat(String(s ?? '').replace(/[,*\s]/g, '')); return Number.isFinite(n) ? n : null; };
 const r2 = n => n == null ? null : Math.round(n * 100) / 100;
@@ -93,20 +119,20 @@ async function dgbas() {
 /* ---------- 經濟部：外銷訂單 ---------- */
 async function orders() {
   const base = 'https://www.moea.gov.tw';
-  const list = await text(base + '/Mns/dos/bulletin/Bulletin.aspx?kind=5&html=1&menu_id=6724');
+  const list = await text(base + '/Mns/dos/bulletin/Bulletin.aspx?kind=5&html=1&menu_id=6724', 15000, true);
   const m = list.match(/bull_id=(\d+)[^>]*>\s*(?:<[^>]+>\s*)*(\d{2,3}年\d{1,2}月外銷訂單統計)/);
   if (!m) throw new Error('找不到外銷訂單新聞稿');
   const after = strip(list.slice(list.indexOf(m[0])));
   const rel = (after.match(/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})/) || []);
   const pageUrl = `${base}/Mns/dos/bulletin/Bulletin.aspx?kind=5&html=1&menu_id=6724&bull_id=${m[1]}`;
-  const page = await text(pageUrl);
+  const page = await text(pageUrl, 15000, true);
   const fid = (page.match(/file_id=(\d+)"[^>]*title="[^"]*全部附表[^"]*\.xlsx/) || page.match(/title="[^"]*全部附表[^"]*\.xlsx[^"]*"[^>]*href="[^"]*file_id=(\d+)/) || [])[1];
   const out = { title: m[2], url: pageUrl, released: rel[1] ? `${rel[1]} ${rel[2]}` : '', src: '經濟部統計處' };
   const t = strip(page);
   const tot = t.match(/外銷訂單([\d,.]+)億美元/); const yy = t.match(/與上年同月比較[^。]*?(增|減)([\d.]+)%/);
   out.total = { amt: tot ? num(tot[1]) : null, yoy: yy ? (yy[1] === '減' ? -1 : 1) * num(yy[2]) : null };
   if (!fid) return out;
-  const wb = readXlsx(await bin(`${base}/Mns/DOS/bulletin/wHandBulletin_File.ashx?file_id=${fid}`), [/^表2/, /^表3$/]);
+  const wb = readXlsx(await bin(`${base}/Mns/DOS/bulletin/wHandBulletin_File.ashx?file_id=${fid}`, 25000, true), [/^表2/, /^表3$/]);
   const take = rows => {
     const hi = rows.findIndex(r => r && /年/.test(ns(r[0])) && /月/.test(ns(r[0]))); if (hi < 0) return [];
     const hdr = rows[hi]; const end = rows.findIndex((r, i) => i > hi && r && /金額/.test(ns(r[2])));
@@ -125,9 +151,14 @@ async function orders() {
 /* ---------- 國家統計預告發布時間表 ---------- */
 const CAL_PICK = { cpi: /^消費者物價指數$/, unemp: /失業率/, export: /海關進出口貿易初步統計/, ip: /^工業生產統計$/, orders: /^外銷訂單統計$/, signal: /景氣對策信號/, cli: /景氣動向指標/, gdp: /^國民所得概估統計$/, forecast: /^經濟預測$/, gdpFull: /國內生產毛額、國民所得、經濟成長率/ };
 async function calendar() {
-  const h = await text('https://www.stat.gov.tw/News_NoticeCalendar.aspx?n=3717&IsControl=0&_Hide=1&Dept=all&PageSize=1000', 20000);
-  const i = h.indexOf('var VueData'); if (i < 0) throw new Error('時間表格式改變');
-  const v = JSON.parse(h.slice(h.indexOf('{', i), h.indexOf('</script>', i)).trim().replace(/;$/, ''));
+  // 從兩個月前開始（才查得到上次公布日），分頁平行抓取，避免一次載入過大
+  const now = new Date(Date.now() + 8 * 3600e3); let ry = now.getUTCFullYear() - 1911, rm = now.getUTCMonth() + 1 - 2; if (rm < 1) { rm += 12; ry--; }
+  const pages = await Promise.all([1, 2, 3, 4].map(async pg => {
+    const h = await text(`https://www.stat.gov.tw/News_NoticeCalendar.aspx?n=3717&IsControl=0&_Hide=1&Dept=all&PageSize=100&page=${pg}&year=${ry}&month=${rm}`, 25000);
+    const i = h.indexOf('var VueData'); if (i < 0) throw new Error('時間表格式改變');
+    return JSON.parse(h.slice(h.indexOf('{', i), h.indexOf('</script>', i)).trim().replace(/;$/, ''));
+  }));
+  const v = { ...pages[0], list: pages.flatMap(p => p.list || []) };
   const y0 = +v.year + 1911, m0 = +v.month, today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
   const out = {};
   Object.entries(CAL_PICK).forEach(([k, re]) => {
@@ -143,7 +174,7 @@ async function calendar() {
 
 module.exports = async (req, res) => {
   const errors = [];
-  const safe = async (label, f) => { try { return await f(); } catch (e) { errors.push(`${label}：${e.message}`); return null; } };
+  const safe = async (label, f) => { try { return await f(); } catch (e) { errors.push(`${label}：${why(e)}`); return null; } };
   const [c, d, o, cal] = await Promise.all([safe('中央銀行', cbc), safe('主計總處', dgbas), safe('外銷訂單', orders), safe('發布時間表', calendar)]);
   const ok = c || d || o;
   res.setHeader('Cache-Control', ok ? 's-maxage=21600, stale-while-revalidate=86400' : 'no-store');
