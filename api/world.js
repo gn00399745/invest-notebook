@@ -105,6 +105,9 @@ const MARKETS = {
   tw: [['^TWII', '加權指數'], ['TWD=X', '美元兌台幣']], us: [['^GSPC', '標普 500'], ['^IXIC', '那斯達克綜合'], ['^SOX', '費城半導體'], ['DX-Y.NYB', '美元指數']],
   cn: [['000300.SS', '滬深 300'], ['CNY=X', '美元兌人民幣'], ['000001.SS', '上證指數']], jp: [['^N225', '日經 225'], ['JPY=X', '美元兌日圓']],
   eu: [['^STOXX50E', '歐洲斯托克 50'], ['EURUSD=X', '歐元兌美元']], hk: [['^HSI', '恒生指數'], ['HKD=X', '美元兌港幣']], kr: [['^KS11', '韓國綜合'], ['KRW=X', '美元兌韓元']], in: [['BSE-100.BO', '印度 BSE 100'], ['^BSESN', '印度 Sensex']],
+  assets: [['GC=F', '黃金'], ['SI=F', '白銀'], ['PL=F', '鉑金'], ['PA=F', '鈀金'], ['HG=F', '銅'], ['CL=F', 'WTI 原油'], ['BZ=F', '布蘭特原油'], ['NG=F', '天然氣'], ['ZS=F', '黃豆'], ['ZW=F', '小麥'],
+    ['^TNX', '美國 10 年債殖利率'], ['^IRX', '美國 3 個月國庫券殖利率'], ['^TYX', '美國 30 年債殖利率'], ['TLT', '美國 20 年以上公債 ETF'], ['IEF', '美國 7–10 年公債 ETF'], ['LQD', '投資級公司債 ETF'], ['HYG', '高收益債 ETF'], ['EMB', '新興市場債 ETF'],
+    ['VNQ', '美國 REITs ETF'], ['BTC-USD', '比特幣'], ['ETH-USD', '以太幣'], ['GLD', 'SPDR 黃金 ETF'], ['00635U.TW', '元大 S&P 黃金'], ['00679B.TWO', '元大美債 20 年']],
 };
 
 const YUA = { 'User-Agent': 'Mozilla/5.0 (invest-notebook; personal research tool)' };
@@ -189,6 +192,34 @@ module.exports = async (req, res) => {
     safe('香港 CPI', () => hkTable('510-60001')), safe('香港失業率', () => hkTable('210-06101')), safe('香港 GDP', () => hkTable('310-31001')),
     safe('韓國失業率', () => fred('LRHUTTTTKRM156S')),
   ]);
+  // 經濟成長貢獻（美國：BEA 經 FRED；歐元區：Eurostat）、Fed 經濟預測（SEP）、OECD 經濟展望
+  const [usC, sep, euC, eo] = await Promise.all([
+    safe('美國 GDP 貢獻', async () => {
+      const ids = { GDP: 'A191RL1Q225SBEA', 民間消費: 'DPCERY2Q224SBEA', 民間投資: 'A006RY2Q224SBEA', 政府支出: 'A822RY2Q224SBEA', 淨出口: 'A019RY2Q224SBEA' };
+      const got = {}; await Promise.all(Object.entries(ids).map(async ([k, id]) => { got[k] = await fred(id, 6); }));
+      return { unit: '季增年率（SAAR）／百分點', periods: got.GDP.map(p => p.d).reverse().map(d => { const o = { label: `${d.slice(0, 4)}Q${Math.ceil(+d.slice(5, 7) / 3)}` }; Object.keys(ids).forEach(k => { o[k] = got[k].find(p => p.d === d)?.v ?? null; }); return o; }), src: '美國經濟分析局 BEA（FRED）' };
+    }),
+    safe('Fed 經濟預測', async () => {
+      const ids = { GDP: 'GDPC1MD', 'PCE 通膨': 'PCECTPIMD', 失業率: 'UNRATEMD', 聯邦基金利率: 'FEDTARMD' }; const out = {};
+      await Promise.all(Object.entries(ids).map(async ([k, id]) => { out[k] = (await fred(id, 8)).map(p => ({ y: p.d.slice(0, 4), v: p.v })).sort((a, b) => a.y.localeCompare(b.y)); }));
+      return { src: 'Fed 經濟預測摘要（SEP，中位數）', rows: out };
+    }),
+    safe('歐元區 GDP 貢獻', async () => {
+      const j = await getJSON('https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/namq_10_gdp?geo=EA21&unit=CON_PPCH_SM&s_adj=SCA&na_item=P31_S14_S15&na_item=P3_S13&na_item=P5G&na_item=P6&na_item=P7&lastTimePeriod=6', 15000);
+      const it = j.dimension.na_item.category.index, tm = j.dimension.time.category.index, nt = Object.keys(tm).length;
+      const v = (k, t) => j.value[it[k] * nt + tm[t]] ?? null;
+      const periods = Object.keys(tm).sort((a, b) => tm[a] - tm[b]).map(t => { const o = { label: t.replace('-', ''), 民間消費: v('P31_S14_S15', t), 政府消費: v('P3_S13', t), 資本形成: v('P5G', t), 淨出口: v('P6', t) != null && v('P7', t) != null ? r2(v('P6', t) + v('P7', t)) : null }; o.GDP = r2(['民間消費', '政府消費', '資本形成', '淨出口'].reduce((s, k) => s + (o[k] || 0), 0)); return o; });
+      return { unit: '年增率貢獻（百分點）', periods, src: 'Eurostat' };
+    }),
+    safe('OECD 經濟展望', async () => {
+      const o = await getJSON('https://sdmx.oecd.org/public/rest/data/OECD.ECO.MAD,DSD_EO@DF_EO,/USA+EA17+CHN+JPN+KOR.GDPV_ANNPCT+CPIH_YTYPCT.A?startPeriod=2025&format=jsondata', 25000);
+      const ds = o.data.dataSets[0].series, st = o.data.structures?.[0] || o.data.structure, dims = st.dimensions;
+      const pa = dims.series.findIndex(d => d.id === 'REF_AREA'), pm = dims.series.findIndex(d => d.id === 'MEASURE'), times = dims.observation[0].values.map(x => x.id);
+      const out = { name: st.name || 'OECD Economic Outlook' };
+      Object.entries(ds).forEach(([k, s]) => { const ks = k.split(':'), a = dims.series[pa].values[+ks[pa]].id, m = dims.series[pm].values[+ks[pm]].id; ((out[a] = out[a] || {})[m.startsWith('GDP') ? 'gdp' : 'cpi'] = {}); Object.entries(s.observations).forEach(([i, x]) => { out[a][m.startsWith('GDP') ? 'gdp' : 'cpi'][times[+i]] = r2(num(x[0])); }); });
+      return out;
+    }),
+  ]);
   const mk = {};
   const spark = await safe('市場行情', () => yspark(Object.values(MARKETS).flat().map(m => m[0])));
   Object.entries(MARKETS).forEach(([e, list]) => { mk[e] = list.map(([sym, name]) => spark?.[sym] && { ...spark[sym], name }).filter(Boolean); });
@@ -214,9 +245,11 @@ module.exports = async (req, res) => {
     in: { indicators: [] },
     us: { indicators: L([ind('cli', '領先指標（OECD）', cliO?.USA, { src: OCLI, unit: '點' })]) },
   };
+  eco.assets = { indicators: [] };
+  if (usC) eco.us.contrib = usC; if (sep) eco.us.sep = sep; if (euC) eco.eu.contrib = euC;
   Object.keys(eco).forEach(k => { eco[k].markets = mk[k] || []; });
   const ok = (tw?.indicators?.length || 0) + Object.values(eco).reduce((s, e) => s + e.indicators.length, 0) > 5;
   res.setHeader('Cache-Control', ok ? 's-maxage=21600, stale-while-revalidate=86400' : 'no-store');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.status(200).send(JSON.stringify({ updated: new Date().toISOString(), fredKey: !!process.env.FRED_API_KEY, economies: eco, imf: imfD, tier: tierD, errors }));
+  res.status(200).send(JSON.stringify({ updated: new Date().toISOString(), fredKey: !!process.env.FRED_API_KEY, economies: eco, imf: imfD, oecdEO: eo, tier: tierD, errors }));
 };
