@@ -140,6 +140,7 @@ function when(pub, next, o = {}) {
   const pubS = pub ? (pub.length > 10 ? pub.replace(/-/g, '/') : ymd(pub)) : '';
   return `<div class="w-when big">${pubS ? `<span>📅 公布 ${esc(pubS)}</span>` : ''}${next ? `<span>⏭️ 下次 <b>${ymd(next)}</b>${o.time ? ' ' + esc(o.time) : ''}${n != null && n >= 0 ? `（${n === 0 ? '今天' : n + ' 天後'}）` : ''}</span>` : o.nextNote ? `<span>${esc(o.nextNote)}</span>` : ''}</div>`;
 }
+const perTW = p => { p = String(p || ''); let m = p.match(/^(\d{3})(\d{2})$/); if (m) return `${+m[1] + 1911}/${+m[2]} 月`; m = p.match(/^(\d{3})Q(\d)$/); if (m) return `${+m[1] + 1911} Q${m[2]}`; return p.replace(/(\d{3})(?=Q|年|~)/g, d => +d + 1911); };
 const latest = (...ds) => ds.filter(Boolean).sort().pop() || '';
 const soonest = (...xs) => xs.filter(x => x?.date).sort((a, b) => a.date.localeCompare(b.date))[0] || null;
 // 台灣各指標對應的發布時間表項目
@@ -268,7 +269,7 @@ function twOrders(off, cal) {
   if (o?.products?.length) {
     const tot = o.products.reduce((s, x) => s + (x.amt || 0), 0) || 1;
     const p = o.products.slice(0, 10), rg = (o.regions || []).slice(0, 7);
-    return `<div class="card"><h3 class="gold-bar">🚢 外銷訂單（${esc(o.period || o.title || '')}）</h3>
+    return `<div class="card"><h3 class="gold-bar">🚢 外銷訂單（${esc((o.title || '').replace('外銷訂單統計', '') || o.period || '')}）</h3>
       ${when(o.released || c?.last, c?.date, { time: c?.time })}
       ${o.total?.amt != null ? `<div class="w-rates"><span>總額 <b>${o.total.amt} 億美元</b></span>${o.total.yoy != null ? `<span>年增 <b class="${o.total.yoy >= 0 ? 'up' : 'down'}">${pc(o.total.yoy)}%</b></span>` : ''}</div>` : ''}
       <div class="w-sub">按貨品：年增率（依金額排序，括號為占比）</div>
@@ -284,7 +285,7 @@ function twOrders(off, cal) {
 function twExtra() {
   const off = S.twOff || {}, cal = off.calendar || {};
   const up = Object.values(cal).filter(x => x.date).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6);
-  const calCard = up.length ? `<div class="card"><h3 class="gold-bar">🗓️ 近期公布行事曆</h3>${gtable(['日期', '項目', '資料期'], up.map(x => `<div class="gt-r"><span>${md(x.date)}${x.time ? ' ' + esc(x.time) : ''}${x.approx ? ' 前' : ''}</span><span style="text-align:left">${esc(x.name)}</span><span>${esc(x.period || '')}</span></div>`), 'cal')}<div class="help">來源：國家統計預告發布時間表（${esc([...new Set(up.map(x => x.dept).filter(Boolean))].join('、'))}）</div></div>` : '';
+  const calCard = up.length ? `<div class="card"><h3 class="gold-bar">🗓️ 近期公布行事曆</h3>${gtable(['日期', '項目', '資料期'], up.map(x => `<div class="gt-r"><span>${md(x.date)}${x.time ? ' ' + esc(x.time) : ''}${x.approx ? ' 前' : ''}</span><span style="text-align:left">${esc(x.name)}</span><span>${esc(perTW(x.period))}</span></div>`), 'cal')}<div class="help">來源：國家統計預告發布時間表（${esc([...new Set(up.map(x => x.dept).filter(Boolean))].join('、'))}）</div></div>` : '';
   return twCBC(off, cal) + twComp(off, cal) + twOrders(off, cal) + calCard;
 }
 

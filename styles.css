@@ -702,3 +702,4 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .gt.as .gt-r > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .gt.as .gt-r > span:first-child { overflow: visible; word-break: break-word; }
 .gt.as .w-spark { width: 100%; max-width: 80px; }
+.gt.cal .gt-r > span { white-space: normal; }
