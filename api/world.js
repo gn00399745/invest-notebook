@@ -111,7 +111,9 @@ const YUA = { 'User-Agent': 'Mozilla/5.0 (invest-notebook; personal research too
 async function yjson(url) { const r = await fetch(url, { headers: YUA, signal: T(12000) }); if (!r.ok) throw new Error('Yahoo HTTP ' + r.status); return r.json(); }
 async function yspark(syms) {
   let j;
-  try { j = await yjson(`https://query1.finance.yahoo.com/v8/finance/spark?symbols=${syms.map(encodeURIComponent).join(',')}&range=1y&interval=1d`); }
+  try { // spark 一次最多約 16 檔，分批查詢
+    j = {}; for (let i = 0; i < syms.length; i += 10) Object.assign(j, await yjson(`https://query1.finance.yahoo.com/v8/finance/spark?symbols=${syms.slice(i, i + 10).map(encodeURIComponent).join(',')}&range=1y&interval=1d`));
+  }
   catch (e) {
     j = {}; // 備援：逐檔查詢
     for (const sym of syms) { try { const c = (await yjson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=1y&interval=1d`)).chart.result[0]; j[sym] = { timestamp: c.timestamp, close: c.indicators.quote[0].close }; } catch (err) { /* 略過 */ } }
