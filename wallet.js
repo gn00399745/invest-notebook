@@ -133,7 +133,7 @@ function linkRecurring(key, r) {
 
 /* ---------- 記帳 ---------- */
 function applyLedger(e, sign) {
-  if (!e?.acct) return; const a = acctById(e.acct); if (!a) return;
+  if (!e?.acct || e.noBal) return; // noBal：錢已經在填的餘額裡，只記收支不動存款 const a = acctById(e.acct); if (!a) return;
   moveCash(a.id, sign * (e.type === '收入' ? 1 : -1) * conv(e.amount, e.ccy || 'TWD', a.ccy || 'TWD'));
 }
 function openLedger(pre = {}, id) {
@@ -146,12 +146,13 @@ function openLedger(pre = {}, id) {
       <input class="amt-input" name="amount" inputmode="decimal" placeholder="金額" value="${esc(v.amount || '')}" autocomplete="off">
       <div class="catgrid" id="catBox">${catsHTML(v.type)}</div>
       <div class="inline" style="margin-top:10px"><label class="f"><span>日期</span><input type="date" name="date" value="${esc(v.date)}"></label><div id="payBox">${paySelectHTML(v, v.type)}</div></div>
-      <label class="f"><span>備註（選填）</span><input type="text" name="note" value="${esc(v.note || '')}" placeholder="例如：午餐、10 月薪水"></label>`,
+      <label class="f"><span>備註（選填）</span><input type="text" name="note" value="${esc(v.note || '')}" placeholder="例如：午餐、10 月薪水"></label>
+      <label class="tog" style="margin-top:4px"><input type="checkbox" name="noBal" value="1" ${v.noBal ? 'checked' : ''}> 只記收支，不改存款餘額（這筆錢已經反映在我填的餘額裡）</label>`,
     saveText: rec ? '儲存' : '記下來',
     onSave: d => {
       const amount = num(d.amount); if (!amount || amount <= 0) { toast('請輸入金額'); return false; }
       const P = parsePay(d.pay), a = acctById(P.acct);
-      const e = { date: d.date || today(), type: d.type, cat: d.cat || CATS[d.type][0][0], amount: String(amount), ...P, ccy: a?.ccy || rec?.ccy || 'TWD', note: d.note || '' };
+      const e = { date: d.date || today(), type: d.type, cat: d.cat || CATS[d.type][0][0], amount: String(amount), ...P, ccy: a?.ccy || rec?.ccy || 'TWD', note: d.note || '', noBal: d.noBal ? 1 : 0 };
       if (rec && rec.card !== e.card) delete rec.rc;
       if (rec) { applyLedger(rec, -1); Object.assign(rec, e); applyLedger(rec, 1); }
       else { const n = { id: uid(), ...e }; S.ledger.push(n); applyLedger(n, 1); }
@@ -244,9 +245,9 @@ function processRecurring() {
   });
   if (n || p) { save(); setTimeout(() => toast([n && `已自動記入 ${n} 筆固定收支`, p && `${p} 筆定期定額／員工認股待確認`].filter(Boolean).join('，')), 600); }
 }
-function postRecurring(r, d) {
-  if (r.kind === '薪資單') return postPayslip(r, d);
-  const e = { id: uid(), date: d, type: r.kind, cat: r.cat || '其他', amount: r.amount, pay: r.pay || (r.acct ? 'acct' : ''), acct: r.acct || '', card: r.card || '', ccy: r.ccy || 'TWD', note: r.name, auto: r.id };
+function postRecurring(r, d, o = {}) {
+  if (r.kind === '薪資單') return postPayslip(r, d, o);
+  const e = { id: uid(), ...(o.noBal ? { noBal: 1 } : {}), date: d, type: r.kind, cat: r.cat || '其他', amount: r.amount, pay: r.pay || (r.acct ? 'acct' : ''), acct: r.acct || '', card: r.card || '', ccy: r.ccy || 'TWD', note: r.name, auto: r.id };
   S.ledger.push(e); applyLedger(e, 1); return 1;
 }
 // 本月應記但還沒記的固定收支（例如設定薪資單時，本月發薪日已經過了）
@@ -259,7 +260,7 @@ function missingThisMonth() {
 }
 function missingCard() {
   const ms = missingThisMonth(); if (!ms.length) return '';
-  return `<div class="card alert"><h3 class="gold-bar">這個月還沒記的固定收支</h3>${ms.map(({ r, d }) => `<div class="pend"><span>${esc(d.slice(5).replace('-', '/'))}　<b>${esc(r.name)}</b>　${r.kind === '薪資單' ? `應發 ${fmt(num(r.gross))}（含${(r.deds || []).filter(x => num(x.amount) > 0).map(x => x.name).join('、') || '扣繳'}）` : fmt(num(r.amount))}</span><span class="btn-row"><button class="btn-small" data-backfill="${r.id}">補記</button><button class="btn-small ghost" data-bfskip="${r.id}">這個月不用</button></span></div>`).join('')}<div class="help">設定時這個月的日子已經過了，所以沒有自動記。按「補記」會照設定記入本月（薪資單會一併記入公保、退撫、健保等扣繳支出）。</div></div>`;
+  return `<div class="card alert"><h3 class="gold-bar">這個月還沒記的固定收支</h3>${ms.map(({ r, d }) => `<div class="pend"><span>${esc(d.slice(5).replace('-', '/'))}　<b>${esc(r.name)}</b>　${r.kind === '薪資單' ? `應發 ${fmt(num(r.gross))}（含${(r.deds || []).filter(x => num(x.amount) > 0).map(x => x.name).join('、') || '扣繳'}）` : fmt(num(r.amount))}</span><span class="btn-row"><button class="btn-small" data-backfill="${r.id}">補記</button><button class="btn-small ghost" data-bfskip="${r.id}">這個月不用</button></span></div>`).join('')}<div class="help">設定時這個月的日子已經過了，所以沒有自動記。按「補記」會照設定記入本月（薪資單會一併記入公保、退撫、健保等扣繳支出）；如果存款餘額已經包含這筆，可以選擇只記收支、不改餘額。</div></div>`;
 }
 function confirmDca(pid) {
   const x = S.pendingDca.find(y => y.id === pid); if (!x) return;
@@ -280,9 +281,9 @@ function payslipCalc(r) {
   const splits = (r.splits || []).map(x => ({ ...x, amt: x.rest ? Math.max(0, net - fixed) : num(x.amount) || 0 }));
   return { gross, deds, dedT, net, splits, left: net - splits.reduce((s, x) => s + x.amt, 0) };
 }
-function postPayslip(r, d) {
+function postPayslip(r, d, o = {}) {
   const c = payslipCalc(r); let n = 0;
-  const add = e => { const x = { id: uid(), date: d, ccy: 'TWD', auto: r.id, ...e }; S.ledger.push(x); applyLedger(x, 1); n++; };
+  const add = e => { const x = { id: uid(), date: d, ccy: 'TWD', auto: r.id, ...(o.noBal ? { noBal: 1 } : {}), ...e }; S.ledger.push(x); applyLedger(x, 1); n++; };
   c.splits.forEach(sp => { if (sp.amt > 0) add({ type: '收入', cat: '薪資', amount: String(sp.amt), acct: sp.acct || '', note: `${r.name} 實領→${acctById(sp.acct)?.name || '未指定帳戶'}` }); });
   if (c.left > 0) add({ type: '收入', cat: '薪資', amount: String(c.left), acct: '', note: `${r.name} 實領（未分配帳戶）` });
   if (c.dedT > 0) {
@@ -635,7 +636,7 @@ PAGES.ledger = () => {
   const m = S.ledgerMonth || ym(today()), M = monthStats(m);
   const groups = {};
   [...M.list].sort((a, b) => (b.date || '').localeCompare(a.date || '')).forEach(e => { (groups[e.date] = groups[e.date] || []).push(e); });
-  const rows = Object.entries(groups).map(([d, es]) => `<div class="lday">${esc(d.slice(5).replace('-', '/'))}</div>` + es.map(e => `<div class="lrow ${e.type === '轉帳' ? 'xfer' : ''}" data-edit="ledger" data-id="${e.id}"><span class="l-ic">${e.type === '轉帳' ? '💳' : catIcon(e.type, e.cat)}</span><span class="l-t"><b>${esc(e.note || e.cat)}</b><em>${esc(e.type === '轉帳' ? '繳卡費（不計入支出）' : e.cat)}${payLabel(e) ? '｜' + esc(payLabel(e)) : ''}${e.auto ? '｜自動' : ''}${e.rc ? '｜✓已對帳' : ''}</em></span><span class="l-v ${e.type === '收入' ? 'up' : e.type === '轉帳' ? '' : 'down'}">${e.type === '收入' ? '+' : '−'}${money(num(e.amount), e.ccy || 'TWD')}</span></div>`).join('')).join('');
+  const rows = Object.entries(groups).map(([d, es]) => `<div class="lday">${esc(d.slice(5).replace('-', '/'))}</div>` + es.map(e => `<div class="lrow ${e.type === '轉帳' ? 'xfer' : ''}" data-edit="ledger" data-id="${e.id}"><span class="l-ic">${e.type === '轉帳' ? '💳' : catIcon(e.type, e.cat)}</span><span class="l-t"><b>${esc(e.note || e.cat)}</b><em>${esc(e.type === '轉帳' ? '繳卡費（不計入支出）' : e.cat)}${payLabel(e) ? '｜' + esc(payLabel(e)) : ''}${e.auto ? '｜自動' : ''}${e.noBal ? '｜未動餘額' : ''}${e.rc ? '｜✓已對帳' : ''}</em></span><span class="l-v ${e.type === '收入' ? 'up' : e.type === '轉帳' ? '' : 'down'}">${e.type === '收入' ? '+' : '−'}${money(num(e.amount), e.ccy || 'TWD')}</span></div>`).join('')).join('');
   const rec = S.recurring.map(r => r.kind === '薪資單' ? payslipRow(r) : `<div class="lrow" data-edit="recurring" data-id="${r.id}"><span class="l-ic">${r.kind === '定期定額' ? '📈' : r.kind === '員工認股' ? '🏢' : catIcon(r.kind, r.cat)}</span><span class="l-t"><b>${esc(r.name)}</b><em>每${r.freq === '年' ? `年 ${r.month} 月` : '月'} ${r.day} 號${r.disc ? `｜市價 ${r.disc}%` : ''}${payLabel(r) ? '｜' + esc(payLabel(r)) : ''}</em></span><span class="l-v ${r.kind === '收入' ? 'up' : ''}">${fmt(num(r.amount))}</span></div>`).join('');
   const byPay = {}; M.list.filter(e => e.type === '支出').forEach(e => { const k = e.card ? '信用卡' : e.acct ? '帳戶扣款' : ({ cash: '現金', mobile: '行動支付', other: '其他' })[e.pay] || '未指定'; byPay[k] = (byPay[k] || 0) + toTWD(e.amount, e.ccy); });
   const payMix = Object.keys(byPay).length > 1 ? `<div class="paymix">${Object.entries(byPay).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span>${k} <b>${fmt(v)}</b></span>`).join('')}</div>` : '';
@@ -677,9 +678,17 @@ function sheet(kind) {
   openModal({ title: kind === 'asset' ? '新增資產' : '要記什麼？', noSave: true, body: `<div class="tiles sm">${list.map(([a, ic, t]) => `<button type="button" class="tile" data-act="${a}"><i>${ic}</i><b>${t}</b></button>`).join('')}</div>` });
 }
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-act],[data-hbuy],[data-hsell],[data-hdet],[data-dca],[data-dcaskip],[data-backfill],[data-bfskip],[data-cardedit],[data-cardrc],[data-cardpay],[data-cardadd],#fab,#qRefresh,#walletToAlloc');
+  const t = e.target.closest('[data-act],[data-hbuy],[data-hsell],[data-hdet],[data-dca],[data-dcaskip],[data-backfill],[data-bfgo],[data-bfskip],[data-cardedit],[data-cardrc],[data-cardpay],[data-cardadd],#fab,#qRefresh,#walletToAlloc');
   if (!t) return;
-  if (t.dataset.backfill) { const r = S.recurring.find(x => x.id === t.dataset.backfill), mm = missingThisMonth().find(x => x.r.id === t.dataset.backfill); if (r && mm) { const n = postRecurring(r, mm.d); save(); render(); toast(`已補記 ${n} 筆（${r.name}）`); } return; }
+  if (t.dataset.backfill) {
+    const r = S.recurring.find(x => x.id === t.dataset.backfill), mm = missingThisMonth().find(x => x.r.id === t.dataset.backfill); if (!r || !mm) return;
+    const inc = r.kind !== '支出';
+    return openModal({ title: `補記 ${mm.d.slice(5).replace('-', '/')} ${r.name}`, noSave: true,
+      body: `<div style="font-size:15px;margin-bottom:10px">這筆${inc ? '錢入帳後' : '扣款後'}，你在網站填的存款餘額是否<b>已經${inc ? '包含' : '扣掉'}</b>它了？</div>
+        <div class="tiles sm" style="grid-template-columns:1fr"><button type="button" class="tile" data-bfgo="${r.id}" data-nobal="1"><i>✅</i><b>已經${inc ? '包含' : '扣掉'}（只記收支，不改餘額）</b><em>例如：發薪後才照網銀 App 填存款餘額</em></button>
+        <button type="button" class="tile" data-bfgo="${r.id}" data-nobal=""><i>➕</i><b>還沒有（記收支，並${inc ? '加到' : '從'}存款${inc ? '' : '扣掉'}）</b><em>例如：餘額是發薪前填的</em></button></div>` });
+  }
+  if (t.dataset.bfgo) { const r = S.recurring.find(x => x.id === t.dataset.bfgo), mm = missingThisMonth().find(x => x.r.id === t.dataset.bfgo); $('#modal').close(); if (r && mm) { const n = postRecurring(r, mm.d, { noBal: !!t.dataset.nobal }); save(); render(); toast(`已補記 ${n} 筆（${r.name}）${t.dataset.nobal ? '，存款餘額不變' : ''}`); } return; }
   if (t.dataset.bfskip) { const r = S.recurring.find(x => x.id === t.dataset.bfskip); if (r) { r.skipM = [...(r.skipM || []), ym(today())].slice(-12); save(); render(); } return; }
   if (t.dataset.cardedit) return openCard(t.dataset.cardedit);
   if (t.dataset.cardrc) return openReconcile(t.dataset.cardrc, t.dataset.k);
