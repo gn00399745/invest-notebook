@@ -95,32 +95,103 @@ function worldStatus() {
 }
 
 /* ---------- 頁面 ---------- */
+/* ---------- 台灣：重點指標快照（央行、經濟部；新資料公布後更新） ---------- */
+const TW_SNAP = {
+  cbc: { src: '中央銀行理監事會預測（實際值：主計總處）', prevNote: '上次（2026/6/18）預測 9.45%',
+    annual: [['2025', 8.76, '實際'], ['2026(f)', 11.48, '上次 9.45'], ['2027(f)', 5.82, '']],
+    q: [['26Q1', 15.43, 0], ['26Q2', 12.93, 0], ['26Q3', 11.5, 1], ['26Q4', 6.86, 1], ['27Q1', 5.81, 1], ['27Q2', 6.5, 1], ['27Q3', 5.33, 1], ['27Q4', 5.68, 1]], half: [['上半年', 14.15], ['下半年(f)', 9.09]] },
+  comp: { src: '主計總處、中央銀行', cols: ['經濟成長率', '內需', '民間消費', '政府消費', '資本形成', '國外淨需求', '輸出', '(−)輸入'],
+    rows: [['2026(f)', 11.48, 7.20, 2.15, 0.66, 4.40, 4.28, 16.22, 11.95], ['上半年', 14.15, 6.10, 2.40, 0.45, 3.26, 8.05, 20.00, 11.95], ['下半年(f)', 9.09, 8.20, 1.93, 0.85, 5.42, 0.89, 12.83, 11.94]],
+    gcols: ['經濟成長率', '內需', '民間消費', '政府消費', '資本形成', '民間投資', '政府投資', '公營投資', '輸出', '(−)輸入'],
+    grows: [['2026(f)', 11.48, 8.91, 4.97, 5.37, 17.37, 12.47, 8.42, -5.32, 22.05, 21.91], ['上半年', 14.15, 7.29, 5.37, 3.74, 12.12, 10.36, 7.63, 3.75, 27.73, 21.55], ['下半年(f)', 9.09, 10.48, 4.58, 6.77, 22.73, 14.75, 8.95, -10.92, 17.17, 22.26]] },
+  orders: { date: '2026 年 8 月', src: '經濟部統計處', items: [['資訊通信', 100.5], ['電子產品', 83.9], ['機械', 28.3], ['基本金屬', 26.8], ['化學品', 15.4], ['塑橡膠製品', 6.7], ['光學器材', -5.0]] },
+};
+const heat = (v, scale = 5, invert) => { if (v == null || !isFinite(v)) return ''; const a = Math.min(1, Math.abs(v) / scale) * 0.32 + 0.04; const good = invert ? v < 0 : v >= 0; return `background:${good ? `rgba(30,158,90,${a})` : `rgba(214,69,69,${a})`}`; };
+const pc = (v, d = 1) => v == null ? '—' : `${v > 0 ? '+' : ''}${(+v).toFixed(d)}`;
+function gtable(cols, rows, cls = '') { return `<div class="gt ${cls}" style="--n:${cols.length}"><div class="gt-r gt-h">${cols.map(c => `<span>${c}</span>`).join('')}</div>${rows.join('')}</div>`; }
+function hbars(rows, o = {}) {
+  // rows: [{l, v, sub}] ；支援負值與目標線
+  const vals = rows.map(r => r.v).filter(v => v != null), mx = Math.max(...vals.map(Math.abs), o.target || 0, 0.1) * (o.target ? 1.25 : 1), neg = vals.some(v => v < 0);
+  const X = v => (neg ? 50 + v / mx * 50 : v / mx * 100);
+  return `<div class="hb">${rows.map(r => `<div class="hb-r"><span>${r.l}</span><div class="hb-t">${neg ? '<i class="hb-0"></i>' : ''}${o.target ? `<i class="hb-tg" style="left:${X(o.target)}%"></i>` : ''}${r.v == null ? '' : `<i class="hb-b ${r.v < 0 ? 'n' : ''} ${r.cls || ''}" style="${neg ? (r.v < 0 ? `left:${X(r.v)}%;width:${50 - X(r.v)}%` : `left:50%;width:${X(r.v) - 50}%`) : `width:${Math.max(1.5, X(r.v))}%`}"></i>`}</div><b>${r.v == null ? '—' : r.v + (o.unit ?? '%')}</b></div>`).join('')}</div>${o.target ? `<div class="help">虛線：${o.targetLabel || '目標 ' + o.target + '%'}</div>` : ''}`;
+}
+function lineSVG(pts, o = {}) {
+  // pts: [[label, v, isForecast]]
+  const W = 320, H = 150, P = 22, vs = pts.map(p => p[1]), lo = Math.min(0, ...vs), hi = Math.max(...vs) * 1.12;
+  const X = i => P + i * (W - 2 * P) / (pts.length - 1), Y = v => H - 22 - (v - lo) * (H - 44) / (hi - lo || 1);
+  const seg = (a, b) => pts.slice(a, b).map((p, i) => `${i ? 'L' : 'M'}${X(a + i).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('');
+  const fi = pts.findIndex(p => p[2]);
+  return `<svg class="ln" viewBox="0 0 ${W} ${H}"><path class="ln-a" d="${seg(0, fi < 0 ? pts.length : fi)}"/>${fi > 0 ? `<path class="ln-f" d="${seg(fi - 1, pts.length)}"/>` : ''}
+    ${pts.map((p, i) => `<circle cx="${X(i)}" cy="${Y(p[1])}" r="3" class="${p[2] ? 'f' : ''}"/><text x="${X(i)}" y="${Y(p[1]) - 7}" text-anchor="middle">${p[1]}</text><text x="${X(i)}" y="${H - 6}" text-anchor="middle" class="ax">${p[0]}</text>`).join('')}</svg>`;
+}
+function twExtra() {
+  const c = TW_SNAP.cbc, m = TW_SNAP.comp, o = TW_SNAP.orders;
+  const contribKeys = [[2, '民間消費', 'c1'], [3, '政府消費', 'c2'], [4, '資本形成', 'c3'], [5, '國外淨需求', 'c4']];
+  const stack = m.rows.map(r => { const tot = contribKeys.reduce((s, [i]) => s + Math.max(0, r[i + 1]), 0);
+    return `<div class="stk-r"><span>${r[0]}</span><div class="stk">${contribKeys.map(([i, l, cl]) => `<i class="${cl}" style="width:${Math.max(0, r[i + 1]) / tot * 100}%" title="${l} ${r[i + 1]}">${r[i + 1] >= 1 ? r[i + 1] : ''}</i>`).join('')}</div><b>${r[1]}%</b></div>`; }).join('');
+  return `
+  <div class="card"><div class="card-head"><h3 class="gold-bar">🏦 央行經濟成長預測</h3><span class="pill">${esc(c.prevNote)}</span></div>
+    <div class="w-fc">${c.annual.map(([y, v, n], i) => `<div class="met wt ${i ? 'pos' : ''}"><div class="met-h"><span>${y} 年</span>${n ? `<span class="help">${n}</span>` : ''}</div><div class="wt-v"><b>${v}</b><em>%</em></div></div>`).join('')}</div>
+    ${lineSVG(c.q.map(([l, v, f]) => [l, v, f]))}
+    <div class="help">實線為實際值，虛線為預測。${c.half.map(([l, v]) => `${l} ${v}%`).join('、')}；成長動能預期逐季放緩，2027 年回到 5～6% 區間。來源：${esc(c.src)}</div></div>
+  <div class="card"><h3 class="gold-bar">🧩 經濟成長的來源（貢獻度，百分點）</h3>
+    ${stack}<div class="w-legend">${contribKeys.map(([, l, cl]) => `<span><i class="${cl}"></i>${l}</span>`).join('')}</div>
+    <div class="help" style="margin:6px 0 10px">2026 年成長 11.48% 中，資本形成（企業投資）貢獻 4.40、國外淨需求 4.28 個百分點；下半年改由投資撐起成長，出口貢獻明顯縮小。</div>
+    <details class="rc-sub"><summary>📋 各組成項目成長率</summary>${gtable(['', ...m.gcols], m.grows.map(r => `<div class="gt-r"><span>${r[0]}</span>${r.slice(1).map(v => `<span style="${heat(v, 20)}">${v}</span>`).join('')}</div>`), 'wide')}</details>
+    <div class="help">來源：${esc(m.src)}</div></div>
+  <div class="card"><h3 class="gold-bar">🚢 外銷訂單：哪些產品在成長（${esc(o.date)}）</h3>
+    ${hbars(o.items.map(([l, v]) => ({ l, v })), { unit: '%' })}
+    <div class="help">資訊通信、電子產品年增最多，反映 AI 伺服器與半導體需求；來源：${esc(o.src)}。總額與年增率在上方圖卡自動更新，產品別為快照，新數據公布後可請我更新。</div></div>`;
+}
+
 function globalView() {
-  const w = S.world, list = ECON.slice(1);
-  const cards = list.map(e => {
-    const h = headline(e.id), j = h.cli ? judge(h.cli) : null;
-    return `<button class="w-eco ${j?.c || ''}" data-wtab="${e.id}"><div class="w-eco-h"><span>${e.flag} <b>${e.name}</b></span>${j ? `<span class="sigp ${j.c}">${j.l}</span>` : ''}</div>
-      <div class="w-eco-g"><span><em>成長（IMF 2026）</em><b>${h.gdp != null ? h.gdp + '%' : '—'}</b></span><span><em>通膨（最新）</em><b>${h.cpi != null ? h.cpi + '%' : '—'}</b></span>
-      <span><em>${esc(h.mkt?.name || '股市')}</em><b>${h.mkt ? chg(h.mkt.chg1m) : '—'}</b></span><span><em>${esc(h.fx?.name || '匯率')}</em><b>${h.fx ? chg(h.fx.chg1m) : '—'}</b></span></div></button>`;
-  }).join('');
-  const g = w?.imf?.NGDP_RPCH; const max = g ? Math.max(...list.map(e => g[e.imf]?.['2026'] || 0), 1) : 1;
-  const imfChart = g ? `<div class="card"><h3 class="gold-bar">IMF 經濟成長預測比較</h3><div class="w-cmp">${list.map(e => { const v = g[e.imf] || {}; return `<div class="w-cmp-r"><span>${e.flag} ${e.name}</span><div class="w-cmp-b">${['2025', '2026', '2027'].map((y, i) => `<i class="y${i}" style="width:${Math.max(2, (v[y] || 0) / max * 100)}%" title="${y}"></i>`).join('')}</div><b>${v['2026'] ?? '—'}%</b></div>`; }).join('')}</div>
-    <div class="w-legend"><span><i class="y0"></i>2025</span><span><i class="y1"></i>2026</span><span><i class="y2"></i>2027</span><span class="help">數字為 2026 年預測</span></div></div>` : '';
-  const tw = w?.economies?.tw?.official, t = w?.tier;
-  const fc = (tw?.gdp?.length || t?.gdp) ? `<div class="card"><h3 class="gold-bar">🇹🇼 台灣經濟預測</h3><div class="w-fc">
-      ${(tw?.gdp || []).map(x => `<div class="met wt pos"><div class="met-h"><span>主計總處 ${esc(x.y)} 年</span></div><div class="wt-v"><b>${x.v}</b><em>% 經濟成長</em></div></div>`).join('')}
-      ${(tw?.cpi || []).map(x => `<div class="met wt"><div class="met-h"><span>主計總處 ${esc(x.y)} 年</span></div><div class="wt-v"><b>${x.v}</b><em>% CPI</em></div></div>`).join('')}
-      ${t?.gdpValue ? `<div class="met wt pos"><div class="met-h"><span>台經院預測</span></div><div class="wt-v"><b>${t.gdpValue}</b><em>% 經濟成長</em></div></div>` : ''}</div>
-      ${t?.gdp ? `<div class="note">台經院：${esc(t.gdp)}${t.cpi ? `<br>${esc(t.cpi)}` : ''}</div>` : ''}
-      <div class="srclinks"><a href="https://www.tier.org.tw/forecast/macro_trends.aspx" target="_blank" rel="noopener">台經院景氣動向與預測</a><a href="https://www.stat.gov.tw/Point.aspx?sid=t.1&n=3580&sms=11480" target="_blank" rel="noopener">主計總處經濟成長率</a><a href="https://index.ndc.gov.tw/n/zh_tw" target="_blank" rel="noopener">國發會景氣燈號</a></div></div>` : '';
-  return `<div class="w-grid">${cards}</div>${fc}${imfChart}
-    <div class="note">看法：先看「領先指標」判斷各經濟體是擴張還是收縮，再看通膨決定央行能不能降息；台股最受美國需求、台灣出口與 Fed 利率影響。</div>`;
+  const w = S.world, list = ECON.slice(1), eco = id => w?.economies?.[id];
+  const f = (id, k) => eco(id)?.indicators?.find(x => x.k === k);
+  const us = k => { const r = S.macro.rows.find(x => x.key === k); return r?.latest ? num(r.latest) : null; };
+  // 1. 股市報酬表
+  const idx = Object.entries(w?.economies || {}).flatMap(([id, e]) => (e.markets || []).filter(m => !/=X$|DX-Y/.test(m.sym)).map(m => ({ ...m, id })));
+  const order = ['^GSPC', '^IXIC', '^SOX', '^N225', '^HSI', '000300.SS', '000001.SS', 'BSE-100.BO', '^BSESN', '^TWII', '^KS11', '^STOXX50E'];
+  idx.sort((a, b) => order.indexOf(a.sym) - order.indexOf(b.sym));
+  const mkt = idx.length ? `<div class="card"><h3 class="gold-bar">📊 全球股市報酬（本地貨幣計價，%）</h3>${gtable(['指數', '水平', '1 天', '7 天', '1 個月', '年初至今'], idx.map(m => `<div class="gt-r ${m.sym === '^TWII' ? 'hl' : ''}"><span>${esc(m.name)}</span><span>${fmt(m.price, m.price < 100 ? 2 : 0)}</span><span style="${heat(m.chg1d, 2)}">${pc(m.chg1d)}</span><span style="${heat(m.chg1w, 4)}">${pc(m.chg1w)}</span><span style="${heat(m.chg1m, 8)}">${pc(m.chg1m)}</span><span style="${heat(m.ytd, 40)}">${pc(m.ytd)}</span></div>`), 'mk')}</div>` : '';
+  // 2. 經濟體總覽表
+  const rows = list.map(e => {
+    const id = e.id, g = w?.imf?.NGDP_RPCH?.[e.imf]?.['2026'];
+    const cpi = id === 'us' ? us('cpi') : f(id, 'cpi')?.v, un = id === 'us' ? us('unrate') : f(id, 'unemp')?.v;
+    const rate = id === 'us' ? us('ffr') : f(id, 'rate')?.v, cli = f(id, 'cli');
+    const cj = cli ? judge(cli) : null;
+    return `<div class="gt-r click" data-wtab="${id}"><span>${e.flag} ${e.name}</span><span style="${heat(g, 6)}">${g ?? '—'}</span><span style="${cpi == null ? '' : heat(1 - Math.abs(cpi - 2), 1.5)}">${cpi ?? '—'}</span><span>${un ?? '—'}</span><span>${rate ?? '—'}</span><span>${cli ? `<i class="sigp ${cj.c}">${cj.l}</i>` : '—'}</span></div>`;
+  });
+  const ov = `<div class="card"><h3 class="gold-bar">🌏 主要經濟體一覽</h3>${gtable(['經濟體', '成長 IMF 2026', '通膨', '失業率', '政策利率', '領先指標'], rows, 'ov')}<div class="help">點任一列看該經濟體的完整指標。通膨格子越接近 2% 顏色越綠。美國數據取自「美國」分頁。</div></div>`;
+  // 3. 圖表
+  const G = w?.imf?.NGDP_RPCH; let imfChart = '';
+  if (G) {
+    const mx = Math.max(...list.flatMap(e => ['2025', '2026', '2027'].map(y => Math.abs(G[e.imf]?.[y] || 0))), 1);
+    imfChart = `<div class="card"><h3 class="gold-bar">📈 經濟成長預測（IMF）</h3><div class="w-cmp">${list.map(e => { const v = G[e.imf] || {}; return `<div class="w-cmp-r"><span>${e.flag} ${e.name}</span><div class="w-cmp-b">${['2025', '2026', '2027'].map((y, i) => `<i class="y${i}" style="width:${Math.max(2, Math.min(100, (v[y] || 0) / mx * 100))}%" title="${y} ${v[y]}%"></i>`).join('')}</div><b>${v['2026'] ?? '—'}%</b></div>`; }).join('')}</div>
+      <div class="w-legend"><span><i class="y0"></i>2025</span><span><i class="y1"></i>2026</span><span><i class="y2"></i>2027</span><span class="help">右側數字為 2026 年</span></div></div>`;
+  }
+  const cpiChart = `<div class="card"><h3 class="gold-bar">🛒 通膨比較（最新 CPI 年增率）</h3>${hbars(list.map(e => ({ l: `${e.flag} ${e.name}`, v: e.id === 'us' ? us('cpi') : f(e.id, 'cpi')?.v })), { target: 2, targetLabel: '多數央行的 2% 通膨目標' })}</div>`;
+  const unChart = `<div class="card"><h3 class="gold-bar">👷 失業率比較</h3>${hbars(list.map(e => ({ l: `${e.flag} ${e.name}`, v: e.id === 'us' ? us('unrate') : f(e.id, 'unemp')?.v })).filter(r => r.v != null))}</div>`;
+  // 4. 領先指標趨勢表
+  const cliRows = list.map(e => ({ e, x: f(e.id, 'cli') })).filter(r => r.x?.spark?.length);
+  const months = n => { const x = cliRows[0]?.x; if (!x) return []; const [y, m] = x.date.split('-').map(Number); return Array.from({ length: n }, (_, i) => { const d = new Date(Date.UTC(y, m - 1 - (n - 1 - i), 1)); return `${d.getUTCMonth() + 1}月`; }); };
+  const cli = cliRows.length ? `<div class="card"><h3 class="gold-bar">🧭 領先指標趨勢（100 = 長期趨勢）</h3>${gtable(['經濟體', ...months(6), '判讀'], cliRows.map(({ e, x }) => { const v6 = x.spark.slice(-6); return `<div class="gt-r click" data-wtab="${e.id}"><span>${e.flag} ${e.name}</span>${v6.map((v, i) => `<span style="${heat(v - 100, 3)}">${(+v).toFixed(1)}${i && v6[i - 1] != null ? (v > v6[i - 1] ? '<small class="u">▲</small>' : v < v6[i - 1] ? '<small class="d">▼</small>' : '') : ''}</span>`).join('')}<span><i class="sigp ${judge(x).c}">${judge(x).l}</i></span></div>`; }), 'cli')}
+    <div class="help">高於 100 且上升＝擴張；高於 100 但下降＝趨緩；低於 100 但上升＝復甦；低於 100 且下降＝收縮。台灣為國發會領先指標（不含趨勢），其他為 OECD 綜合領先指標。</div></div>` : '';
+  // 5. 匯率表
+  const fx = Object.values(w?.economies || {}).flatMap(e => (e.markets || []).filter(m => /=X$|DX-Y/.test(m.sym)));
+  const fxT = fx.length ? `<div class="card"><h3 class="gold-bar">💱 匯率（%）</h3>${gtable(['', '匯率', '1 天', '1 個月', '年初至今'], fx.map(m => `<div class="gt-r"><span>${esc(m.name)}</span><span>${m.price}</span><span>${pc(m.chg1d, 2)}</span><span>${pc(m.chg1m)}</span><span>${pc(m.ytd)}</span></div>`), 'fx')}<div class="help">「美元兌 X」上升＝美元變強、該貨幣貶值；歐元兌美元上升＝歐元升值。</div></div>` : '';
+  // 6. 台灣預測
+  const tw = eco('tw')?.official, t = w?.tier;
+  const fc = `<div class="card"><h3 class="gold-bar">🇹🇼 台灣 2026 年經濟成長預測比較</h3>${hbars([{ l: '中央銀行', v: TW_SNAP.cbc.annual[1][1] }, ...(tw?.gdp || []).filter(x => x.y === '2026').map(x => ({ l: '主計總處', v: x.v })), ...(t?.gdpValue ? [{ l: '台經院', v: t.gdpValue }] : []), { l: 'IMF', v: G?.TWN?.['2026'] ?? null }])}
+    ${t?.gdp ? `<div class="note">台經院：${esc(t.gdp)}${t.cpi ? `<br>${esc(t.cpi)}` : ''}</div>` : ''}
+    <div class="help">IMF 預測更新頻率較低，與國內機構差距大時，以最新公布的國內預測為主。</div>
+    <div class="srclinks"><a href="https://www.tier.org.tw/forecast/macro_trends.aspx" target="_blank" rel="noopener">台經院</a><a href="https://www.stat.gov.tw/Point.aspx?sid=t.1&n=3580&sms=11480" target="_blank" rel="noopener">主計總處</a><a href="https://www.cbc.gov.tw/tw/lp-302-1.html" target="_blank" rel="noopener">中央銀行新聞稿</a></div></div>`;
+  return mkt + ov + fc + imfChart + cpiChart + unChart + cli + fxT;
 }
 function ecoView(id) {
   const e = ECON.find(x => x.id === id), eco = S.world?.economies?.[id];
   if (!eco) return hero(e) + `<div class="card empty">${worldBusy ? '資料載入中…' : '還沒有資料，按右上角「更新」。'}</div>`;
   const tiles = eco.indicators.map(tile).join('');
-  return hero(e) + `<div class="met-grid wide w-tiles">${tiles || '<div class="empty">這個經濟體的數據暫時取不到。</div>'}</div>`;
+  return hero(e) + `<div class="met-grid wide w-tiles">${tiles || '<div class="empty">這個經濟體的數據暫時取不到。</div>'}</div>` + (id === 'tw' ? twExtra() : '');
 }
 const _macroUS = PAGES.macro;
 PAGES.macro = () => {
