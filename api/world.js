@@ -54,7 +54,12 @@ async function taiwan(errors) {
   }
   if (got.un) add(ind('unemp', '失業率（季調）', chartPts(got.un.charts, /失業率\(經季節調整後\)/), { src, url: U('t.3', 3582) }));
   if (got.trade) add(ind('export', '出口年增率', chartPts(got.trade.charts, /出口年增率/), { src: '財政部（中華民國統計資訊網）', url: U('t.8', 3587), dp: 1 }));
-  if (got.ip) add(ind('ip', '工業生產年增率', chartPts(got.ip.charts, /^工業生產指數年增率/), { src: '經濟部（中華民國統計資訊網）', url: U('t.6', 3584) }));
+  if (got.ip) {
+    add(ind('ip', '工業生產年增率', chartPts(got.ip.charts, /^工業生產指數年增率/), { src: '經濟部（中華民國統計資訊網）', url: U('t.6', 3584) }));
+    const ord = chartPts(got.ip.charts, /^外銷訂單/);
+    add(ind('orders', '外銷訂單年增率', ord.slice(0, ord.length - 12).map((p, i) => ({ d: p.d, v: ord[i + 12]?.v ? (p.v / ord[i + 12].v - 1) * 100 : null })), { src: '經濟部統計處（中華民國統計資訊網）', url: U('t.6', 3584), dp: 1, kind: 'export' }));
+    if (ord[0]) add({ k: 'ordersAmt', name: '外銷訂單金額', v: Math.round(ord[0].v / 10) / 10, prev: ord[1] ? Math.round(ord[1].v / 10) / 10 : null, date: ord[0].d, prevDate: ord[1]?.d, unit: '億美元', spark: ord.slice(0, 24).map(p => Math.round(p.v / 10) / 10).reverse(), src: '經濟部統計處', url: U('t.6', 3584), kind: 'amt' });
+  }
   if (got.cyc) {
     add(ind('signal', '景氣對策信號', chartPts(got.cyc.charts, /景氣對策信號/), { src: '國發會', url: 'https://index.ndc.gov.tw/n/zh_tw', unit: '分', dp: 0 }));
     add(ind('cli', '景氣領先指標', chartPts(got.cyc.charts, /領先指標/), { src: '國發會', url: U('t.11', 3590), unit: '點', kind: 'cliTW' }));
@@ -97,26 +102,28 @@ async function yq(sym) {
   return { sym, price: r2(last, last < 10 ? 4 : 2), chg1d: prev ? r2((last / prev - 1) * 100) : null, chg1m: m1 ? r2((last / m1 - 1) * 100) : null, spark: c.slice(-60).map(x => r2(x[1], 4)), date: new Date(c[c.length - 1][0] * 1000).toISOString().slice(0, 10) };
 }
 const MARKETS = {
-  tw: [['^TWII', '加權指數'], ['TWD=X', '美元兌台幣']], us: [['^GSPC', 'S&P 500'], ['^SOX', '費城半導體'], ['DX-Y.NYB', '美元指數']],
-  cn: [['000001.SS', '上證指數'], ['CNY=X', '美元兌人民幣']], jp: [['^N225', '日經 225'], ['JPY=X', '美元兌日圓']],
-  eu: [['^STOXX50E', '歐洲斯托克 50'], ['EURUSD=X', '歐元兌美元']], hk: [['^HSI', '恒生指數'], ['HKD=X', '美元兌港幣']], kr: [['^KS11', '韓國綜合'], ['KRW=X', '美元兌韓元']],
+  tw: [['^TWII', '加權指數'], ['TWD=X', '美元兌台幣']], us: [['^GSPC', '標普 500'], ['^IXIC', '那斯達克綜合'], ['^SOX', '費城半導體'], ['DX-Y.NYB', '美元指數']],
+  cn: [['000300.SS', '滬深 300'], ['CNY=X', '美元兌人民幣'], ['000001.SS', '上證指數']], jp: [['^N225', '日經 225'], ['JPY=X', '美元兌日圓']],
+  eu: [['^STOXX50E', '歐洲斯托克 50'], ['EURUSD=X', '歐元兌美元']], hk: [['^HSI', '恒生指數'], ['HKD=X', '美元兌港幣']], kr: [['^KS11', '韓國綜合'], ['KRW=X', '美元兌韓元']], in: [['BSE-100.BO', '印度 BSE 100'], ['^BSESN', '印度 Sensex']],
 };
 
 const YUA = { 'User-Agent': 'Mozilla/5.0 (invest-notebook; personal research tool)' };
 async function yjson(url) { const r = await fetch(url, { headers: YUA, signal: T(12000) }); if (!r.ok) throw new Error('Yahoo HTTP ' + r.status); return r.json(); }
 async function yspark(syms) {
   let j;
-  try { j = await yjson(`https://query1.finance.yahoo.com/v8/finance/spark?symbols=${syms.map(encodeURIComponent).join(',')}&range=3mo&interval=1d`); }
+  try { j = await yjson(`https://query1.finance.yahoo.com/v8/finance/spark?symbols=${syms.map(encodeURIComponent).join(',')}&range=1y&interval=1d`); }
   catch (e) {
     j = {}; // 備援：逐檔查詢
-    for (const sym of syms) { try { const c = (await yjson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=3mo&interval=1d`)).chart.result[0]; j[sym] = { timestamp: c.timestamp, close: c.indicators.quote[0].close }; } catch (err) { /* 略過 */ } }
+    for (const sym of syms) { try { const c = (await yjson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=1y&interval=1d`)).chart.result[0]; j[sym] = { timestamp: c.timestamp, close: c.indicators.quote[0].close }; } catch (err) { /* 略過 */ } }
     if (!Object.keys(j).length) throw e;
   }
   const out = {};
   Object.entries(j).forEach(([sym, v]) => {
     const c = (v.close || []).map((x, i) => [v.timestamp[i], x]).filter(x => x[1] != null); if (c.length < 2) return;
     const last = c[c.length - 1][1], prev = c[c.length - 2][1], m1 = c[Math.max(0, c.length - 22)][1];
-    out[sym] = { sym, price: r2(last, last < 10 ? 4 : 2), chg1d: r2((last / prev - 1) * 100), chg1m: r2((last / m1 - 1) * 100), spark: c.slice(-60).map(x => r2(x[1], 4)), date: new Date(c[c.length - 1][0] * 1000).toISOString().slice(0, 10) };
+    const yr = new Date(c[c.length - 1][0] * 1000).getUTCFullYear(), fi = c.findIndex(x => new Date(x[0] * 1000).getUTCFullYear() === yr);
+    const ybase = fi > 0 ? c[fi - 1][1] : null, w1 = c[Math.max(0, c.length - 6)][1];
+    out[sym] = { sym, price: r2(last, last < 10 ? 4 : 2), chg1d: r2((last / prev - 1) * 100), chg1w: r2((last / w1 - 1) * 100), chg1m: r2((last / m1 - 1) * 100), ytd: ybase ? r2((last / ybase - 1) * 100) : null, spark: c.slice(-60).map(x => r2(x[1], 4)), date: new Date(c[c.length - 1][0] * 1000).toISOString().slice(0, 10) };
   });
   return out;
 }
