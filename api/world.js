@@ -130,7 +130,8 @@ async function yspark(syms) {
     const last = c[c.length - 1][1], prev = c[c.length - 2][1], m1 = c[Math.max(0, c.length - 22)][1];
     const yr = new Date(c[c.length - 1][0] * 1000).getUTCFullYear(), fi = c.findIndex(x => new Date(x[0] * 1000).getUTCFullYear() === yr);
     const ybase = fi > 0 ? c[fi - 1][1] : null, w1 = c[Math.max(0, c.length - 6)][1];
-    out[sym] = { sym, price: r2(last, last < 10 ? 4 : 2), chg1d: r2((last / prev - 1) * 100), chg1w: r2((last / w1 - 1) * 100), chg1m: r2((last / m1 - 1) * 100), ytd: ybase ? r2((last / ybase - 1) * 100) : null, spark: c.slice(-60).map(x => r2(x[1], 4)), date: new Date(c[c.length - 1][0] * 1000).toISOString().slice(0, 10) };
+    const all = c.map(x => x[1]);
+    out[sym] = { sym, hi52: r2(Math.max(...all), last < 10 ? 4 : 2), lo52: r2(Math.min(...all), last < 10 ? 4 : 2), chg1y: r2((last / all[0] - 1) * 100), wk: all.filter((_, i) => (all.length - 1 - i) % 5 === 0).map(x => r2(x, 4)), price: r2(last, last < 10 ? 4 : 2), chg1d: r2((last / prev - 1) * 100), chg1w: r2((last / w1 - 1) * 100), chg1m: r2((last / m1 - 1) * 100), ytd: ybase ? r2((last / ybase - 1) * 100) : null, spark: c.slice(-60).map(x => r2(x[1], 4)), date: new Date(c[c.length - 1][0] * 1000).toISOString().slice(0, 10) };
   });
   return out;
 }
@@ -220,6 +221,8 @@ module.exports = async (req, res) => {
       return out;
     }),
   ]);
+  const [ry, bei] = await Promise.all([safe('美國實質利率', () => fred('DFII10', 300)), safe('通膨預期', () => fred('T10YIE', 300))]);
+  const lineOf = (pts, name, src) => { if (!pts?.length) return null; const p = pts.filter(x => x.v != null); const m1 = p.find(x => x.d <= new Date(Date.parse(p[0].d) - 30 * 864e5).toISOString().slice(0, 10)); return { name, v: p[0].v, d: p[0].d, m1: m1?.v ?? null, wk: p.filter((_, i) => i % 5 === 0).slice(0, 52).map(x => x.v).reverse(), src }; };
   const mk = {};
   const spark = await safe('市場行情', () => yspark(Object.values(MARKETS).flat().map(m => m[0])));
   Object.entries(MARKETS).forEach(([e, list]) => { mk[e] = list.map(([sym, name]) => spark?.[sym] && { ...spark[sym], name }).filter(Boolean); });
@@ -245,7 +248,7 @@ module.exports = async (req, res) => {
     in: { indicators: [] },
     us: { indicators: L([ind('cli', '領先指標（OECD）', cliO?.USA, { src: OCLI, unit: '點' })]) },
   };
-  eco.assets = { indicators: [] };
+  eco.assets = { indicators: [], realYield: lineOf(ry, '美國 10 年期實質利率（TIPS）', 'FRED DFII10'), breakeven: lineOf(bei, '美國 10 年期通膨預期', 'FRED T10YIE') };
   if (usC) eco.us.contrib = usC; if (sep) eco.us.sep = sep; if (euC) eco.eu.contrib = euC;
   Object.keys(eco).forEach(k => { eco[k].markets = mk[k] || []; });
   const ok = (tw?.indicators?.length || 0) + Object.values(eco).reduce((s, e) => s + e.indicators.length, 0) > 5;

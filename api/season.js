@@ -4,7 +4,7 @@
 'use strict';
 
 const UA = { 'User-Agent': 'Mozilla/5.0 (invest-notebook; personal research tool)' };
-const ALLOW = { '^GSPC': '標普 500', '^TWII': '台灣加權指數', '^IXIC': '那斯達克綜合', '^SOX': '費城半導體', '^DJI': '道瓊工業' };
+const ALLOW = { '^GSPC': '標普 500', '^TWII': '台灣加權指數', '^IXIC': '那斯達克綜合', '^SOX': '費城半導體', '^DJI': '道瓊工業', 'GC=F': '黃金', 'SI=F': '白銀', 'TWD=X': '美元兌台幣', 'JPY=X': '美元兌日圓' };
 // 美國總統任期資料（用於分類）
 const SIXTH = [1958, 1966, 1974, 1986, 1998, 2006, 2014]; // 同一政黨執政第 6 年（第二任期的期中選舉年）
 const REP_2ND = [1954, 1970, 1982, 1990, 2002, 2018]; // 共和黨總統第一任的期中選舉年
@@ -23,6 +23,7 @@ module.exports = async (req, res) => {
     pts.forEach(p => { const y = p.d.getUTCFullYear(), doy = Math.floor((p.d - Date.UTC(y, 0, 1)) / 864e5) + 1; (byY[y] = byY[y] || []).push([doy, p.c]); });
     const years = Object.keys(byY).map(Number).sort((a, b) => a - b), thisY = years[years.length - 1];
     const first = Math.max(years[0] + 1, sym === '^GSPC' || sym === '^DJI' ? 1950 : years[0] + 1);
+    if (years.length < 5) throw new Error('歷史資料不足');
     const path = y => { // 相對前一年最後收盤的累積漲跌 %，每 STEP 天一點
       const prev = byY[y - 1]; if (!prev) return null; const base = prev[prev.length - 1][1], arr = byY[y]; const out = []; let j = 0, last = null;
       for (let doy = 1; doy <= 366; doy += STEP) { while (j < arr.length && arr[j][0] <= doy) { last = arr[j][1]; j++; } out.push(last == null ? 0 : (last / base - 1) * 100); }
