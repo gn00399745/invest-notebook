@@ -865,3 +865,18 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .emp-r b { text-align: right; font-variant-numeric: tabular-nums; }
 .emp-calc { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; } .emp-calc > div { background: var(--bg); border-radius: 10px; padding: 8px; }
 .emp-calc em { display: block; font-style: normal; font-size: 11px; color: var(--muted); line-height: 1.35; } .emp-calc b { display: block; font-size: 15px; margin-top: 4px; }
+/* 週期研究總覽 */
+.cyc-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } .cyc-tabs::-webkit-scrollbar { display: none; } .cyc-tabs .chip { flex: 0 0 auto; }
+.cm-intro b { font-size: 15px; } .cm-flow { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0; font-size: 13px; }
+.cm-flow i, .cm-tag { display: inline-block; } .cm-flow i { width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.cm-flow i.l, .cm.l .cm-tag { background: #8b5cf6; } .cm-flow i.m, .cm.m .cm-tag { background: var(--navy-2); } .cm-flow i.s, .cm.s .cm-tag { background: var(--gold); }
+.cm { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin-bottom: 12px; border-left: 5px solid var(--line); }
+.cm.l { border-left-color: #8b5cf6; } .cm.m { border-left-color: var(--navy-2); } .cm.s { border-left-color: var(--gold); }
+.cm-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; } .cm-h b { font-size: 17px; } .cm-h em { font-style: normal; font-size: 12px; color: var(--muted); }
+.cm-tag { font-size: 11px; color: #fff; padding: 2px 8px; border-radius: 999px; font-weight: 700; }
+.cm-now { font-size: 14px; margin: 8px 0 2px; line-height: 1.5; }
+.cm-io { display: grid; gap: 6px; margin: 8px 0; } .cm-io > div { display: grid; grid-template-columns: 22px 1fr; gap: 4px; background: var(--bg); border-radius: 10px; padding: 8px 10px; font-size: 13px; line-height: 1.5; } .cm-io i { font-style: normal; }
+.cm-mo { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; height: 70px; align-items: end; margin: 10px 0 4px; }
+.cm-mo span { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
+.cm-mo i { display: block; width: 100%; border-radius: 3px 3px 0 0; background: #98a4b8; min-height: 2px; } .cm-mo span.g i { background: var(--green); } .cm-mo span.r i { background: var(--red); }
+.cm-mo em { font-style: normal; font-size: 10px; color: var(--muted); margin-top: 2px; } .cm-mo span.on em { color: var(--text); font-weight: 800; } .cm-mo span.on i { box-shadow: 0 0 0 2px var(--gold); }

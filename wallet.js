@@ -1,7 +1,7 @@
 /* 我的資產：收支記帳、存款、保單、房產、股票庫存、定期定額 */
 'use strict';
 
-['accounts', 'insurance', 'property', 'ledger', 'recurring', 'pendingDca', 'trades', 'ccards'].forEach(k => { S[k] = S[k] || []; });
+['accounts', 'insurance', 'property', 'ledger', 'recurring', 'pendingDca', 'trades', 'ccards', 'metals'].forEach(k => { S[k] = S[k] || []; });
 
 /* ---------- 幣別 ---------- */
 const CCY = ['TWD', 'USD', 'JPY', 'EUR', 'CNY', 'HKD', 'AUD', 'GBP'];
@@ -45,6 +45,20 @@ SCHEMAS.insurance = { title: '保單', fields: [
   { k: 'premium', l: '每年保費（選填）', t: 'money', h: '填了會自動在繳費月份記一筆「保險」支出。' },
   { k: 'payMonth', l: '繳費月份', t: 'select', o: Array.from({ length: 12 }, (_, i) => String(i + 1)) },
   { k: 'endYear', l: '繳費到哪一年（選填）', ph: '2032' }] };
+SCHEMAS.metals = { title: '貴金屬', fields: [
+  { k: 'kind', l: '種類', t: 'select', o: ['黃金存摺', '實體黃金（金條、金幣、金飾）', '白銀', '鉑金'] },
+  { k: 'name', l: '名稱（選填）', ph: '例如：台銀黃金存摺、1 台兩金條' },
+  { k: 'qty', l: '數量', t: 'money', h: '黃金存摺看存摺或網銀的「庫存公克數」；金條金飾看重量（可用台兩或台錢）。' },
+  { k: 'unit', l: '單位', t: 'select', o: ['公克', '台兩（37.5 公克）', '台錢（3.75 公克）', '盎司（31.1 公克）'] },
+  { k: 'cost', l: '總成本（台幣，選填）', t: 'money', h: '填了會顯示損益。黃金存摺可看「平均成本 × 公克數」。' },
+  { k: 'where', l: '存放／銀行（選填）', ph: '例如：台灣銀行、自家保險箱' }] };
+const MET_G = { 公克: 1, '台兩（37.5 公克）': 37.5, '台錢（3.75 公克）': 3.75, '盎司（31.1 公克）': 31.1035 };
+const MET_SYM = k => /白銀/.test(k) ? 'SI=F' : /鉑/.test(k) ? 'PL=F' : 'GC=F';
+function metalPrice(kind) { // 每公克台幣（國際價格換算；銀行牌價會有 1～2% 價差）
+  const all = Object.values(S.world?.economies || {}).flatMap(e => e.markets || []), m = all.find(x => x.sym === MET_SYM(kind)), tw = all.find(x => x.sym === 'TWD=X');
+  return m ? m.price * (tw?.price || fx()) / 31.1035 : null;
+}
+function metalVal(x) { const g = (num(x.qty) || 0) * (MET_G[x.unit] || 1), p = metalPrice(x.kind || ''); return { g, p, v: p != null ? g * p : num(x.cost) || 0, priced: p != null }; }
 SCHEMAS.property = { title: '房產', fields: [
   { k: 'name', l: '名稱', ph: '例如：自住 新北板橋' },
   { k: 'value', l: '估計市值', t: 'money', h: '可到內政部「實價登錄」查同社區近期成交，取個保守數字；一年更新一次就好。' },
@@ -112,6 +126,7 @@ function editAsset(key, id) {
     title: (rec ? '編輯' : '新增') + sc.title,
     body: sc.fields.map(f => fieldHTML(f, rec?.[f.k])).join(''),
     onSave: d => {
+      if (key === 'metals') { if (!(num(d.qty) > 0)) { toast('請填數量'); return false; } d.name = d.name || d.kind.replace(/（.*）/, ''); }
       if (key !== 'accounts' && !d.name) { toast('請填名稱'); return false; }
       let r = rec; if (r) Object.assign(r, d); else { r = { id: uid(), ...d }; S[key].push(r); }
       const msg = linkRecurring(key, r); toast(msg || '已儲存');
@@ -541,8 +556,9 @@ function wealth() {
   const savIns = sum(S.insurance.filter(i => i.kind === '儲蓄險'), i => toTWD(i.cashValue, i.ccy));
   const invIns = sum(S.insurance.filter(i => i.kind === '投資型保單'), i => toTWD(i.cashValue, i.ccy));
   const prop = sum(S.property, p => num(p.value)), loan = sum(S.property, p => num(p.loan));
-  const invest = cash + tw + us + savIns + invIns, cardD = sum(S.ccards || [], cardDebt);
-  return { hs, cash, tw, us, savIns, invIns, prop, loan, invest, cardD, net: invest + prop - loan - cardD,
+  const metal = sum(S.metals || [], x => metalVal(x).v);
+  const invest = cash + tw + us + savIns + invIns + metal, cardD = sum(S.ccards || [], cardDebt);
+  return { hs, cash, tw, us, savIns, invIns, metal, prop, loan, invest, cardD, net: invest + prop - loan - cardD,
     pl: sum(hs, h => h.plT), day: hs.some(h => h.dayT != null) ? sum(hs, h => h.dayT) : null, realized: sum(holdings(), h => toTWD(h.realized, ccyOf(h.code))) };
 }
 const ym = d => d.slice(0, 7);
@@ -575,10 +591,10 @@ const signed = (n, d = 0) => n == null ? '—' : `<span class="${n >= 0 ? 'up' :
 /* ---------- 首頁：我的資產 ---------- */
 PAGES.overview = PAGES.home;
 PAGES.home = () => {
-  setTimeout(() => refreshHoldQuotes(false), 30);
+  setTimeout(() => { refreshHoldQuotes(false); if ((S.metals || []).length && typeof loadWorld === 'function') loadWorld(false); }, 30);
   const W = wealth(), m = ym(today()), M = monthStats(m), avgExp = avgMonthlyExpense();
   const emptyAll = !S.accounts.length && !W.hs.length && !S.ledger.length && !S.insurance.length && !S.property.length;
-  const parts = [{ l: '現金與存款', v: W.cash }, { l: '台股', v: W.tw }, { l: '美股／海外', v: W.us }, { l: '儲蓄險', v: W.savIns }, { l: '投資型保單', v: W.invIns }];
+  const parts = [{ l: '現金與存款', v: W.cash }, { l: '台股', v: W.tw }, { l: '美股／海外', v: W.us }, { l: '儲蓄險', v: W.savIns }, { l: '投資型保單', v: W.invIns }, { l: '貴金屬', v: W.metal }];
   if (S.showProp) parts.push({ l: '房產淨值', v: W.prop - W.loan });
   const alerts = S.monAlerts?.length ? `<div class="card alert"><div class="card-head"><h3 class="gold-bar">⚠ 監控條件觸發</h3><button class="btn-small ghost" id="clearAlerts">知道了</button></div>${S.monAlerts.map(a => `<div>${esc(a)}</div>`).join('')}</div>` : '';
   const pend = S.pendingDca.length ? `<div class="card alert"><h3 class="gold-bar">待確認的買進</h3>${S.pendingDca.map(x => `<div class="pend"><span>${esc(x.date.slice(5))}　<span class="pill ${x.kind === '員工認股' ? 'gold' : ''}">${esc(x.kind || '定期定額')}</span> <b>${esc(x.code)}</b> ${esc(x.name || '')}　${fmt(num(x.amount))} 元</span><span class="btn-row"><button class="btn-small" data-dca="${x.id}">確認入帳</button><button class="btn-small ghost" data-dcaskip="${x.id}">這期沒扣</button></span></div>`).join('')}<div class="help">確認時會帶入現價（員工認股為市價 × 折扣）與估計股數，請對照券商成交通知或公司的認股通知修改。</div></div>` : '';
@@ -594,6 +610,7 @@ PAGES.home = () => {
         <span class="btn-row"><button class="btn-small" data-hbuy="${esc(h.code)}">加碼</button><button class="btn-small ghost" data-hsell="${esc(h.code)}">賣出</button><button class="btn-small ghost" data-hdet="${esc(h.code)}">明細</button></span></div></div>`).join('');
   const other = [
     ...S.accounts.map(a => ({ k: 'accounts', id: a.id, ic: '🏦', t: a.name || a.kind, s: `${a.kind || ''}${a.rateP ? `｜${a.rateP}%` : ''}${a.maturity ? `｜${a.maturity} 到期` : ''}`, v: money(num(a.balance) || 0, a.ccy || 'TWD') })),
+    ...(S.metals || []).map(x => { const m = metalVal(x), c = num(x.cost); return { k: 'metals', id: x.id, ic: /白銀/.test(x.kind) ? '🥈' : '🥇', t: x.name, s: `${fmt(m.g, m.g < 100 ? 2 : 0)} 公克${m.p ? `｜每公克約 ${fmt(m.p, 0)}` : '｜按「市場」更新價格'}${c && m.priced ? `｜損益 ${m.v - c >= 0 ? '+' : ''}${fmt(m.v - c)}（${pct((m.v / c - 1) * 100)}）` : ''}`, v: fmt(m.v) }; }),
     ...S.insurance.map(i => ({ k: 'insurance', id: i.id, ic: '🛡️', t: i.name, s: `${i.kind}${i.premium ? `｜年繳 ${fmt(num(i.premium))}` : ''}`, v: money(num(i.cashValue) || 0, i.ccy || 'TWD') })),
     ...(S.ccards || []).map(c => ({ k: 'ccards', id: c.id, ic: '💳', t: c.name, s: `信用卡｜${c.closeDay} 號結帳・${c.dueDay} 號繳款`, v: cardDebt(c) ? '−' + fmt(cardDebt(c)) : '0' })),
     ...S.property.map(p => ({ k: 'property', id: p.id, ic: '🏠', t: p.name, s: `市值 ${fmt(num(p.value))}｜房貸 ${fmt(num(p.loan))}`, v: fmt((num(p.value) || 0) - (num(p.loan) || 0)) })),
@@ -628,7 +645,7 @@ PAGES.home = () => {
     ${W.realized ? `<div class="help" style="margin-top:6px">已實現損益累計 ${signed(W.realized)} 元</div>` : ''}
   </div>
   <div class="card">
-    <div class="card-head"><h3 class="gold-bar">存款、保單、房產</h3><button class="btn-small" data-act="sheetAsset">＋ 新增</button></div>
+    <div class="card-head"><h3 class="gold-bar">存款、貴金屬、保單、房產</h3><button class="btn-small" data-act="sheetAsset">＋ 新增</button></div>
     ${other || '<div class="empty">還沒有資料。</div>'}
   </div>
   <div class="card"><div class="card-head"><h3 class="gold-bar">投資研究</h3><button class="btn-small ghost" data-go="overview">研究總覽 →</button></div>
@@ -677,7 +694,7 @@ go = function (page) { _goW(page); const g = groupOf(current); document.querySel
 
 /* ---------- 動作 ---------- */
 function sheet(kind) {
-  const all = [['exp', '➖', '記支出'], ['inc', '➕', '記收入'], ['buy', '📈', '買進股票／ETF'], ['sell', '📉', '賣出'], ['import', '📋', '匯入券商庫存'], ['payslip', '💼', '薪資單（扣繳＋分帳戶）'], ['recur', '🔁', '固定收支／定期定額'], ['espp', '🏢', '員工認股（折價買）'], ['addAcct', '🏦', '存款帳戶'], ['addCard', '💳', '信用卡'], ['addIns', '🛡️', '保單'], ['addProp', '🏠', '房產']];
+  const all = [['exp', '➖', '記支出'], ['inc', '➕', '記收入'], ['buy', '📈', '買進股票／ETF'], ['sell', '📉', '賣出'], ['import', '📋', '匯入券商庫存'], ['payslip', '💼', '薪資單（扣繳＋分帳戶）'], ['recur', '🔁', '固定收支／定期定額'], ['espp', '🏢', '員工認股（折價買）'], ['addAcct', '🏦', '存款帳戶'], ['addCard', '💳', '信用卡'], ['addMetal', '🥇', '貴金屬（黃金存摺、金條）'], ['addIns', '🛡️', '保單'], ['addProp', '🏠', '房產']];
   const list = kind === 'asset' ? all.slice(8).concat([all[4]]) : all;
   openModal({ title: kind === 'asset' ? '新增資產' : '要記什麼？', noSave: true, body: `<div class="tiles sm">${list.map(([a, ic, t]) => `<button type="button" class="tile" data-act="${a}"><i>${ic}</i><b>${t}</b></button>`).join('')}</div>` });
 }
@@ -722,6 +739,7 @@ document.addEventListener('click', e => {
     case 'espp': return openTradeForm({ side: '買進', kind: '員工認股', esppDisc: 85, acct: '', fee: '0', note: '員工認股（市價 85%）' });
     case 'addAcct': return editAsset('accounts');
     case 'addCard': return openCard(null);
+    case 'addMetal': return editAsset('metals');
     case 'addIns': return editAsset('insurance');
     case 'addProp': return editAsset('property');
     case 'sheet': return sheet();
@@ -738,7 +756,7 @@ document.addEventListener('click', async e => {
 document.addEventListener('change', e => { if (e.target.id === 'showProp') { S.showProp = e.target.checked; save(); const y = scrollY; render(); scrollTo(0, y); } });
 const _editW = editRecord;
 editRecord = function (key, id) {
-  if (key === 'accounts' || key === 'insurance' || key === 'property') return editAsset(key, id);
+  if (key === 'accounts' || key === 'insurance' || key === 'property' || key === 'metals') return editAsset(key, id);
   if (key === 'ccards') return openCard(id);
   if (key === 'ledger') { const x = S.ledger.find(y => y.id === id); if (x?.type === '轉帳') return openModal({ title: '繳卡費紀錄', noSave: true, body: `<div style="font-size:15px">${esc(x.date)}　${esc(x.note)}<br>金額 <b>${fmt(num(x.amount))}</b>　從 ${esc(acctById(x.acct)?.name || '未指定帳戶')}</div><div class="help" style="margin-top:8px">要修改請刪除後重新按「繳卡費」。刪除會把金額加回存款帳戶。</div>`, onDelete: () => { applyLedger(x, -1); S.ledger = S.ledger.filter(y => y.id !== id); save(); toast('已刪除'); } }); return openLedger({}, id); }
   if (key === 'recurring') return openRecurring(id);

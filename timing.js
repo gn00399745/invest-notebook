@@ -13,7 +13,7 @@ async function loadSeason(sym, force) {
   seaBusy = true; if (current === 'season') render();
   try { const j = await (await fetch('api/season?sym=' + encodeURIComponent(sym), { signal: AbortSignal.timeout(60000) })).json(); if (j.error) throw new Error(j.error); j.at = Date.now(); S.season[sym] = j; save(); }
   catch (e) { toast('季節性資料讀取失敗：' + e.message); }
-  seaBusy = false; if (current === 'season' || current === 'timing') { const y = scrollY; render(); scrollTo(0, y); }
+  seaBusy = false; if (['season', 'timing', 'cycles'].includes(current)) { const y = scrollY; render(); scrollTo(0, y); }
 }
 const MSTART = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335];
 function seasonChart(d, show) {
@@ -228,7 +228,12 @@ function factorList(fs) {
 function goldView() {
   const g = mkOf('GC=F'), si = mkOf('SI=F'), pl = mkOf('PL=F'), tw = mkOf('TWD=X'), dx = mkOf('DX-Y.NYB'), gld = mkOf('00635U.TW');
   const A = S.world?.economies?.assets || {}, ry = A.realYield, be = A.breakeven;
-  if (!g) return `<div class="card empty">${worldBusy ? '資料載入中…' : '還沒有資料，按「總經」頁右上角的更新。'}</div>`;
+  const mine = (S.metals || []).map(x => ({ x, m: metalVal(x) })), mv = mine.reduce((a, b) => a + b.m.v, 0), mc = mine.reduce((a, b) => a + (num(b.x.cost) || 0), 0);
+  const myCard = `<div class="card"><div class="card-head"><h3 class="gold-bar">💰 我的貴金屬</h3><button class="btn-small" data-act="addMetal">＋ 記錄</button></div>
+    ${mine.length ? mine.map(({ x, m }) => `<div class="arow" data-edit="metals" data-id="${x.id}"><span class="a-ic">${/白銀/.test(x.kind) ? '🥈' : '🥇'}</span><span class="a-t"><b>${esc(x.name)}</b><em>${fmt(m.g, 2)} 公克${x.where ? '｜' + esc(x.where) : ''}</em></span><span class="a-v">${fmt(m.v)}</span></div>`).join('') + `<div class="w-rates" style="margin-top:8px"><span>市值 <b>${fmt(mv)}</b></span>${mc ? `<span>成本 ${fmt(mc)}</span><span>損益 <b class="${mv >= mc ? 'up' : 'down'}">${mv >= mc ? '+' : ''}${fmt(mv - mc)}（${pct((mv / mc - 1) * 100)}）</b></span>` : ''}</div>`
+      : '<div class="empty">黃金存摺、金條、金飾、白銀都可以記在這裡，會用即時國際金價換算市值並計入「資產」。黃金 ETF（例如 00635U、GLD）請用「買股票」記錄。</div>'}
+    <div class="help">市值＝持有公克數 × 國際價格換算的每公克台幣；銀行黃金存摺的買回價通常再低 1～2%。</div></div>`;
+  if (!g) return myCard + `<div class="card empty">${worldBusy ? '資料載入中…' : '還沒有資料，按「總經」頁右上角的更新。'}</div>`;
   const twd = tw?.price || fx(), gG = g.price * twd / OZ_G;
   const gsr = si ? g.price / si.price : null, gsrS = si?.spark?.length === g.spark?.length ? g.spark.map((v, i) => v / si.spark[i]) : null;
   const r = rsi14(g.spark), p52 = pos52(g);
@@ -241,7 +246,7 @@ function goldView() {
   if (r != null) fs.push([`金價 RSI ${fmt(r, 0)}`, r >= 75 ? 'neg' : r <= 35 ? 'pos' : 'neu', r >= 75 ? '短線過熱，追高風險大' : r <= 35 ? '短線超賣' : '短線動能正常']);
   if (p52 != null) fs.push([`位於 52 週區間 ${fmt(p52, 0)}%`, p52 >= 90 ? 'neu' : p52 <= 20 ? 'pos' : 'neu', p52 >= 90 ? '接近一年高點：趨勢強，但新資金宜分批' : p52 <= 20 ? '接近一年低點' : '區間中段']);
   const F = factorList(fs);
-  return `<div class="card"><div class="card-head"><h3 class="gold-bar">🥇 黃金</h3><span class="sigp ${F.verdict[1]}">${F.verdict[0]}</span></div>
+  return myCard + `<div class="card"><div class="card-head"><h3 class="gold-bar">🥇 黃金</h3><span class="sigp ${F.verdict[1]}">${F.verdict[0]}</span></div>
       <div class="mf-big"><div><em>國際金價（美元／盎司）</em><b>${fmt(g.price, 1)}</b><span>${chg(g.chg1d, 2)}今日　近 1 月 ${pc(g.chg1m)}%　今年 ${pc(g.ytd)}%</span></div>
         <div><em>台幣計價（每公克）</em><b>${fmt(gG, 0)}</b><span>每台兩（37.5g）約 ${fmt(gG * 37.5, 0)} 元</span></div></div>
       ${sparkSVG(g.wk, 'gold')}<div class="help" style="margin:-2px 0 6px">近一年週線</div>
@@ -501,3 +506,66 @@ PAGES.empire = () => {
 };
 if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['macro', '總經'], ['cycles', '景氣循環'], ['empire', '霸權輪替'], ['metfx', '金屬・匯率'], ['season', '季節性'], ['monitor', '監控'], ['overview', '研究總覽']];
 if (current === 'cycles' || current === 'empire') render();
+
+/* ================= 週期研究：長週期（霸權）× 中週期（景氣）× 短週期（選舉與季節）整合 ================= */
+const _seasonPage = PAGES.season, _empirePage = PAGES.empire;
+const stripHead = h => h.replace(/^\s*<h2>[^<]*<\/h2>/, '').replace(/<div class="chips"><button class="chip" data-go="cycles">‹ 景氣循環<\/button><\/div>/, '');
+const CYC_TABS = [['map', '🗺️ 總覽'], ['us', '🇺🇸 美國'], ['tw', '🇹🇼 台灣'], ['intl', '🌍 歐洲・日本'], ['season', '📅 選舉與季節'], ['empire', '👑 霸權輪替']];
+let mapBusy = false;
+async function loadMap() {
+  if (mapBusy) return; mapBusy = true;
+  for (const r of ['us', 'tw']) if (!S.cyc[r]) await loadCycles(false, r);
+  if (!S.season['^GSPC']) await loadSeason('^GSPC', false);
+  mapBusy = false; if (current === 'cycles' && (S.cycReg || 'map') === 'map') { const y = scrollY; render(); scrollTo(0, y); }
+}
+function scaleCard(o) {
+  return `<div class="cm ${o.cls || ''}"><div class="cm-h"><span class="cm-tag">${o.tag}</span><b>${o.title}</b><em>${o.span}</em></div>
+    <div class="cm-now">${o.now}</div>${o.bar || ''}
+    <div class="cm-io"><div><i>📊</i><span>${o.data}</span></div><div><i>👉</i><span>${o.todo}</span></div></div>
+    <button class="btn-small ghost" data-cycreg="${o.go}">看完整分析 ›</button></div>`;
+}
+function mapView() {
+  setTimeout(loadMap, 30);
+  const yr = new Date().getFullYear(), mo = new Date().getMonth(), U = S.cyc.us?.stats, T = S.cyc.tw?.stats, SD = S.season['^GSPC'];
+  const usd = yr - 1920, avgEmp = 94;
+  const long = scaleCard({ tag: '長週期', title: '霸權與貨幣', span: '數十年～百年', go: 'empire', cls: 'l',
+    now: `美元當世界貨幣第 <b>${usd}</b> 年（過去五個霸權平均約 ${avgEmp} 年）`,
+    bar: rangeBar(0, 150, usd, { label: `美元 ${usd} 年`, zones: [[80, 110, 'bad']], ticks: [[0, '0'], [avgEmp, `平均 ${avgEmp}`], [150, '150 年']] }),
+    data: '中國經濟規模（購買力平價）約 2016 年已超過美國，但人民幣只占全球外匯存底約 2%，美元仍占 57%。',
+    todo: '決定「資產配置比例」：不要只押單一貨幣，可配置一部分黃金與非美元資產；不用來決定買賣時點。' });
+  const mid = scaleCard({ tag: '中週期', title: '景氣循環', span: '4～10 年', go: 'tw', cls: 'm',
+    now: T && U ? `台灣擴張第 <b>${T.cur.months}</b> 個月（歷次平均 ${T.expPost}）・美國擴張第 <b>${U.cur.months}</b> 個月（戰後平均 ${U.expPost}）` : '資料載入中…',
+    bar: T ? rangeBar(0, Math.max(100, T.maxExp + 4), Math.min(T.cur.months, 100), { label: `台灣 ${T.cur.months} 個月`, zones: [[T.expPost, Math.max(100, T.maxExp + 4), 'bad']], ticks: [[0, '0'], [T.expPost, `平均 ${T.expPost}`], [T.maxExp, `最長 ${T.maxExp}`]] }) : '',
+    data: T && U ? `衰退時股市平均最大跌幅：台股 ${T.dd}%、美股 ${U.dd}%；股市多半比景氣谷底早幾個月見底，谷底後一年平均漲 ${T.after12}%（台股）。` : '',
+    todo: '決定「股票放多少」：擴張已超過平均長度時不追高、守紀律；看到燈號轉藍、股市大跌時，反而是分批加碼的機會。' });
+  let shortNow = '', shortBar = '', shortData = '';
+  if (SD) {
+    const m = SD.monthly.mid, cur = m[mo], best = m.map((x, i) => [i, x?.avg ?? -99]).sort((a, b) => b[1] - a[1]).slice(0, 2).map(x => x[0] + 1);
+    shortNow = `${yr} 是${yr % 4 === 2 ? '<b>美國期中選舉年</b>' : yr % 4 === 0 ? '美國大選年' : yr % 4 === 1 ? '美國大選隔年' : '美國大選前一年'}，現在 ${mo + 1} 月（期中年歷史平均 ${pc(cur?.avg, 1)}%、上漲率 ${cur?.win ?? '—'}%）`;
+    shortBar = `<div class="cm-mo">${m.map((x, i) => `<span class="${i === mo ? 'on' : ''} ${x?.avg >= 1 ? 'g' : x?.avg < 0 ? 'r' : ''}" title="${i + 1} 月 平均 ${x?.avg}%"><i style="height:${Math.min(100, Math.abs(x?.avg || 0) / 3.5 * 100)}%"></i><em>${i + 1}</em></span>`).join('')}</div>`;
+    shortData = `期中選舉年最強的月份是 ${best.join('、')} 月；9 月底進場持有一年，歷史上 ${SD.midFwd.filter(x => x.r > 0).length}/${SD.midFwd.length} 次上漲，平均 ${pc(SD.midFwd.reduce((a, b) => a + b.r, 0) / SD.midFwd.length)}%。`;
+  }
+  const short = scaleCard({ tag: '短週期', title: '選舉與季節', span: '1 年內', go: 'season', cls: 's', now: shortNow || '資料載入中…', bar: shortBar, data: shortData,
+    todo: '決定「進場節奏」：在歷史上偏弱的月份分批、偏強的月份不追；權重最低，只當背景風向。' });
+  return `<div class="card cm-intro"><b>三種週期，各管一件事</b><div class="cm-flow"><span><i class="l"></i>長週期 → 配置比例</span><span><i class="m"></i>中週期 → 股票多寡</span><span><i class="s"></i>短週期 → 進場節奏</span></div>
+      <div class="help">週期越長，影響越大但越慢；越短，越容易被雜訊干擾。判斷時從長到短，三者方向一致時最有把握。實際買賣請搭配「進出場時機」頁。</div></div>
+    ${long}${mid}${short}
+    <div class="card"><h3 class="gold-bar">🧭 一句話總結</h3><div class="tm-ph">${T && U ? `長期：美元霸權仍在但緩慢鬆動 → 分散配置、留一點黃金。中期：台灣與美國都在擴張後段（${T.cur.months > T.expPost ? '台灣已超過平均長度' : '台灣仍在平均長度內'}）→ 持有但不追高，準備好現金等下一次衰退。短期：${yr % 4 === 2 ? '期中選舉年第四季歷史上偏強' : '依季節性安排分批節奏'}。` : '資料載入中…'}</div><button class="btn-small" data-go="timing">到「進出場時機」看我的持股該怎麼做 ›</button></div>`;
+}
+PAGES.cycles = () => {
+  const reg = S.cycReg || 'map';
+  const tabs = `<div class="chips cyc-tabs">${CYC_TABS.map(([k, l]) => `<button class="chip ${k === reg ? 'on' : ''}" data-cycreg="${k}">${l}</button>`).join('')}</div>`;
+  const head = `<h2>週期研究</h2>`;
+  if (reg === 'map') return head + `<p class="lead">市場同時受三種週期影響：百年一次的<b>霸權更替</b>、幾年一次的<b>景氣循環</b>、每年重複的<b>選舉與季節</b>。這頁把它們放在一起，告訴你現在各在哪個位置、該怎麼用。</p>` + tabs + mapView();
+  if (reg === 'season') return head + tabs + stripHead(_seasonPage());
+  if (reg === 'empire') return head + tabs + stripHead(_empirePage());
+  setTimeout(() => loadCycles(false, reg), 30);
+  const C = S.cyc[reg];
+  const lead = { us: '美國自 1920 年以來共經歷 18 次衰退與 18 段擴張（依美國國家經濟研究局 NBER 認定）。', tw: '台灣自 1954 年以來共經歷 15 次完整景氣循環，現在處於第 16 次循環的擴張期（依國家發展委員會認定）。', intl: '英國、德國、法國、歐元區、日本的衰退（以實質 GDP 連續兩季下滑認定），並與美國、台灣放在同一條時間軸比較。' }[reg];
+  return head + `<p class="lead">${lead}</p>` + tabs + (!C ? `<div class="card empty">${cycBusy ? '計算中…（約 10～20 秒）' : '讀取中…'}</div>` : reg === 'intl' ? intlView(C) : cycView(C));
+};
+// 舊入口（季節性、霸權輪替）導向週期研究的分頁
+const _goCyc = go;
+go = function (page) { if (page === 'season' || page === 'empire') { S.cycReg = page; page = 'cycles'; } return _goCyc(page); };
+if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['macro', '總經'], ['cycles', '週期研究'], ['metfx', '黃金・匯率'], ['monitor', '監控'], ['overview', '研究總覽']];
+if (['cycles', 'season', 'empire'].includes(current)) go(current);
