@@ -66,7 +66,56 @@ function layerSelectHTML(cur) {
   const groups = CHAINS.map(ch => `<optgroup label="${esc(ch.name)}">${ch.layers.map((l, i) => { const v = layerValue(ch, i); return `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(v)}</option>`; }).join('')}</optgroup>`).join('');
   return `<select data-card-f="layer"><option value="">—</option>${groups}<option ${cur === '其他' ? 'selected' : ''}>其他</option></select>`;
 }
-// 代號 → 所在層（由各層範例公司與常見美股代號建立）
+// ---------- 自動歸類：代號對照表 → 名稱關鍵字 → Yahoo 產業 → 證交所產業別 ----------
+const LV = k => { const [id, n] = k.split(':'), ch = CHAINS.find(c => c.id === id); return ch && ch.layers[n - 1] ? layerValue(ch, n - 1) : null; };
+// 常見台美股的人工對照（優先於範例公司）
+const CODE_MAP = {
+  'ai:1': 'META PLTR CRM ADBE AAPL NFLX UBER SHOP NOW INTU WDAY APP TTD RDDT SPOT DUOL HUBS',
+  'ai:2': 'GOOGL GOOG SPCX',
+  'ai:3': 'MSFT AMZN ORCL CRWV SNOW NET DDOG MDB CRWD ZS PANW FTNT NBIS',
+  'ai:4': '2317 2382 3231 6669 2356 2324 4938 2376 2377 2357 2353 3706 6414 3013 6117 DELL SMCI HPE HPQ CLS FLEX JBL',
+  'ai:5': '2345 3596 5388 2332 3380 4977 3081 3363 4979 3450 6442 4908 3163 3234 4971 6426 ANET MRVL COHR LITE CSCO CIEN CRDO ALAB AAOI FN GLW',
+  'ai:6': '2308 3017 3324 3653 8996 2421 6230 3483 2301 6409 6412 3015 VRT ETN MPWR CEG VST NRG OKLO SMR NVT MOD',
+  'ai:7': '2454 3661 3443 3035 2379 3034 6533 3529 6643 5274 4966 6415 3227 2458 6138 6526 4961 3592 3014 5269 6202 8016 NVDA AMD AVGO QCOM ARM TXN ADI NXPI MCHP SNPS CDNS LSCC SWKS QRVO',
+  'ai:8': '2408 2344 2337 8299 3260 4967 3006 2451 8271 MU WDC STX SNDK',
+  'ai:9': '3711 2449 6239 6147 8150 3131 6640 6187 2467 3374 AMKR ASX',
+  'ai:10': '2330 2303 5347 6770 TSM INTC GFS UMC',
+  'ai:11': '3680 6510 6223 2404 6196 3413 3583 5536 6683 6515 7769 2360 3030 6139 ASML AMAT LRCX KLAC TER ONTO',
+  'ai:12': '6488 3532 5483 3037 8046 3189 2383 6274 6213 2368 3044 4958 2327 2492 3026 2375 2478 6173 4763 1773 3533 8028 6182 3016 3023 1802 1815 5469 6153 6191 8358 ENTG LIN APH',
+  'ev:1': '2207 2201 2258 2204 TSLA RIVN LCID NIO LI XPEV F GM TM',
+  'ev:2': '4721 6121 3211 ALB',
+  'ev:3': '3707 ON',
+  'ev:4': '3552 2231 MBLY',
+  'ev:6': '1519 1503 1513 1514 1504 1605 1609 1608 1618 PWR GEV',
+  'ev:7': '9958 6806 3708 6443 3576 6869 FSLR NEE ENPH',
+  'fin:1': '2880 2884 2886 2890 2891 2892 5880 2801 2834 2812 5876 2838 2845 2849 JPM BAC WFC C',
+  'fin:2': '2881 2882 2887 2867 2851 2852 2832',
+  'fin:3': '2883 2885 2889 6024 2855 6005 GS MS BLK SCHW',
+  'fin:4': 'V MA PYPL AXP',
+  'cons:1': '2412 3045 4904 T VZ TMUS',
+  'cons:2': '1216 1210 1227 1229 1201 1215 1231 1232 KO PG PEP',
+  'cons:3': '2912 5903 8454 2903 5904 COST WMT TGT',
+  'cons:4': '2727 2731 2707 2723 2753 1268 2748 2704 9943 MCD SBUX MAR HLT BKNG ABNB',
+  'ship:1': '2603 2609 2615 2605 2606 2637 2612 5608 ZIM MATX',
+  'ship:2': '2618 2610 2646 2634 DAL UAL AAL LUV',
+  'ship:3': '1301 1303 1326 6505 1304 1308 1312 1314 1722 1717 1402 DOW LYB XOM CVX',
+  'ship:4': '2002 2014 2027 2006 2015 2023 1101 1102 2031 NUE STLD CLF VMC MLM',
+  'sat:1': 'RKLB ASTS IRDM PL SATS GSAT VSAT',
+  'sat:2': '3105 8086 5222 3042 2455',
+  'sat:3': '3491 3138 2314',
+  'sat:4': '2313 2367 6271',
+  'sat:5': '6285',
+  'champ:1': '2049 1597 4571 4583 4576',
+  'champ:2': '1590 4526 1583 2395',
+  'champ:3': '2059 8210',
+  'champ:4': '1319 6605 1522 1536 6279 3665 2105 2106 2228 2239 1525',
+  'champ:5': '1476 1477 9910 9904 9921 9914 1736 9802 9938 6670',
+  'champ:6': '8464 1560 1515 1527',
+  'bio:1': 'LLY NVO MRK PFE ABBV JNJ AZN AMGN GILD BMY',
+  'bio:2': '6446 4743 4123 6535 4147 6547 6550 3176 4174 4152 4162 REGN VRTX MRNA',
+  'bio:3': '6472 1795 4114 1760 4105 1789 6589 1762 4142',
+  'bio:4': '6469 6491 4737 4107 1733 4106 6612 8406 4164 1786 ISRG ABT MDT SYK BSX TMO DHR',
+};
 const CODE_LAYER = (() => {
   const m = {};
   CHAINS.forEach(ch => ch.layers.forEach((l, i) => {
@@ -74,22 +123,86 @@ const CODE_LAYER = (() => {
     (l.ex || '').replace(/（([A-Z.]{1,6})）/g, (_, t) => { if (!m[t]) m[t] = v; });
     (l.ex || '').replace(/\b(\d{4})\b/g, (_, t) => { if (!m[t]) m[t] = v; });
   }));
-  Object.assign(m, { NVDA: '7 AI 晶片設計', AMD: '7 AI 晶片設計', AVGO: '7 AI 晶片設計', TSM: '10 晶圓代工', MU: '8 記憶體', ASML: '11 半導體設備', AMAT: '11 半導體設備', LRCX: '11 半導體設備', KLAC: '11 半導體設備', MSFT: '3 AI 平台與雲端', AMZN: '3 AI 平台與雲端', GOOGL: '2 模型與 AI 實驗室', GOOG: '2 模型與 AI 實驗室', META: '1 終端需求與變現', ORCL: '3 AI 平台與雲端', CRWV: '3 AI 平台與雲端', DELL: '4 資料中心與系統整合', SMCI: '4 資料中心與系統整合', ANET: '5 網通與光通訊', MRVL: '5 網通與光通訊', COHR: '5 網通與光通訊', LITE: '5 網通與光通訊', VRT: '6 電力與散熱', ETN: '6 電力與散熱', PLTR: '1 終端需求與變現', CRM: '1 終端需求與變現', ADBE: '1 終端需求與變現', SPCX: '2 模型與 AI 實驗室', AAPL: '1 終端需求與變現', INTC: '10 晶圓代工', QCOM: '7 AI 晶片設計', ARM: '7 AI 晶片設計', '2330': '10 晶圓代工', '2454': '7 AI 晶片設計', '2317': '4 資料中心與系統整合', '2308': '6 電力與散熱', '3711': '9 先進封裝' });
+  Object.entries(CODE_MAP).forEach(([k, s]) => { const v = LV(k); if (v) s.split(/\s+/).forEach(c => { m[c] = v; }); });
   return m;
 })();
-const INDUSTRY_LAYER = [
-  [/金融|保險|銀行/, '金融｜1 銀行（利差）'], [/證券/, '金融｜3 證券與資產管理'], [/航運/, '原物料｜1 貨櫃航運'],
-  [/塑膠|化學/, '原物料｜3 石化塑膠'], [/鋼鐵|水泥/, '原物料｜4 鋼鐵水泥'], [/食品/, '內需｜2 食品與民生'],
-  [/貿易百貨|百貨/, '內需｜3 零售通路'], [/觀光|餐飲/, '內需｜4 觀光餐飲'], [/生技|醫療/, '生技｜2 新藥研發'],
-  [/紡織|運動休閒/, '隱冠｜5 運動休閒製造'], [/汽車/, '電動車｜1 整車品牌'], [/電機/, '電動車｜6 電網與重電'], [/綠能|環保/, '電動車｜7 再生能源'],
-  [/半導體/, '7 AI 晶片設計'], [/電腦及週邊/, '4 資料中心與系統整合'], [/通信網路/, '5 網通與光通訊'],
-  [/電子零組件/, '12 材料與零組件'], [/光電/, '5 網通與光通訊'], [/其他電子|電子通路/, '4 資料中心與系統整合'],
+// 名稱關鍵字（台股）
+const NAME_LAYER = [[/電信/, 'cons:1'], [/銀行|商銀/, 'fin:1'], [/人壽|產險|保險|再保/, 'fin:2'], [/證券|期貨|投信/, 'fin:3'], [/海運|航運|船/, 'ship:1'], [/航空/, 'ship:2'], [/鋼|鐵/, 'ship:4'], [/水泥/, 'ship:4'], [/石化|塑膠/, 'ship:3'], [/製藥|藥業|生技|醫材/, 'bio:2'], [/重電|電機|機電/, 'ev:6'], [/綠能|太陽能|風電|再生/, 'ev:7']];
+// Yahoo Finance 英文產業分類（台美股都有）
+const YF_LAYER = [
+  [/Semiconductor Equipment/, 'ai:11', ['ai:12', 'ai:9']], [/^Semiconductors$/, 'ai:7', ['ai:8', 'ai:9', 'ai:10']],
+  [/Electronic Components/, 'ai:12', ['ai:6', 'ai:5', 'ai:4']], [/Computer Hardware|Consumer Electronics/, 'ai:4', ['ai:1']],
+  [/Communication Equipment/, 'ai:5', ['sat:5']], [/Electronics & Computer Distribution/, 'ai:4'], [/Scientific & Technical Instruments/, 'ai:11', ['ai:12']],
+  [/Software.*Application|Internet Content|Internet Retail|Electronic Gaming/, 'ai:1'], [/Software.*Infrastructure|Information Technology Services/, 'ai:3', ['ai:1']],
+  [/Electrical Equipment/, 'ai:6', ['ev:6']], [/Renewable|Solar/, 'ev:7'], [/Utilities/, 'ai:6', ['ev:6']],
+  [/Specialty Industrial Machinery|Industrial Machinery|Tools & Accessories|Farm & Heavy|Metal Fabrication/, 'champ:2', ['champ:1', 'champ:6']],
+  [/Auto Parts/, 'champ:4', ['ev:3', 'ev:4']], [/Auto Manufacturers|Auto & Truck/, 'ev:1'],
+  [/^Banks/, 'fin:1'], [/Insurance/, 'fin:2'], [/Capital Markets|Asset Management|Financial Data/, 'fin:3'], [/Credit Services/, 'fin:4'],
+  [/Telecom/, 'cons:1'], [/Packaged Foods|Beverages|Confectioners|Farm Products|Food Distribution|Household & Personal|Tobacco/, 'cons:2'],
+  [/Grocery|Discount Stores|Department Stores|Specialty Retail|Home Improvement/, 'cons:3'], [/Restaurants|Lodging|Travel|Resorts/, 'cons:4'],
+  [/Marine Shipping/, 'ship:1'], [/Airlines|Airports/, 'ship:2'], [/Aerospace/, 'sat:1', ['ship:2']],
+  [/Chemicals|Oil & Gas/, 'ship:3'], [/Steel|Building Materials|Industrial Metals|Aluminum/, 'ship:4'],
+  [/Drug Manufacturers.*General/, 'bio:1', ['bio:3']], [/Drug Manufacturers/, 'bio:3', ['bio:1']], [/Biotechnology/, 'bio:2', ['bio:3']],
+  [/Medical|Diagnostics|Health Information|Pharmaceutical Retailers/, 'bio:4'],
+  [/Textile|Apparel|Footwear|Leisure|Recreational/, 'champ:5'], [/Furnishings|Fixtures|Appliances/, 'champ:6'],
 ];
-function guessLayer(code, industry, name) {
-  if (CODE_LAYER[code]) return { v: CODE_LAYER[code], sure: true };
-  if (/電信/.test(name || '') || /^(2412|3045|4904)$/.test(code)) return { v: '內需｜1 電信', sure: true };
-  const hit = INDUSTRY_LAYER.find(([re]) => re.test(industry || ''));
-  return hit ? { v: hit[1], sure: false } : null;
+// 證交所／櫃買中心產業別
+const INDUSTRY_LAYER = [
+  [/金融|保險|銀行/, 'fin:1', ['fin:2', 'fin:3']], [/證券/, 'fin:3'], [/航運/, 'ship:1', ['ship:2']],
+  [/塑膠|化學/, 'ship:3'], [/鋼鐵|水泥|玻璃陶瓷/, 'ship:4'], [/食品/, 'cons:2'],
+  [/貿易百貨|百貨/, 'cons:3'], [/觀光|餐旅|餐飲/, 'cons:4'], [/生技|醫療/, 'bio:2', ['bio:3', 'bio:4']],
+  [/紡織|運動休閒/, 'champ:5'], [/汽車|橡膠/, 'champ:4', ['ev:1', 'ev:4']], [/電器電纜/, 'ev:6'], [/電機/, 'champ:2', ['ev:6', 'champ:1']], [/綠能|環保/, 'ev:7'],
+  [/居家生活/, 'champ:6'], [/數位雲端/, 'ai:3', ['ai:1']], [/資訊服務/, 'ai:1', ['ai:3']],
+  [/半導體/, 'ai:7', ['ai:8', 'ai:9', 'ai:10', 'ai:11', 'ai:12']], [/電腦及週邊/, 'ai:4', ['ai:6']], [/通信網路/, 'ai:5', ['sat:5', 'sat:2']],
+  [/電子零組件/, 'ai:12', ['ai:6', 'ai:5', 'ai:4']], [/光電/, 'ai:5', ['ai:12']], [/其他電子|電子通路/, 'ai:4', ['ai:12']],
+];
+// 回傳 { v 層, sure 是否確定, why 依據, alts 其他可能 }
+function guessLayer(code, industry, name, yInd, isEtf) {
+  code = String(code || '').toUpperCase();
+  if (CODE_LAYER[code]) return { v: CODE_LAYER[code], sure: true, why: '系統對照表（常見公司已人工歸類）', alts: [] };
+  if (isEtf || /^00\d{2,4}[A-Z]?$/.test(code)) return null;
+  const cands = [];
+  const add = (k, why, alts) => { const v = LV(k); if (!v) return; const hit = cands.find(c => c.v === v); if (hit) { hit.n++; hit.why += '；' + why; } else cands.push({ v, why, n: 1, alts: (alts || []).map(LV).filter(Boolean) }); };
+  const nm = NAME_LAYER.find(([re]) => re.test(name || '')); if (nm) add(nm[1], `公司名稱含「${(name.match(nm[0]) || [''])[0]}」`);
+  const y = yInd && YF_LAYER.find(([re]) => re.test(yInd)); if (y) add(y[1], `Yahoo 產業分類：${yInd}`, y[2]);
+  const t = industry && INDUSTRY_LAYER.find(([re]) => re.test(industry)); if (t) add(t[1], `證交所產業別：${industry}`, t[2]);
+  if (!cands.length) return /建材營造|油電燃氣|造紙/.test(industry || '') ? { v: '其他', sure: false, why: `證交所產業別：${industry}（目前沒有對應的供應鏈）`, alts: [] } : null;
+  const best = cands[0], alts = [...new Set([...best.alts, ...cands.slice(1).flatMap(c => [c.v, ...c.alts])])].filter(v => v !== best.v).slice(0, 5);
+  // 兩個以上來源指向同一層、且沒有其他候選 → 視為確定
+  const agree = best.n > 1 && cands.length === 1 && !best.alts.length;
+  return { v: best.v, sure: agree, why: cands.map(c => c.why).join('；'), alts };
+}
+function applyLayer(c, g, force) {
+  if (!g) return false;
+  if (c.layer && !force && !c.layerAuto && !c.layerGuess) return false; // 自己選的不覆蓋
+  c.layer = g.v; c.layerGuess = !g.sure; c.layerAuto = true; c.layerWhy = g.why; c.layerAlts = g.alts || [];
+  layerLight(c); return true;
+}
+function layerLight(c) {
+  const fl = findLayer(c.layer), l = c.lights?.[0]; if (!fl || !l) return;
+  if (l.c && !isBlankish(l.note) && !l.auto) return;
+  l.c = fl.l.bottleneck ? '綠' : '黃'; l.auto = true;
+  l.note = `【自動】${c.layer}${fl.l.bottleneck ? '，屬瓶頸層，議價能力較強' : '，非瓶頸層，競爭者較多'}${c.layerGuess ? '（所在層為系統推估，請確認）' : ''}`;
+}
+// 只查產業資料（不抓整套財報），給「重新判斷」與舊卡補歸類用
+async function classifyCard(c, force) {
+  if (!c.code) return false;
+  let d = {};
+  try { const r = await fetch('api/stock?profile=1&code=' + encodeURIComponent(c.code), { signal: AbortSignal.timeout(20000) }); d = await r.json(); } catch (e) { /* 只用對照表 */ }
+  if (d.name && !c.name) c.name = d.name;
+  if (d.isEtf) { c.layerWhy = 'ETF 沒有單一產業位置，請到「ETF 健檢」看成分股'; return false; }
+  const g = guessLayer(c.code, d.industry, d.name || c.name, d.yIndustry, d.isEtf);
+  if (!g) { c.layerWhy = '找不到可用的產業資料，請自己選'; c.layerAlts = []; return false; }
+  return applyLayer(c, g, force);
+}
+// 研究卡清單：還沒定位的卡在背景補歸類（每次開啟只跑一次）
+let _classifyRan = false;
+async function classifyMissing() {
+  if (_classifyRan || !location.protocol.startsWith('http')) return; _classifyRan = true;
+  const todo = S.cards.filter(c => c.code && !c.example && (!c.layer || (c.layerGuess && !c.layerWhy)));
+  let n = 0;
+  for (const c of todo) { if (await classifyCard(c)) n++; }
+  if (n) { save(); if (current === 'cards') render(); toast(`已自動歸類 ${n} 張研究卡的產業位置`); }
 }
 
 PAGES.industry = () => {
@@ -177,7 +290,7 @@ function chartHTML(c) {
 // 自動帶入後的擴充處理（由 app.js 呼叫）
 window.afterAutoFill = (c, d) => {
   if (d.spark) c.spark = d.spark;
-  if (!c.layer) { const g = guessLayer(c.code, d.industry, d.name); if (g) { c.layer = g.v; c.layerGuess = !g.sure; } }
+  applyLayer(c, guessLayer(c.code, d.industry, d.name, d.yIndustry, d.isEtf));
   if (d.dcf && (!c.dcfIn || c.dcfIn.auto)) {
     const us = d.market === '美股', k = us ? 1e6 : 1e8;
     const g0 = d.dcf.revG == null ? 8 : Math.max(3, Math.min(20, d.dcf.revG / 2));
@@ -188,8 +301,7 @@ window.afterAutoFill = (c, d) => {
     }
   }
   const setL = (i, color, note) => { if (!color) return; const l = c.lights[i]; if (!l.c || isBlankish(l.note) || l.auto) { l.c = color; l.note = '【自動】' + note; l.auto = true; } };
-  const fl = findLayer(c.layer);
-  if (fl) setL(0, fl.l.bottleneck ? '綠' : c.layerGuess ? '黃' : '黃', `${c.layer}${fl.l.bottleneck ? '，屬瓶頸層，議價能力較強' : '，非瓶頸層，競爭者較多'}${c.layerGuess ? '（所在層依產業分類推估，請確認）' : ''}`);
+  layerLight(c);
   setL(2, d.guideLight, d.guideNote);
 };
 

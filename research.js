@@ -84,6 +84,7 @@ async function syncHoldCards() {
 PAGES.cards = () => {
   if (openCardId) { const c = S.cards.find(x => x.id === openCardId); if (c) return cardEditor(c); openCardId = null; }
   if (holdings().some(h => h.shares > 0 && !S.cards.some(x => String(x.code).toUpperCase() === h.code))) setTimeout(syncHoldCards, 50);
+  if (S.cards.some(c => c.code && !c.example && (!c.layer || (c.layerGuess && !c.layerWhy)))) setTimeout(classifyMissing, 80);
   const flt = S.rcFilter || '全部', held = c => !!holdOf(c.code);
   const list = [...S.cards].filter(c => flt === '全部' || (flt === '持有中' ? held(c) : !held(c)))
     .sort((a, b) => (held(b) - held(a)) || (b.date || '').localeCompare(a.date || ''));
@@ -98,7 +99,7 @@ PAGES.cards = () => {
       return `<button class="rc-item" data-card="${c.id}">
         <div class="rc-i-top"><span class="rc-code">${esc(c.code)}</span>${held(c) ? '<span class="pill green">持有中</span>' : ''}${c.example ? '<span class="pill gold">範例</span>' : ''}<span class="spacer"></span>${lightsHTML(c)}</div>
         <div class="rc-i-name">${esc(c.name || '（未命名）')}</div>
-        <div class="rc-i-layer">${esc(f ? `${f.ch.name}・${f.i + 1} ${f.l.n}` : c.layer || '未定位')}</div>
+        <div class="rc-i-layer">${esc(f ? `${f.ch.name}・${f.i + 1} ${f.l.n}` : c.layer || '未定位')}${c.layerGuess ? '<span class="la-q">推估</span>' : ''}</div>
         ${c.spark ? `<svg class="rc-i-spark" viewBox="0 0 120 30" preserveAspectRatio="none"><path d="${sparkPath(c.spark, 120, 30)}"/></svg>` : ''}
         <div class="rc-i-nums"><span><em>股價</em><b>${esc(c.price || '—')}</b></span><span><em>20 日</em><b class="${ch >= 0 ? 'up' : 'down'}">${ch == null ? '—' : pct(ch)}</b></span><span><em>估值空間</em><b class="${vs.upside >= 0 ? 'up' : 'down'}">${vs.upside == null ? '—' : pct(vs.upside)}</b></span></div>
         ${c.verdict ? `<div class="rc-i-v">${esc(c.verdict.replace(/^【自動草稿】/, ''))}</div>` : ''}
@@ -177,8 +178,8 @@ cardEditor = function (c) {
   </details>
 
   <details class="rc-sec" id="sec-ind" open>${secHead('1', 'ind', '產業地位', c.layer ? 1 : 0, 1)}
-    <div class="ind-box"><label class="f"><span>所在供應鏈與層級</span>${layerSelectHTML(c.layer)}</label>
-      ${f ? `<div class="ind-info"><b>${esc(f.l.n)}</b>：${esc(f.l.d)}${f.l.b ? `<br><span class="bn">${esc(f.l.b)}</span>` : ''}${c.layerGuess ? '<br><span class="help">（自動判斷，請確認）</span>' : ''}</div>` : ''}
+    <div class="ind-box">${layerAutoHTML(c)}<label class="f"><span>所在供應鏈與層級</span>${layerSelectHTML(c.layer)}</label>
+      ${f ? `<div class="ind-info"><b>${esc(f.l.n)}</b>：${esc(f.l.d)}${f.l.b ? `<br><span class="bn">${esc(f.l.b)}</span>` : ''}</div>` : ''}
       ${pos ? `<div class="ind-info">卡位紀錄：收入←${esc(pos.revenueFrom || '—')}；產能受限：${esc(pos.capacityBy || '—')}；領先指標：${esc(pos.leading || '—')}</div>` : ''}
       <button class="btn-small ghost" data-golayer="${esc(c.layer || '')}">到產業地位看整條供應鏈 ›</button></div>
     ${srcLinks(c, 'industry')}
@@ -239,6 +240,33 @@ cardEditor = function (c) {
   <div class="rc-meta"><label>代號 ${inp('code', c.code)}</label><label>名稱 ${inp('name', c.name)}</label><label>市場 <select data-card-f="market">${['台股', '美股', '其他'].map(o => `<option ${o === c.market ? 'selected' : ''}>${o}</option>`).join('')}</select></label><label>股價 ${inp('price', c.price, 'inputmode="decimal"')}</label><label>研究日 <input type="date" data-card-f="date" value="${esc(c.date)}"></label></div>`;
 };
 
+
+// 產業自動歸類：顯示依據、信心與其他可能
+function layerAutoHTML(c) {
+  const btn = `<button class="btn-small ghost" data-relayer="1">${c.layer ? '🔄 重新判斷' : '🤖 自動判斷產業'}</button>`;
+  if (!c.layer) return `<div class="la-box"><div class="la-h"><span>🤖 還沒定位</span>${btn}</div>${c.layerWhy ? `<div class="help">${esc(c.layerWhy)}</div>` : '<div class="help">系統會依代號對照表、公司名稱、Yahoo 與證交所產業分類自動判斷。</div>'}</div>`;
+  if (!c.layerAuto && !c.layerGuess) return `<div class="la-box mine"><div class="la-h"><span>✋ 你自己選的</span>${btn}</div></div>`;
+  const alts = (c.layerAlts || []).filter(v => v !== c.layer);
+  return `<div class="la-box ${c.layerGuess ? 'guess' : 'sure'}"><div class="la-h"><span>🤖 系統歸類</span><span class="pill ${c.layerGuess ? 'gold' : 'green'}">${c.layerGuess ? '推估，請確認' : '確定'}</span>${btn}</div>
+    ${c.layerWhy ? `<div class="help">依據：${esc(c.layerWhy)}</div>` : ''}
+    ${alts.length ? `<div class="la-alts"><span class="help">也可能是：</span>${alts.map(v => `<button class="chip" data-layerpick="${esc(v)}">${esc(v)}</button>`).join('')}</div>` : ''}</div>`;
+}
+document.addEventListener('click', async e => {
+  const t = e.target.closest('[data-relayer],[data-layerpick]'); if (!t) return;
+  const c = S.cards.find(x => x.id === openCardId); if (!c) return;
+  if (t.dataset.layerpick) { c.layer = t.dataset.layerpick; c.layerAuto = false; c.layerGuess = false; c.layerWhy = ''; layerLight(c); save(); const y = scrollY; render(); scrollTo(0, y); return; }
+  t.disabled = true; t.textContent = '判斷中…';
+  const ok = await classifyCard(c, true); save();
+  const y = scrollY; render(); scrollTo(0, y);
+  toast(ok ? `歸類為「${c.layer}」` : (c.layerWhy || '判斷不出來，請自己選'));
+});
+// 手動改下拉選單 → 標記為自己選的
+document.addEventListener('change', e => {
+  if (e.target.dataset?.cardF !== 'layer') return;
+  const c = S.cards.find(x => x.id === openCardId); if (!c) return;
+  c.layer = e.target.value; c.layerAuto = false; c.layerGuess = false; c.layerWhy = ''; layerLight(c); save();
+  const y = scrollY; render(); scrollTo(0, y);
+});
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-light],[data-tip],[data-golayer],[data-lesson-go],[data-rcf],[data-gdir],#cardToBt,.rc-toc a,.rh-dim');
   if (!t) return;

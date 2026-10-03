@@ -880,3 +880,12 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .cm-mo span { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
 .cm-mo i { display: block; width: 100%; border-radius: 3px 3px 0 0; background: #98a4b8; min-height: 2px; } .cm-mo span.g i { background: var(--green); } .cm-mo span.r i { background: var(--red); }
 .cm-mo em { font-style: normal; font-size: 10px; color: var(--muted); margin-top: 2px; } .cm-mo span.on em { color: var(--text); font-weight: 800; } .cm-mo span.on i { box-shadow: 0 0 0 2px var(--gold); }
+/* 產業自動歸類 */
+.la-box { border: 1px solid var(--line, #e3e6ec); border-radius: 10px; padding: 8px 10px; display: grid; gap: 4px; background: var(--card, #fff); }
+.la-box.sure { border-color: #8cc9a0; }
+.la-box.guess { border-color: #e2c27a; background: color-mix(in srgb, #f6e7c1 25%, transparent); }
+.la-h { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; font-weight: 600; }
+.la-h .btn-small { margin-left: auto; }
+.la-alts { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.la-alts .chip { font-size: 12px; padding: 3px 8px; }
+.la-q { margin-left: 4px; font-size: 10px; padding: 1px 5px; border-radius: 6px; background: #f6e7c1; color: #8a6a1c; }
