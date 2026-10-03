@@ -64,6 +64,15 @@ function technicals(bars, unit = '') {
   };
 }
 
+/* ---------------- 產業分類（Yahoo 搜尋，台美股通用） ---------------- */
+async function yIndustry(code) {
+  const tw = /^\d/.test(code);
+  const res = await fetch(`https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(code)}&quotesCount=6&newsCount=0`, { signal: T(8000), headers: UA });
+  if (!res.ok) throw new Error('Yahoo 產業 HTTP ' + res.status);
+  const q = ((await res.json()).quotes || []).find(x => tw ? x.symbol === code + '.TW' || x.symbol === code + '.TWO' : x.symbol === code);
+  return q ? { ySector: q.sector || q.sectorDisp || '', yIndustry: q.industry || q.industryDisp || '' } : {};
+}
+
 /* ---------------- 台股：FinMind ---------------- */
 async function fm(dataset, id, start) {
   const tok = process.env.FINMIND_TOKEN ? `&token=${process.env.FINMIND_TOKEN}` : '';
@@ -369,6 +378,18 @@ module.exports = async (req, res) => {
     } catch (e) { res.status(502).json({ code, error: e.message }); }
     return;
   }
+  if (req.query.profile) {
+    // 輕量模式：只回傳名稱與產業分類（研究卡自動歸類用）
+    const tw = /^\d{4,6}[A-Z]?$/.test(code), out = { code, market: tw ? '台股' : '美股' };
+    const [inf, y] = await Promise.all([tw ? fm('TaiwanStockInfo', code, '2000-01-01').catch(() => []) : Promise.resolve([]), yIndustry(code).catch(() => ({}))]);
+    const i = inf.find(x => x.stock_id === code);
+    if (i) { out.name = i.stock_name; out.industry = i.industry_category; out.isEtf = /ETF|ETN|受益證券/.test(i.industry_category || ''); }
+    if (tw && /^00\d/.test(code)) out.isEtf = true;
+    Object.assign(out, y);
+    res.setHeader('Cache-Control', 's-maxage=604800, stale-while-revalidate=2592000');
+    res.status(200).json(out);
+    return;
+  }
   if (req.query.history) {
     try {
       let bars;
@@ -389,8 +410,10 @@ module.exports = async (req, res) => {
   const errors = [];
   req_debug = req.query.debug === '1';
   let out;
+  const yP = yIndustry(code).catch(() => ({}));
   try { out = /^\d{4,6}[A-Z]?$/.test(code) ? await taiwan(code, errors) : await us(code, errors); }
   catch (e) { errors.push(e.message); out = { code }; }
+  Object.assign(out, await yP);
   out.errors = errors; out.updated = new Date().toISOString();
   const ok = out.price || out.fin;
   res.setHeader('Cache-Control', ok ? 's-maxage=21600, stale-while-revalidate=86400' : 'no-store');
