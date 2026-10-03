@@ -318,3 +318,96 @@ SEA_SYMS.push(['GC=F', '黃金'], ['TWD=X', '美元兌台幣'], ['JPY=X', '美�
 SEA_DEF['GC=F'] = ['all', 'mid']; SEA_DEF['TWD=X'] = ['all']; SEA_DEF['JPY=X'] = ['all'];
 if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['macro', '總經'], ['metfx', '金屬・匯率'], ['season', '季節性'], ['monitor', '監控'], ['overview', '研究總覽']];
 if (current === 'metfx') render();
+
+/* ================= 百年景氣循環：擴張與衰退統計 ================= */
+let cycBusy = false;
+async function loadCycles(force) {
+  if (cycBusy || !location.protocol.startsWith('http')) return;
+  if (!force && S.cycles && Date.now() - (S.cyclesAt || 0) < 7 * 864e5) return;
+  cycBusy = true; if (current === 'cycles') render();
+  try { const j = await (await fetch('api/cycles', { signal: AbortSignal.timeout(60000) })).json(); if (!j.recessions) throw new Error('格式錯誤'); S.cycles = j; S.cyclesAt = Date.now(); save(); }
+  catch (e) { toast('景氣循環資料讀取失敗：' + e.message); }
+  cycBusy = false; if (current === 'cycles') { const y = scrollY; render(); scrollTo(0, y); }
+}
+const ymNum = s => +s.slice(0, 4) + (+s.slice(5, 7) - 1) / 12;
+const yrLab = s => `${s.slice(0, 4)}/${+s.slice(5, 7)}`;
+function cycTimeline(C) {
+  const W = 340, H = 64, L = 4, R = 4, x0 = 1920, x1 = new Date().getFullYear() + 1, X = v => L + (v - x0) / (x1 - x0) * (W - L - R);
+  return `<svg class="cy" viewBox="0 0 ${W} ${H}">
+    ${C.expansions.map(e => `<rect x="${X(ymNum(e.start))}" y="10" width="${Math.max(1, X(ymNum(e.end || new Date().toISOString().slice(0, 7))) - X(ymNum(e.start)))}" height="22" class="ex"><title>擴張 ${yrLab(e.start)}–${e.end ? yrLab(e.end) : '至今'}：${e.months} 個月${e.name ? '（' + e.name + '）' : ''}</title></rect>`).join('')}
+    ${C.recessions.map(r => `<rect x="${X(ymNum(r.peak))}" y="6" width="${Math.max(1.5, X(ymNum(r.trough)) - X(ymNum(r.peak)))}" height="30" class="rc"><title>衰退 ${yrLab(r.peak)}–${yrLab(r.trough)}：${r.months} 個月（${r.name}）</title></rect>`).join('')}
+    ${[1920, 1940, 1960, 1980, 2000, 2020].map(y => `<line x1="${X(y)}" x2="${X(y)}" y1="38" y2="42" class="tk"/><text x="${X(y)}" y="54" text-anchor="${y === 1920 ? 'start' : 'middle'}">${y}</text>`).join('')}
+  </svg>`;
+}
+function cycSpx(C) {
+  const pts = C.spx; if (!pts?.length) return '';
+  const W = 340, H = 210, L = 34, R = 6, T = 14, B = 20, x0 = ymNum(pts[0][0]), x1 = ymNum(pts[pts.length - 1][0]);
+  const lv = pts.map(p => Math.log10(p[1])), lo = Math.floor(Math.min(...lv)), hi = Math.ceil(Math.max(...lv));
+  const X = v => L + (v - x0) / (x1 - x0) * (W - L - R), Y = v => T + (hi - Math.log10(v)) / (hi - lo) * (H - T - B);
+  const big = { 經濟大蕭條: '大蕭條', 第一次石油危機: '石油危機', '網路泡沫・911': '網路泡沫', 全球金融海嘯: '金融海嘯', 新冠疫情: '疫情' }; let bi = 0;
+  return `<svg class="cy" viewBox="0 0 ${W} ${H}">
+    ${Array.from({ length: hi - lo + 1 }, (_, i) => lo + i).map(e => `<line x1="${L}" x2="${W - R}" y1="${Y(10 ** e)}" y2="${Y(10 ** e)}" class="gl"/><text x="${L - 4}" y="${Y(10 ** e) + 3}" text-anchor="end">${fmt(10 ** e, 0)}</text>`).join('')}
+    ${C.recessions.filter(r => ymNum(r.trough) >= x0).map(r => `<rect x="${X(Math.max(x0, ymNum(r.peak)))}" y="${T}" width="${Math.max(1.5, X(ymNum(r.trough)) - X(Math.max(x0, ymNum(r.peak))))}" height="${H - T - B}" class="rcs"><title>${r.name}：${yrLab(r.peak)}–${yrLab(r.trough)}${r.dd != null ? `，股市最大跌幅 ${r.dd}%` : ''}</title></rect>${big[r.name] ? `<text x="${X(ymNum(r.peak))}" y="${T + 8 + (bi++ % 2) * 10}" text-anchor="${ymNum(r.peak) > x1 - 8 ? 'end' : 'middle'}" class="ev">${big[r.name]}</text>` : ''}`).join('')}
+    <path d="${pts.map((p, i) => `${i ? 'L' : 'M'}${X(ymNum(p[0])).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('')}" class="ln2"/>
+    ${[1930, 1950, 1970, 1990, 2010].filter(y => y >= x0).map(y => `<text x="${X(y)}" y="${H - 5}" text-anchor="middle">${y}</text>`).join('')}
+  </svg>`;
+}
+function cycGdp(C) {
+  const d = C.gdpY; if (!d?.length) return '';
+  const W = 340, H = 180, L = 28, R = 4, T = 12, B = 20, mx = Math.max(...d.map(x => Math.abs(x[1]))), lim = Math.ceil(mx / 5) * 5;
+  const n = d.length, bw = (W - L - R) / n, Y = v => T + (lim - v) / (2 * lim) * (H - T - B);
+  const ext = [d.reduce((a, b) => (b[1] < a[1] ? b : a)), d.reduce((a, b) => (b[1] > a[1] ? b : a))];
+  return `<svg class="cy" viewBox="0 0 ${W} ${H}">
+    ${[-lim, -lim / 2, 0, lim / 2, lim].map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="${v === 0 ? 'z' : 'gl'}"/><text x="${L - 4}" y="${Y(v) + 3}" text-anchor="end">${v}%</text>`).join('')}
+    ${d.map(([y, v], i) => `<rect x="${(L + i * bw + 0.4).toFixed(1)}" y="${Math.min(Y(v), Y(0)).toFixed(1)}" width="${Math.max(0.8, bw - 0.8).toFixed(1)}" height="${Math.max(0.5, Math.abs(Y(v) - Y(0))).toFixed(1)}" rx="0.8" class="${v < 0 ? 'neg' : 'pos'}"><title>${y} 年：${v}%</title></rect>`).join('')}
+    ${ext.map(([y, v]) => `<text x="${L + d.findIndex(x => x[0] === y) * bw + bw / 2}" y="${v < 0 ? Y(v) + 10 : Y(v) - 3}" text-anchor="middle" class="ev">${y}：${v > 0 ? '+' : ''}${v}%</text>`).join('')}
+    ${d.filter(([y]) => y % 20 === 0).map(([y]) => `<text x="${L + d.findIndex(x => x[0] === y) * bw}" y="${H - 5}" text-anchor="middle">${y}</text>`).join('')}
+  </svg>`;
+}
+function cycPairs(C) {
+  // 每個循環一列：擴張（綠）＋接著的衰退（紅），同一刻度（月）
+  const rows = C.expansions.map((e, i) => ({ e, r: C.recessions[i + 1] }));
+  const mx = Math.max(...C.expansions.map(e => e.months), 1);
+  return `<div class="cyp">${rows.map(({ e, r }) => `<div class="cyp-r"><span>${e.start.slice(0, 4)}</span><div class="cyp-b"><i class="ex" style="width:${e.months / mx * 100}%" title="擴張 ${e.months} 個月"></i>${r ? `<i class="rc" style="width:${Math.max(1.2, r.months / mx * 100)}%" title="衰退 ${r.months} 個月"></i>` : '<i class="now">進行中</i>'}</div><b>${e.months}${r ? `<small>/${r.months}</small>` : ''}</b></div>`).join('')}</div>`;
+}
+function cycDd(C) {
+  const rs = C.recessions.filter(r => r.dd != null), mx = Math.max(...rs.map(r => Math.abs(r.dd)), 1);
+  return `<div class="cyd">${rs.map(r => `<div class="cyd-r"><span>${/^\d/.test(r.name) ? '' : r.peak.slice(0, 4) + ' '}${esc(r.name)}</span><div class="cyd-t"><i style="width:${Math.abs(r.dd) / mx * 100}%" title="${esc(r.name)}：股市高點 ${yrLab(r.spxTop)} → 低點 ${yrLab(r.spxBottom)}"></i></div><b>${r.dd}%</b></div>`).join('')}</div>`;
+}
+function cycLead(C) {
+  const rs = C.recessions.filter(r => r.bottomLead != null), mx = Math.max(...rs.map(r => Math.abs(r.bottomLead)), 1);
+  return `<div class="tv-dv">${rs.map(r => `<div class="tv-dr"><span>${r.peak.slice(0, 4)}</span><div class="tv-dt"><i class="tv-0"></i><i class="tv-db ${r.bottomLead > 0 ? 'p' : 'n'}" style="${r.bottomLead > 0 ? `right:50%;width:${r.bottomLead / mx * 50}%` : `left:50%;width:${Math.abs(r.bottomLead) / mx * 50}%`}" title="股市低點 ${yrLab(r.spxBottom)}、景氣谷底 ${yrLab(r.trough)}"></i></div><b>${r.bottomLead > 0 ? '早 ' + r.bottomLead : r.bottomLead < 0 ? '晚 ' + Math.abs(r.bottomLead) : '同月'}</b></div>`).join('')}</div>`;
+}
+PAGES.cycles = () => {
+  setTimeout(() => loadCycles(false), 30);
+  const C = S.cycles;
+  const head = `<h2>百年景氣循環</h2><p class="lead">美國自 1920 年以來共經歷 18 次衰退與 18 段擴張（依美國國家經濟研究局 NBER 認定）。把每一次的長度、GDP、失業率與股市表現放在一起看，找出可以用在投資上的規律。</p>`;
+  if (!C) return head + `<div class="card empty">${cycBusy ? '計算中…（約 10 秒）' : '讀取中…'}</div>`;
+  const s = C.stats, cur = s.cur;
+  const tiles = [['平均擴張', `${s.expPost} 個月`, `二戰後；含戰前平均 ${s.expAll} 個月`], ['平均衰退', `${s.recPost} 個月`, `二戰後；含戰前平均 ${s.recAll} 個月`], ['衰退期間股市最大跌幅', `${s.dd}%`, `平均；二戰後 ${s.ddPost}%`], ['股市比景氣谷底', s.bottomLead >= 0 ? `早 ${s.bottomLead} 個月` : `晚 ${Math.abs(s.bottomLead)} 個月`, `${s.ddWins}/${s.ddN} 次在衰退結束前見底`], ['景氣谷底後 12 個月', `${s.after12 >= 0 ? '+' : ''}${s.after12}%`, '標普 500 平均報酬'], ['目前這段擴張', `${cur.months} 個月`, `自 ${yrLab(cur.start)} 起${cur.spx != null ? `，股市 +${cur.spx}%` : ''}`]];
+  const curPos = rangeBar(0, 130, Math.min(130, cur.months), { label: `目前 ${cur.months} 個月`, ticks: [[0, '0'], [s.expPost, `戰後平均 ${s.expPost}`], [128, '最長 128（2009–20）']] });
+  return head + `
+    <div class="cy-tiles">${tiles.map(([t, v, d]) => `<div><em>${t}</em><b>${v}</b><span>${d}</span></div>`).join('')}</div>
+    <div class="card"><h3 class="gold-bar">🗓️ 百年時間軸</h3>${cycTimeline(C)}<div class="w-legend"><span><i class="cy-ex"></i>擴張</span><span><i class="cy-rc"></i>衰退</span><span class="help">點色塊看期間</span></div>
+      <div class="help">衰退通常短而急（平均不到一年），擴張則越來越長：二戰前平均約 2～3 年，1980 年代以後動輒 8～10 年，原因是央行與財政政策更積極地「熨平」景氣。</div></div>
+    <div class="card"><h3 class="gold-bar">📈 標普 500（對數刻度）與衰退期間</h3>${cycSpx(C)}<div class="w-legend"><span><i class="cy-rc"></i>衰退期間</span><span><i class="cy-ln"></i>標普 500 指數</span></div>
+      <div class="help">對數刻度下，同樣高度代表同樣的漲跌百分比。每次衰退都留下一段下跌，但長期趨勢一路向上：衰退是「暫時的」，持有優質資產度過衰退的人最終都賺回來，只是大蕭條花了 25 年。</div></div>
+    ${C.gdpY?.length ? `<div class="card"><h3 class="gold-bar">🏭 美國每年實質 GDP 成長率</h3>${cycGdp(C)}<div class="help">紅色是負成長的年份。1930 年代大蕭條、1946 年戰後軍需驟減是最深的谷底；1980 年代以後負成長變得少而淺，2020 年疫情是例外的急跌急彈。</div></div>` : ''}
+    <div class="card"><h3 class="gold-bar">⏱️ 每段擴張與接著的衰退（月）</h3>${cycPairs(C)}<div class="w-legend"><span><i class="cy-ex"></i>擴張</span><span><i class="cy-rc"></i>衰退</span></div><div class="help">左邊是擴張開始的年份；右側數字為「擴張月數 / 衰退月數」。</div></div>
+    <div class="card"><h3 class="gold-bar">📉 每次衰退的股市最大跌幅</h3>${cycDd(C)}<div class="help">從衰退前 18 個月內的股市高點，到景氣谷底後 12 個月內的低點。跌幅超過 40% 的幾乎都伴隨金融危機（1929、1937、1973、2001、2008）。</div></div>
+    <div class="card"><h3 class="gold-bar">🔭 股市比景氣早幾個月見底</h3>${cycLead(C)}<div class="help">綠色（向左）＝股市在衰退結束「之前」就見底；平均${s.bottomLead >= 0 ? '提早' : '晚'} ${Math.abs(s.bottomLead)} 個月，${s.ddWins}/${s.ddN} 次提前。等到經濟數據確認好轉才進場，往往已錯過最低點。</div></div>
+    <div class="card"><h3 class="gold-bar">📍 現在在哪裡</h3>${curPos}
+      <div class="help">目前的擴張始於 ${yrLab(cur.start)}，已 ${cur.months} 個月，${cur.months > s.expPost ? '超過' : '短於'}二戰後平均 ${s.expPost} 個月。擴張不會因為「年紀大」而結束，真正終結擴張的通常是：央行為壓通膨而過度升息、資產泡沫破裂、或外部衝擊（石油、疫情）。可搭配「進出場時機」頁的景氣階段一起看。</div></div>
+    <div class="card"><h3 class="gold-bar">💡 給投資人的 5 個規律</h3><ol class="cy-l">
+      <li>衰退平均約 ${s.recPost} 個月，擴張平均約 ${s.expPost} 個月：時間站在多頭這邊，長期持有的勝率高。</li>
+      <li>衰退期間股市平均最大跌幅約 ${Math.abs(s.dd)}%：配置時要先確定自己撐得住這種跌幅（或保留現金與債券）。</li>
+      <li>多數衰退（${s.ddWins}/${s.ddN} 次）股市在景氣谷底之前就見底：在壞消息最多、失業率還在上升時分批買進，歷史上報酬最好。</li>
+      <li>景氣谷底後一年，標普 500 平均 ${s.after12 >= 0 ? '+' : ''}${s.after12}%：衰退結束初期往往是一輪多頭最肥的一段。</li>
+      <li>擴張後段的警訊：殖利率曲線倒掛、失業率從低點回升 0.5 個百分點以上（薩姆規則）、領先指標連續下滑、央行持續升息。</li>
+    </ol></div>
+    <details class="card rc-sub"><summary>📋 18 次衰退明細</summary>${gtable(['期間', '月', 'GDP', '失業率高點', '股市跌幅', '谷底後 1 年'], C.recessions.map(r => `<div class="gt-r"><span>${r.peak.slice(0, 4)} ${esc(r.name)}</span><span>${r.months}</span><span>${r.gdpDrop != null ? r.gdpDrop + '%' : '—'}</span><span>${r.unPeak != null ? r.unPeak + '%' : '—'}</span><span style="${heat(r.dd, 40)}">${r.dd != null ? r.dd + '%' : '—'}</span><span style="${heat(r.after12, 40)}">${r.after12 != null ? pc(r.after12) + '%' : '—'}</span></div>`), 'cyt')}
+      <div class="help">GDP＝衰退期間實質 GDP 從高點到低點的跌幅（1947 年後才有季資料）；失業率高點取衰退開始後 2 年內（1948 年後）。</div></details>
+    <div class="help">${esc(C.src)}。${C.errors?.length ? '<span class="down">' + C.errors.map(esc).join('；') + '</span>' : ''}</div>`;
+};
+if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['macro', '總經'], ['cycles', '景氣循環'], ['metfx', '金屬・匯率'], ['season', '季節性'], ['monitor', '監控'], ['overview', '研究總覽']];
+if (current === 'cycles') render();

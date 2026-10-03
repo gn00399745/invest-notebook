@@ -828,3 +828,25 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .mf-do:empty { display: none; }
 .mf-px { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .mf-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; } .mf-two em { font-style: normal; font-size: 11px; color: var(--muted); } .mf-two b { display: block; }
+/* 百年景氣循環 */
+.cy { width: 100%; height: auto; display: block; }
+.cy text { font-size: 8.5px; fill: var(--muted); } .cy text.ev { font-size: 8px; fill: var(--text); font-weight: 700; }
+.cy .gl { stroke: var(--line); stroke-width: 1; } .cy .z { stroke: var(--muted); stroke-width: 1; } .cy .tk { stroke: var(--muted); }
+.cy rect.ex { fill: rgba(30,158,90,.55); } .cy rect.rc { fill: var(--red); } .cy rect.rcs { fill: rgba(214,69,69,.16); }
+.cy rect.pos { fill: #6fa8dc; } .cy rect.neg { fill: var(--red); }
+.cy .ln2 { fill: none; stroke: var(--navy-2); stroke-width: 1.6; } @media (prefers-color-scheme: dark) { .cy .ln2 { stroke: #e6ebf3; } }
+.w-legend i.cy-ex { background: rgba(30,158,90,.55); } .w-legend i.cy-rc { background: var(--red); } .w-legend i.cy-ln { background: var(--navy-2); height: 2px; }
+.cy-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.cy-tiles > div { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+.cy-tiles em { display: block; font-style: normal; font-size: 11px; color: var(--muted); } .cy-tiles b { display: block; font-size: 22px; margin: 2px 0; } .cy-tiles span { display: block; font-size: 11px; color: var(--muted); line-height: 1.35; }
+.cyp-r { display: grid; grid-template-columns: 36px 1fr 52px; gap: 6px; align-items: center; font-size: 12px; margin: 4px 0; }
+.cyp-b { display: flex; gap: 2px; height: 12px; } .cyp-b i { display: block; height: 100%; border-radius: 3px; font-style: normal; }
+.cyp-b i.ex { background: rgba(30,158,90,.6); } .cyp-b i.rc { background: var(--red); } .cyp-b i.now { font-size: 10px; color: var(--green); padding-left: 4px; line-height: 12px; white-space: nowrap; }
+.cyp-r b { text-align: right; font-variant-numeric: tabular-nums; } .cyp-r b small { color: var(--red); font-weight: 600; }
+.cyd-r { display: grid; grid-template-columns: 1fr 1.1fr 50px; gap: 6px; align-items: center; font-size: 12px; margin: 5px 0; }
+.cyd-r span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cyd-t { height: 10px; background: var(--bg); border-radius: 99px; overflow: hidden; display: flex; justify-content: flex-end; }
+.cyd-t i { display: block; height: 100%; background: linear-gradient(90deg, #f87171, var(--red)); border-radius: 99px; }
+.cyd-r b { text-align: right; color: var(--red); font-variant-numeric: tabular-nums; }
+.cy-l { margin: 0; padding-left: 20px; font-size: 13.5px; line-height: 1.65; } .cy-l li { margin-bottom: 4px; }
+.gt.cyt .gt-r { grid-template-columns: minmax(110px, 1.8fr) 34px repeat(4, minmax(52px, 1fr)); } .gt.cyt .gt-r > span:first-child { white-space: normal; line-height: 1.3; }
