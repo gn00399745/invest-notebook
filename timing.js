@@ -176,3 +176,37 @@ document.addEventListener('toggle', e => { if (e.target.id === 'tmGuide') { S.tm
 /* ---------- 導覽：市場分頁加入「進出場時機」「季節性」 ---------- */
 if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['macro', '總經'], ['season', '季節性'], ['monitor', '監控'], ['overview', '研究總覽']];
 if (current === 'timing' || current === 'season') render();
+
+/* ================= 美國總經指標：刻度圖（一眼看出高低與方向） ================= */
+const MVIZ = {
+  cpi: { lo: 0, hi: 6, ref: [2, 'Fed 目標 2%'], zones: [[0, 2.5, 'good'], [3.5, 6, 'bad']], short: 'CPI', note: '越接近 2% 越好；高於 3.5% 降息空間小' },
+  ppi: { lo: -2, hi: 8, ref: [2, '2%'], zones: [[0, 3, 'good'], [5, 8, 'bad']], short: 'PPI', note: '生產成本；持續走高會推升 CPI' },
+  pce: { lo: 0, hi: 5, ref: [2, 'Fed 目標 2%'], zones: [[1.5, 2.5, 'good'], [3, 5, 'bad']], short: '核心 PCE', note: 'Fed 最看重的通膨指標' },
+  nfp: { lo: -100, hi: 400, ref: [150, '健康 150K'], zones: [[100, 250, 'good'], [-100, 50, 'bad']], short: '非農就業', note: '每月新增就業（千人）；低於 50K 代表轉弱', unit: 'K' },
+  unrate: { lo: 3, hi: 6.5, ref: [4.2, '長期均衡 ≈4.2%'], zones: [[3, 4.5, 'good'], [5, 6.5, 'bad']], short: '失業率', note: '上升太快是衰退警訊' },
+  claims: { lo: 180, hi: 320, ref: [250, '警戒 250K'], zones: [[180, 230, 'good'], [260, 320, 'bad']], short: '初領失業金', note: '每週公布，最快反映裁員', unit: 'K' },
+  ffr: { lo: 0, hi: 6, ref: [3, '中性利率 ≈3%'], zones: [[4.5, 6, 'bad']], short: '聯邦基金利率', note: '高於中性利率＝緊縮，壓抑估值' },
+  us10y: { lo: 2.5, hi: 6, ref: [4.5, '4.5%'], zones: [[2.5, 4, 'good'], [4.75, 6, 'bad']], short: '10 年債殖利率', note: '高於 4.5% 對成長股評價壓力大' },
+  usdtwd: { lo: 27, hi: 35, ref: [31, '31'], zones: [], short: '美元兌台幣', note: '上升＝台幣貶值，出口股受惠', dp: 2 },
+};
+function mGauge(r, small) {
+  const z = MVIZ[r.key], v = num(r.latest), p = num(r.prev); if (!z || v == null) return '';
+  const X = x => Math.max(0, Math.min(100, (x - z.lo) / (z.hi - z.lo) * 100)), f = x => (z.dp ? (+x).toFixed(z.dp) : x) + (z.unit || (r.key === 'usdtwd' ? '' : '%'));
+  const zone = z.zones.find(([a, b]) => v >= a && v <= b)?.[2] || '';
+  return `<div class="mg ${small ? 'sm' : ''} ${zone}"><div class="tv-tr">${z.zones.map(([a, b, c]) => `<i class="tv-z ${c}" style="left:${X(a)}%;width:${X(b) - X(a)}%"></i>`).join('')}
+      <i class="tv-tk ref" style="left:${X(z.ref[0])}%"></i>${p != null && p !== v ? `<i class="mg-prev" style="left:${X(p)}%"></i><i class="mg-arr ${v > p ? 'r' : 'l'}" style="left:${Math.min(X(p), X(v))}%;width:${Math.abs(X(v) - X(p))}%"></i>` : ''}<i class="tv-dot ${zone}" style="left:${X(v)}%">${small ? '' : `<span>${f(v)}</span>`}</i></div>
+    ${small ? '' : `<div class="tv-ax"><span style="left:0">${f(z.lo)}</span><span style="left:${X(z.ref[0])}%">${esc(z.ref[1])}</span><span style="left:100%">${f(z.hi)}</span></div><div class="tv-cap">${p != null && p !== v ? `空心圈＝前值 ${f(p)}，箭頭＝變化方向。` : p === v ? '與前值相同。' : ''}${esc(z.note)}</div>`}</div>`;
+}
+if (typeof indCard === 'function') {
+  const _indCard = indCard;
+  indCard = function (r, i) { const h = _indCard(r, i), g = mGauge(r); return g ? h.replace('<div class="ind-vals">', g + '<div class="ind-vals">') : h; };
+}
+if (typeof inflationHint === 'function') {
+  const _infH = inflationHint;
+  inflationHint = function () {
+    const rows = S.macro.rows.filter(r => MVIZ[r.key] && num(r.latest) != null);
+    const sum = rows.length ? `<div class="mg-sum"><div class="mg-sh">一眼看完：每條刻度上的圓點是最新值，虛線是參考線，綠區＝健康、紅區＝警訊</div>${rows.map(r => { const v = num(r.latest), p = num(r.prev), z = MVIZ[r.key];
+      return `<div class="mg-r"><span>${esc(z.short)}</span>${mGauge(r, true)}<b class="${(z.zones.find(([a, b]) => v >= a && v <= b) || [])[2] || ''}">${z.dp ? v.toFixed(z.dp) : v}${z.unit || (r.key === 'usdtwd' ? '' : '%')}<small>${p == null || p === v ? '＝' : v > p ? '▲' : '▼'}</small></b></div>`; }).join('')}</div>` : '';
+    return sum + _infH();
+  };
+}

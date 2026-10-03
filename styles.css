@@ -794,3 +794,16 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .tg-h { font-weight: 800; margin: 12px 0 6px; font-size: 15px; }
 .tg { background: var(--bg); border-radius: 10px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; }
 .tg ul { margin: 4px 0 0; padding-left: 18px; line-height: 1.6; }
+/* 總經刻度圖 */
+.tv-z.good { background: rgba(30,158,90,.2); } .tv-z.bad { background: rgba(214,69,69,.22); }
+.tv-tk.ref { border-left: 2px dashed var(--navy-2); opacity: .9; } @media (prefers-color-scheme: dark) { .tv-tk.ref { border-left-color: #e6ebf3; } }
+.tv-dot.good { background: var(--green); box-shadow: 0 0 0 1px var(--green); } .tv-dot.bad { background: var(--red); box-shadow: 0 0 0 1px var(--red); }
+.mg { padding: 20px 6px 2px; margin-bottom: 6px; } .mg.sm { padding: 0; margin: 0; }
+.mg-prev { position: absolute; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; border: 2px solid var(--muted); background: var(--card); }
+.mg-arr { position: absolute; top: 50%; height: 2px; margin-top: -1px; background: var(--muted); }
+.mg-sum { background: var(--bg); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; }
+.mg-sh { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+.mg-r { display: grid; grid-template-columns: 82px 1fr 64px; gap: 8px; align-items: center; font-size: 12.5px; margin: 7px 0; }
+.mg-r b { text-align: right; font-variant-numeric: tabular-nums; } .mg-r b.good { color: var(--green); } .mg-r b.bad { color: var(--red); }
+.mg-r b small { font-size: 10px; margin-left: 2px; color: var(--muted); }
+.mg-r .tv-dot { width: 12px; height: 12px; margin: -6px 0 0 -6px; }
