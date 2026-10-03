@@ -121,10 +121,11 @@ function assetCheck(c) {
   else st = [h ? '續抱' : '觀察', 'neu', '訊號不一致，維持原計畫'];
   return { c, code, h, px, pl, st, why, date: c.date };
 }
+const idxOf = id => (S.world?.economies?.[id]?.markets || []).find(m => !/=X$|DX-Y/.test(m.sym));
 PAGES.timing = () => {
   setTimeout(() => { loadWorld(false); loadSeason('^GSPC', false); if (typeof refreshHoldQuotes === 'function') refreshHoldQuotes(false); }, 30);
   const W = S.world;
-  const ecos = ['tw', 'us', 'cn', 'jp', 'eu', 'hk', 'kr'].map(id => ({ id, e: ECON.find(x => x.id === id), P: phaseOf(id), m: mktTemp(W?.economies?.[id]?.markets?.[0]), m0: W?.economies?.[id]?.markets?.[0] }));
+  const ecos = ['tw', 'us', 'cn', 'jp', 'eu', 'hk', 'kr'].map(id => ({ id, e: ECON.find(x => x.id === id), P: phaseOf(id), m: mktTemp(idxOf(id)), m0: idxOf(id) }));
   const tw = ecos[0], us = ecos[1];
   // 1. 景氣位置
   const ph = `<div class="card"><h3 class="gold-bar">① 景氣在哪個階段（決定股票要多還是少）</h3>
