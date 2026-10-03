@@ -425,7 +425,7 @@ function intlView(D) {
     return `<details class="rc-sub"><summary>${c.flag} ${c.name}：${c.recessions.length} 次衰退（${esc(c.idxName)}）</summary><div class="cyd">${rs.map(r => `<div class="cyd-r"><span>${yrLab(r.peak)} ${esc(r.name || '')}</span><div class="cyd-t"><i style="width:${Math.abs(r.dd) / mx * 100}%" title="GDP ${r.gdpDrop}%"></i></div><b>${r.dd}%</b></div>`).join('')}</div><div class="help">右側為股市最大跌幅；GDP 跌幅依序：${c.recessions.map(r => `${r.peak.slice(0, 4)} ${r.gdpDrop}%`).join('、')}</div></details>`; }).join('');
   return `<div class="card"><h3 class="gold-bar">🌍 各國衰退同步圖</h3>${sync}<div class="w-legend"><span><i class="cy-rc"></i>衰退</span><span class="help">點色塊看期間；灰色＝尚無季資料</span></div>
       <div class="help">全球化之後，衰退越來越「同步」：2008 金融海嘯與 2020 疫情，所有主要經濟體幾乎同時衰退；歐洲與日本另外多了 2011–12 歐債危機、2022–23 能源危機的獨立衰退。台灣的循環則最貼近美國與全球電子業。</div></div>
-    <div class="card"><h3 class="gold-bar">📊 各國衰退統計</h3>${st}<div class="help">歐洲與日本沒有官方的衰退認定機構（歐元區有 CEPR 委員會），這裡統一用「實質 GDP 連續兩季下滑」認定，所以會比官方定義多出一些短而淺的技術性衰退。日本自 1990 年代起長期低成長，衰退最頻繁；德國次之。</div></div>
+    <div class="card"><h3 class="gold-bar">📊 各國衰退統計</h3>${st}<div class="help">歐洲與日本沒有官方的衰退認定機構（歐元區有 CEPR 委員會），這裡統一用「實質 GDP 連續兩季下滑」認定，所以會比官方定義多出一些短而淺的技術性衰退。${(() => { const r = [...D.countries].filter(c => c.stats.perDecade != null).sort((a, b) => b.stats.perDecade - a.stats.perDecade); return r.length > 1 ? `以每 10 年的次數看，${r[0].name}最頻繁（${r[0].stats.perDecade} 次），${r[1].name}次之（${r[1].stats.perDecade} 次）；${r[r.length - 1].name}最少。` : ''; })()}</div></div>
     <div class="card"><h3 class="gold-bar">📉 各國衰退時的股市跌幅</h3>${dd}</div>
     <div class="help">${esc(D.src)}。${D.errors?.length ? '<span class="down">' + D.errors.map(esc).join('；') + '</span>' : ''}</div>`;
 }
