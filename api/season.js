@@ -13,9 +13,10 @@ const STEP = 2; // 每 2 天取一點
 module.exports = async (req, res) => {
   const sym = ALLOW[req.query?.sym] ? req.query.sym : '^GSPC';
   try {
-    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=max&interval=1d`, { headers: UA, signal: AbortSignal.timeout(25000) });
+    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?period1=${Math.floor(Date.UTC(1948, 11, 1) / 1000)}&period2=${Math.floor(Date.now() / 1000)}&interval=1d&events=history`, { headers: UA, signal: AbortSignal.timeout(25000) });
     if (!r.ok) throw new Error('Yahoo HTTP ' + r.status);
     const R = (await r.json()).chart.result[0], cl = R.indicators.quote[0].close;
+    if (R.meta?.dataGranularity && R.meta.dataGranularity !== '1d') throw new Error('Yahoo 回傳的不是日資料：' + R.meta.dataGranularity);
     const pts = R.timestamp.map((t, i) => ({ d: new Date((t + (R.meta.gmtoffset || 0)) * 1000), c: cl[i] })).filter(p => p.c != null);
     // 依年份整理：日序（1～366）→ 收盤
     const byY = {};
