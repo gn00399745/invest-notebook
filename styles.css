@@ -850,3 +850,18 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .cyd-r b { text-align: right; color: var(--red); font-variant-numeric: tabular-nums; }
 .cy-l { margin: 0; padding-left: 20px; font-size: 13.5px; line-height: 1.65; } .cy-l li { margin-bottom: 4px; }
 .gt.cyt .gt-r { grid-template-columns: minmax(110px, 1.8fr) 34px repeat(4, minmax(52px, 1fr)); } .gt.cyt .gt-r > span:first-child { white-space: normal; line-height: 1.3; }
+/* 國際衰退同步、霸權輪替 */
+.cy .cy-rl { font-size: 9px; fill: var(--text); } .cy .base { stroke: var(--line); stroke-width: 6; stroke-linecap: round; } .cy rect.nod { fill: var(--bg); }
+.gt.cyi .gt-r { grid-template-columns: minmax(70px, 1.3fr) repeat(6, minmax(40px, 1fr)); } .gt.cyi .gt-r > span:first-child small { display: block; margin: 0; }
+.cy .emp-t { font-size: 9px; font-weight: 700; fill: #fff; }
+.cy .sl2 { fill: none; stroke-width: 1.8; } .cy rect.fc { fill: var(--bg); }
+.emp-l { display: grid; grid-template-columns: 10px 48px auto; gap: 2px 8px; align-items: center; font-size: 13px; margin: 6px 0; }
+.emp-l i { width: 10px; height: 10px; border-radius: 3px; } .emp-l span { color: var(--muted); font-size: 12px; } .emp-l em { grid-column: 2 / -1; font-style: normal; font-size: 12px; color: var(--muted); }
+.emp-seq { display: grid; gap: 8px; margin-bottom: 8px; } .emp-seq > div { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.emp-seq b { font-size: 13px; margin-right: 4px; } .emp-seq span { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: rgba(30,158,90,.13); } .emp-seq span.d { background: rgba(214,69,69,.13); }
+.emp-s { margin-bottom: 12px; } .emp-sh { font-size: 13px; font-weight: 700; margin-bottom: 4px; } .emp-sh small { font-weight: 400; color: var(--muted); margin-left: 6px; font-size: 11px; }
+.emp-r { display: grid; grid-template-columns: 64px 1fr 52px; gap: 6px; align-items: center; font-size: 12px; margin: 3px 0; }
+.emp-b { height: 10px; background: var(--bg); border-radius: 99px; overflow: hidden; } .emp-b i { display: block; height: 100%; border-radius: 99px; }
+.emp-r b { text-align: right; font-variant-numeric: tabular-nums; }
+.emp-calc { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; } .emp-calc > div { background: var(--bg); border-radius: 10px; padding: 8px; }
+.emp-calc em { display: block; font-style: normal; font-size: 11px; color: var(--muted); line-height: 1.35; } .emp-calc b { display: block; font-size: 15px; margin-top: 4px; }

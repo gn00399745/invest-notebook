@@ -321,22 +321,23 @@ if (current === 'metfx') render();
 
 /* ================= 百年景氣循環：擴張與衰退統計 ================= */
 let cycBusy = false;
-async function loadCycles(force) {
+S.cyc = S.cyc || {};
+async function loadCycles(force, reg = S.cycReg || 'us') {
   if (cycBusy || !location.protocol.startsWith('http')) return;
-  if (!force && S.cycles && Date.now() - (S.cyclesAt || 0) < 7 * 864e5) return;
+  const c = S.cyc[reg]; if (!force && c && Date.now() - (c.at || 0) < 7 * 864e5) return;
   cycBusy = true; if (current === 'cycles') render();
-  try { const j = await (await fetch('api/cycles', { signal: AbortSignal.timeout(60000) })).json(); if (!j.recessions) throw new Error('格式錯誤'); S.cycles = j; S.cyclesAt = Date.now(); save(); }
+  try { const j = await (await fetch('api/cycles' + (reg === 'us' ? '' : '?region=' + reg), { signal: AbortSignal.timeout(80000) })).json(); if (j.error || !(j.recessions || j.countries)) throw new Error(j.error || '格式錯誤'); j.at = Date.now(); S.cyc[reg] = j; delete S.cycles; save(); }
   catch (e) { toast('景氣循環資料讀取失敗：' + e.message); }
   cycBusy = false; if (current === 'cycles') { const y = scrollY; render(); scrollTo(0, y); }
 }
 const ymNum = s => +s.slice(0, 4) + (+s.slice(5, 7) - 1) / 12;
 const yrLab = s => `${s.slice(0, 4)}/${+s.slice(5, 7)}`;
 function cycTimeline(C) {
-  const W = 340, H = 64, L = 4, R = 4, x0 = 1920, x1 = new Date().getFullYear() + 1, X = v => L + (v - x0) / (x1 - x0) * (W - L - R);
+  const W = 340, H = 64, L = 4, R = 4, x0 = C.since || 1920, x1 = new Date().getFullYear() + 1, X = v => L + (v - x0) / (x1 - x0) * (W - L - R);
   return `<svg class="cy" viewBox="0 0 ${W} ${H}">
     ${C.expansions.map(e => `<rect x="${X(ymNum(e.start))}" y="10" width="${Math.max(1, X(ymNum(e.end || new Date().toISOString().slice(0, 7))) - X(ymNum(e.start)))}" height="22" class="ex"><title>擴張 ${yrLab(e.start)}–${e.end ? yrLab(e.end) : '至今'}：${e.months} 個月${e.name ? '（' + e.name + '）' : ''}</title></rect>`).join('')}
     ${C.recessions.map(r => `<rect x="${X(ymNum(r.peak))}" y="6" width="${Math.max(1.5, X(ymNum(r.trough)) - X(ymNum(r.peak)))}" height="30" class="rc"><title>衰退 ${yrLab(r.peak)}–${yrLab(r.trough)}：${r.months} 個月（${r.name}）</title></rect>`).join('')}
-    ${[1920, 1940, 1960, 1980, 2000, 2020].map(y => `<line x1="${X(y)}" x2="${X(y)}" y1="38" y2="42" class="tk"/><text x="${X(y)}" y="54" text-anchor="${y === 1920 ? 'start' : 'middle'}">${y}</text>`).join('')}
+    ${[1920, 1940, 1960, 1980, 2000, 2020].filter(y => y >= x0).map((y, i) => `<line x1="${X(y)}" x2="${X(y)}" y1="38" y2="42" class="tk"/><text x="${X(y)}" y="54" text-anchor="${i || X(y) > 20 ? 'middle' : 'start'}">${y}</text>`).join('')}
   </svg>`;
 }
 function cycSpx(C) {
@@ -344,12 +345,12 @@ function cycSpx(C) {
   const W = 340, H = 210, L = 34, R = 6, T = 14, B = 20, x0 = ymNum(pts[0][0]), x1 = ymNum(pts[pts.length - 1][0]);
   const lv = pts.map(p => Math.log10(p[1])), lo = Math.floor(Math.min(...lv)), hi = Math.ceil(Math.max(...lv));
   const X = v => L + (v - x0) / (x1 - x0) * (W - L - R), Y = v => T + (hi - Math.log10(v)) / (hi - lo) * (H - T - B);
-  const big = { 經濟大蕭條: '大蕭條', 第一次石油危機: '石油危機', '網路泡沫・911': '網路泡沫', 全球金融海嘯: '金融海嘯', 新冠疫情: '疫情' }; let bi = 0;
+  const big = { 經濟大蕭條: '大蕭條', 第一次石油危機: '石油危機', '網路泡沫・911': '網路泡沫', 全球金融海嘯: '金融海嘯', 新冠疫情: '疫情', 亞洲金融風暴: '亞洲金融風暴', 網路泡沫: '網路泡沫', 歐債危機: '歐債', '疫後庫存調整・升息': '升息' }; let bi = 0;
   return `<svg class="cy" viewBox="0 0 ${W} ${H}">
-    ${Array.from({ length: hi - lo + 1 }, (_, i) => lo + i).map(e => `<line x1="${L}" x2="${W - R}" y1="${Y(10 ** e)}" y2="${Y(10 ** e)}" class="gl"/><text x="${L - 4}" y="${Y(10 ** e) + 3}" text-anchor="end">${fmt(10 ** e, 0)}</text>`).join('')}
+    ${Array.from({ length: hi - lo + 1 }, (_, i) => lo + i).map(e => `<line x1="${L}" x2="${W - R}" y1="${Y(10 ** e)}" y2="${Y(10 ** e)}" class="gl"/><text x="${L - 4}" y="${Y(10 ** e) + 3}" text-anchor="end">${10 ** e >= 1000 ? fmt(10 ** e / 1000, 0) + 'k' : fmt(10 ** e, 0)}</text>`).join('')}
     ${C.recessions.filter(r => ymNum(r.trough) >= x0).map(r => `<rect x="${X(Math.max(x0, ymNum(r.peak)))}" y="${T}" width="${Math.max(1.5, X(ymNum(r.trough)) - X(Math.max(x0, ymNum(r.peak))))}" height="${H - T - B}" class="rcs"><title>${r.name}：${yrLab(r.peak)}–${yrLab(r.trough)}${r.dd != null ? `，股市最大跌幅 ${r.dd}%` : ''}</title></rect>${big[r.name] ? `<text x="${X(ymNum(r.peak))}" y="${T + 8 + (bi++ % 2) * 10}" text-anchor="${ymNum(r.peak) > x1 - 8 ? 'end' : 'middle'}" class="ev">${big[r.name]}</text>` : ''}`).join('')}
     <path d="${pts.map((p, i) => `${i ? 'L' : 'M'}${X(ymNum(p[0])).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('')}" class="ln2"/>
-    ${[1930, 1950, 1970, 1990, 2010].filter(y => y >= x0).map(y => `<text x="${X(y)}" y="${H - 5}" text-anchor="middle">${y}</text>`).join('')}
+    ${(x1 - x0 > 50 ? [1930, 1950, 1970, 1990, 2010] : [2000, 2005, 2010, 2015, 2020, 2025]).filter(y => y >= x0 && y <= x1).map(y => `<text x="${X(y)}" y="${H - 5}" text-anchor="middle">${y}</text>`).join('')}
   </svg>`;
 }
 function cycGdp(C) {
@@ -378,36 +379,125 @@ function cycLead(C) {
   const rs = C.recessions.filter(r => r.bottomLead != null), mx = Math.max(...rs.map(r => Math.abs(r.bottomLead)), 1);
   return `<div class="tv-dv">${rs.map(r => `<div class="tv-dr"><span>${r.peak.slice(0, 4)}</span><div class="tv-dt"><i class="tv-0"></i><i class="tv-db ${r.bottomLead > 0 ? 'p' : 'n'}" style="${r.bottomLead > 0 ? `right:50%;width:${r.bottomLead / mx * 50}%` : `left:50%;width:${Math.abs(r.bottomLead) / mx * 50}%`}" title="股市低點 ${yrLab(r.spxBottom)}、景氣谷底 ${yrLab(r.trough)}"></i></div><b>${r.bottomLead > 0 ? '早 ' + r.bottomLead : r.bottomLead < 0 ? '晚 ' + Math.abs(r.bottomLead) : '同月'}</b></div>`).join('')}</div>`;
 }
-PAGES.cycles = () => {
-  setTimeout(() => loadCycles(false), 30);
-  const C = S.cycles;
-  const head = `<h2>百年景氣循環</h2><p class="lead">美國自 1920 年以來共經歷 18 次衰退與 18 段擴張（依美國國家經濟研究局 NBER 認定）。把每一次的長度、GDP、失業率與股市表現放在一起看，找出可以用在投資上的規律。</p>`;
-  if (!C) return head + `<div class="card empty">${cycBusy ? '計算中…（約 10 秒）' : '讀取中…'}</div>`;
+function cycView(C) {
+  const tw = C.region === 'tw', era = tw ? '歷次' : '二戰後', ix = C.index || '標普 500', head = '';
   const s = C.stats, cur = s.cur;
-  const tiles = [['平均擴張', `${s.expPost} 個月`, `二戰後；含戰前平均 ${s.expAll} 個月`], ['平均衰退', `${s.recPost} 個月`, `二戰後；含戰前平均 ${s.recAll} 個月`], ['衰退期間股市最大跌幅', `${s.dd}%`, `平均；二戰後 ${s.ddPost}%`], ['股市比景氣谷底', s.bottomLead >= 0 ? `早 ${s.bottomLead} 個月` : `晚 ${Math.abs(s.bottomLead)} 個月`, `${s.ddWins}/${s.ddN} 次在衰退結束前見底`], ['景氣谷底後 12 個月', `${s.after12 >= 0 ? '+' : ''}${s.after12}%`, '標普 500 平均報酬'], ['目前這段擴張', `${cur.months} 個月`, `自 ${yrLab(cur.start)} 起${cur.spx != null ? `，股市 +${cur.spx}%` : ''}`]];
-  const curPos = rangeBar(0, 130, Math.min(130, cur.months), { label: `目前 ${cur.months} 個月`, ticks: [[0, '0'], [s.expPost, `戰後平均 ${s.expPost}`], [128, '最長 128（2009–20）']] });
-  return head + `
+  const tiles = [['平均擴張', `${s.expPost} 個月`, tw ? `最長 ${s.maxExp} 個月（1956–64）` : `二戰後；含戰前平均 ${s.expAll} 個月`], ['平均衰退', `${s.recPost} 個月`, tw ? '國發會認定的收縮期' : `二戰後；含戰前平均 ${s.recAll} 個月`], ['衰退期間股市最大跌幅', `${s.dd}%`, tw ? `平均（加權指數 1997 年起）` : `平均；二戰後 ${s.ddPost}%`], ['股市比景氣谷底', s.bottomLead >= 0 ? `早 ${s.bottomLead} 個月` : `晚 ${Math.abs(s.bottomLead)} 個月`, `${s.ddWins}/${s.ddN} 次在衰退結束前見底`], ['景氣谷底後 12 個月', `${s.after12 >= 0 ? '+' : ''}${s.after12}%`, `${ix} 平均報酬`], ['目前這段擴張', `${cur.months} 個月`, `自 ${yrLab(cur.start)} 起${cur.spx != null ? `，股市 ${pc(cur.spx)}%` : ''}`]];
+  const curPos = rangeBar(0, 130, Math.min(130, cur.months), { label: `目前 ${cur.months} 個月`, ticks: [[0, '0'], [s.expPost, `${era}平均 ${s.expPost}`], [s.maxExp || 128, `最長 ${s.maxExp || 128}`]] });
+  return `
     <div class="cy-tiles">${tiles.map(([t, v, d]) => `<div><em>${t}</em><b>${v}</b><span>${d}</span></div>`).join('')}</div>
-    <div class="card"><h3 class="gold-bar">🗓️ 百年時間軸</h3>${cycTimeline(C)}<div class="w-legend"><span><i class="cy-ex"></i>擴張</span><span><i class="cy-rc"></i>衰退</span><span class="help">點色塊看期間</span></div>
-      <div class="help">衰退通常短而急（平均不到一年），擴張則越來越長：二戰前平均約 2～3 年，1980 年代以後動輒 8～10 年，原因是央行與財政政策更積極地「熨平」景氣。</div></div>
-    <div class="card"><h3 class="gold-bar">📈 標普 500（對數刻度）與衰退期間</h3>${cycSpx(C)}<div class="w-legend"><span><i class="cy-rc"></i>衰退期間</span><span><i class="cy-ln"></i>標普 500 指數</span></div>
-      <div class="help">對數刻度下，同樣高度代表同樣的漲跌百分比。每次衰退都留下一段下跌，但長期趨勢一路向上：衰退是「暫時的」，持有優質資產度過衰退的人最終都賺回來，只是大蕭條花了 25 年。</div></div>
-    ${C.gdpY?.length ? `<div class="card"><h3 class="gold-bar">🏭 美國每年實質 GDP 成長率</h3>${cycGdp(C)}<div class="help">紅色是負成長的年份。1930 年代大蕭條、1946 年戰後軍需驟減是最深的谷底；1980 年代以後負成長變得少而淺，2020 年疫情是例外的急跌急彈。</div></div>` : ''}
+    <div class="card"><h3 class="gold-bar">🗓️ ${tw ? '台灣景氣循環時間軸' : '百年時間軸'}</h3>${cycTimeline(C)}<div class="w-legend"><span><i class="cy-ex"></i>擴張</span><span><i class="cy-rc"></i>衰退</span><span class="help">點色塊看期間</span></div>
+      <div class="help">${tw ? '台灣是出口導向經濟，景氣循環比美國更頻繁（約 4～5 年一次），而且多半跟著全球電子業庫存與美國景氣起伏：石油危機、亞洲金融風暴、網路泡沫、金融海嘯都是外部衝擊。' : '衰退通常短而急（平均不到一年），擴張則越來越長：二戰前平均約 2～3 年，1980 年代以後動輒 8～10 年，原因是央行與財政政策更積極地「熨平」景氣。'}</div></div>
+    <div class="card"><h3 class="gold-bar">📈 ${ix}（對數刻度）與衰退期間</h3>${cycSpx(C)}<div class="w-legend"><span><i class="cy-rc"></i>衰退期間</span><span><i class="cy-ln"></i>${ix}</span></div>
+      <div class="help">${tw ? '加權指數在 1990 年泡沫破裂（12,682 → 2,485 點）後花了 30 年才站回高點；網路泡沫與金融海嘯也都腰斬。台股波動遠大於美股，景氣收縮期常伴隨 40% 以上跌幅。' : '對數刻度下，同樣高度代表同樣的漲跌百分比。每次衰退都留下一段下跌，但長期趨勢一路向上：衰退是「暫時的」，持有優質資產度過衰退的人最終都賺回來，只是大蕭條花了 25 年。'}</div></div>
+    ${C.gdpY?.length ? `<div class="card"><h3 class="gold-bar">🏭 ${tw ? '台灣' : '美國'}每年實質 GDP 成長率</h3>${cycGdp(C)}<div class="help">${tw ? '台灣 1980 年以來只有 2001（網路泡沫）與 2009（金融海嘯）兩年負成長；成長率從 80 年代的 8～12% 逐步降到 2～4%，2021 與 2025 年因半導體與 AI 需求再度跳升。' : '紅色是負成長的年份。1930 年代大蕭條、1946 年戰後軍需驟減是最深的谷底；1980 年代以後負成長變得少而淺，2020 年疫情是例外的急跌急彈。'}</div></div>` : ''}
     <div class="card"><h3 class="gold-bar">⏱️ 每段擴張與接著的衰退（月）</h3>${cycPairs(C)}<div class="w-legend"><span><i class="cy-ex"></i>擴張</span><span><i class="cy-rc"></i>衰退</span></div><div class="help">左邊是擴張開始的年份；右側數字為「擴張月數 / 衰退月數」。</div></div>
-    <div class="card"><h3 class="gold-bar">📉 每次衰退的股市最大跌幅</h3>${cycDd(C)}<div class="help">從衰退前 18 個月內的股市高點，到景氣谷底後 12 個月內的低點。跌幅超過 40% 的幾乎都伴隨金融危機（1929、1937、1973、2001、2008）。</div></div>
+    <div class="card"><h3 class="gold-bar">📉 每次衰退的股市最大跌幅</h3>${cycDd(C)}<div class="help">從衰退前 18 個月內的股市高點，到景氣谷底後 12 個月內的低點。${tw ? '' : '跌幅超過 40% 的幾乎都伴隨金融危機（1929、1937、1973、2001、2008）。'}</div></div>
     <div class="card"><h3 class="gold-bar">🔭 股市比景氣早幾個月見底</h3>${cycLead(C)}<div class="help">綠色（向左）＝股市在衰退結束「之前」就見底；平均${s.bottomLead >= 0 ? '提早' : '晚'} ${Math.abs(s.bottomLead)} 個月，${s.ddWins}/${s.ddN} 次提前。等到經濟數據確認好轉才進場，往往已錯過最低點。</div></div>
     <div class="card"><h3 class="gold-bar">📍 現在在哪裡</h3>${curPos}
-      <div class="help">目前的擴張始於 ${yrLab(cur.start)}，已 ${cur.months} 個月，${cur.months > s.expPost ? '超過' : '短於'}二戰後平均 ${s.expPost} 個月。擴張不會因為「年紀大」而結束，真正終結擴張的通常是：央行為壓通膨而過度升息、資產泡沫破裂、或外部衝擊（石油、疫情）。可搭配「進出場時機」頁的景氣階段一起看。</div></div>
+      <div class="help">目前的擴張始於 ${yrLab(cur.start)}，已 ${cur.months} 個月，${cur.months > s.expPost ? '超過' : '短於'}${era}平均 ${s.expPost} 個月。擴張不會因為「年紀大」而結束，真正終結擴張的通常是：央行為壓通膨而過度升息、資產泡沫破裂、或外部衝擊（石油、疫情）。可搭配「進出場時機」頁的景氣階段一起看。</div></div>
     <div class="card"><h3 class="gold-bar">💡 給投資人的 5 個規律</h3><ol class="cy-l">
       <li>衰退平均約 ${s.recPost} 個月，擴張平均約 ${s.expPost} 個月：時間站在多頭這邊，長期持有的勝率高。</li>
       <li>衰退期間股市平均最大跌幅約 ${Math.abs(s.dd)}%：配置時要先確定自己撐得住這種跌幅（或保留現金與債券）。</li>
       <li>多數衰退（${s.ddWins}/${s.ddN} 次）股市在景氣谷底之前就見底：在壞消息最多、失業率還在上升時分批買進，歷史上報酬最好。</li>
-      <li>景氣谷底後一年，標普 500 平均 ${s.after12 >= 0 ? '+' : ''}${s.after12}%：衰退結束初期往往是一輪多頭最肥的一段。</li>
+      <li>景氣谷底後一年，${ix}平均 ${s.after12 >= 0 ? '+' : ''}${s.after12}%：衰退結束初期往往是一輪多頭最肥的一段。</li>
       <li>擴張後段的警訊：殖利率曲線倒掛、失業率從低點回升 0.5 個百分點以上（薩姆規則）、領先指標連續下滑、央行持續升息。</li>
     </ol></div>
-    <details class="card rc-sub"><summary>📋 18 次衰退明細</summary>${gtable(['期間', '月', 'GDP', '失業率高點', '股市跌幅', '谷底後 1 年'], C.recessions.map(r => `<div class="gt-r"><span>${r.peak.slice(0, 4)} ${esc(r.name)}</span><span>${r.months}</span><span>${r.gdpDrop != null ? r.gdpDrop + '%' : '—'}</span><span>${r.unPeak != null ? r.unPeak + '%' : '—'}</span><span style="${heat(r.dd, 40)}">${r.dd != null ? r.dd + '%' : '—'}</span><span style="${heat(r.after12, 40)}">${r.after12 != null ? pc(r.after12) + '%' : '—'}</span></div>`), 'cyt')}
-      <div class="help">GDP＝衰退期間實質 GDP 從高點到低點的跌幅（1947 年後才有季資料）；失業率高點取衰退開始後 2 年內（1948 年後）。</div></details>
+    <details class="card rc-sub"><summary>📋 ${C.count || C.recessions.length} 次衰退明細</summary>${gtable(['期間', '月', 'GDP', '失業率高點', '股市跌幅', '谷底後 1 年'], C.recessions.map(r => `<div class="gt-r"><span>${r.peak.slice(0, 4)} ${esc(r.name)}</span><span>${r.months}</span><span>${r.gdpDrop != null ? r.gdpDrop + '%' : '—'}</span><span>${r.unPeak != null ? r.unPeak + '%' : '—'}</span><span style="${heat(r.dd, 40)}">${r.dd != null ? r.dd + '%' : '—'}</span><span style="${heat(r.after12, 40)}">${r.after12 != null ? pc(r.after12) + '%' : '—'}</span></div>`), 'cyt')}
+      <div class="help">${tw ? '台灣的收縮期多為成長放緩而非負成長，因此不列 GDP 與失業率。' : 'GDP＝衰退期間實質 GDP 從高點到低點的跌幅（1947 年後才有季資料）；失業率高點取衰退開始後 2 年內（1948 年後）。'}</div></details>
     <div class="help">${esc(C.src)}。${C.errors?.length ? '<span class="down">' + C.errors.map(esc).join('；') + '</span>' : ''}</div>`;
 };
 if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['macro', '總經'], ['cycles', '景氣循環'], ['metfx', '金屬・匯率'], ['season', '季節性'], ['monitor', '監控'], ['overview', '研究總覽']];
 if (current === 'cycles') render();
+
+/* ---------- 景氣循環：地區切換、國際比較 ---------- */
+function intlView(D) {
+  const x0 = 1955, x1 = new Date().getFullYear() + 1, W = 340, L = 52, R = 4, X = v => L + (v - x0) / (x1 - x0) * (W - L - R);
+  const rows = [{ flag: '🇺🇸', name: '美國', recs: D.us }, { flag: '🇹🇼', name: '台灣', recs: D.tw }, ...D.countries.map(c => ({ flag: c.flag, name: c.name, recs: c.recessions, since: +c.since }))];
+  const H = rows.length * 22 + 26;
+  const sync = `<svg class="cy" viewBox="0 0 ${W} ${H}">
+    ${[1960, 1980, 2000, 2020].map(y => `<line x1="${X(y)}" x2="${X(y)}" y1="4" y2="${H - 18}" class="gl"/><text x="${X(y)}" y="${H - 5}" text-anchor="middle">${y}</text>`).join('')}
+    ${[[2008, 2009.5, '金融海嘯'], [2020, 2020.6, '疫情']].map(([a, b, t]) => `<rect x="${X(a)}" y="2" width="${X(b) - X(a) + 2}" height="${H - 20}" class="rcs"/><text x="${X(a)}" y="${H - 14}" text-anchor="middle" class="ev">${t}</text>`).join('')}
+    ${rows.map((r, i) => { const y = 6 + i * 22; return `<text x="2" y="${y + 11}" class="cy-rl">${r.flag} ${r.name}</text>${r.since > x0 ? `<rect x="${X(x0)}" y="${y + 3}" width="${X(r.since) - X(x0)}" height="10" class="nod"><title>${r.name} 季資料自 ${r.since} 年起</title></rect>` : ''}<line x1="${X(Math.max(x0, r.since || x0))}" x2="${W - R}" y1="${y + 8}" y2="${y + 8}" class="base"/>${r.recs.filter(z => ymNum(z.trough) >= x0).map(z => `<rect x="${X(Math.max(x0, ymNum(z.peak)))}" y="${y + 1}" width="${Math.max(2, X(ymNum(z.trough)) - X(Math.max(x0, ymNum(z.peak))))}" height="14" rx="2" class="rc"><title>${r.name} ${yrLab(z.peak)}–${yrLab(z.trough)}${z.name ? '：' + z.name : ''}</title></rect>`).join('')}`; }).join('')}
+  </svg>`;
+  const st = gtable(['', '次數', '每 10 年', '平均月數', 'GDP 跌幅', '股市跌幅', '谷底後 1 年'], D.countries.map(c => `<div class="gt-r"><span>${c.flag} ${c.name}<small class="w-u">${c.since} 年起</small></span><span>${c.stats.n}</span><span>${c.stats.perDecade ?? '—'}</span><span>${c.stats.months ?? '—'}</span><span style="${heat(c.stats.gdpDrop, 5)}">${c.stats.gdpDrop ?? '—'}%</span><span style="${heat(c.stats.dd, 40)}">${c.stats.dd ?? '—'}%</span><span style="${heat(c.stats.after12, 30)}">${c.stats.after12 != null ? pc(c.stats.after12) + '%' : '—'}</span></div>`), 'cyi');
+  const dd = D.countries.map(c => { const rs = c.recessions.filter(r => r.dd != null); if (!rs.length) return ''; const mx = Math.max(...rs.map(r => Math.abs(r.dd)), 1);
+    return `<details class="rc-sub"><summary>${c.flag} ${c.name}：${c.recessions.length} 次衰退（${esc(c.idxName)}）</summary><div class="cyd">${rs.map(r => `<div class="cyd-r"><span>${yrLab(r.peak)} ${esc(r.name || '')}</span><div class="cyd-t"><i style="width:${Math.abs(r.dd) / mx * 100}%" title="GDP ${r.gdpDrop}%"></i></div><b>${r.dd}%</b></div>`).join('')}</div><div class="help">右側為股市最大跌幅；GDP 跌幅依序：${c.recessions.map(r => `${r.peak.slice(0, 4)} ${r.gdpDrop}%`).join('、')}</div></details>`; }).join('');
+  return `<div class="card"><h3 class="gold-bar">🌍 各國衰退同步圖</h3>${sync}<div class="w-legend"><span><i class="cy-rc"></i>衰退</span><span class="help">點色塊看期間；灰色＝尚無季資料</span></div>
+      <div class="help">全球化之後，衰退越來越「同步」：2008 金融海嘯與 2020 疫情，所有主要經濟體幾乎同時衰退；歐洲與日本另外多了 2011–12 歐債危機、2022–23 能源危機的獨立衰退。台灣的循環則最貼近美國與全球電子業。</div></div>
+    <div class="card"><h3 class="gold-bar">📊 各國衰退統計</h3>${st}<div class="help">歐洲與日本沒有官方的衰退認定機構（歐元區有 CEPR 委員會），這裡統一用「實質 GDP 連續兩季下滑」認定，所以會比官方定義多出一些短而淺的技術性衰退。日本自 1990 年代起長期低成長，衰退最頻繁；德國次之。</div></div>
+    <div class="card"><h3 class="gold-bar">📉 各國衰退時的股市跌幅</h3>${dd}</div>
+    <div class="help">${esc(D.src)}。${D.errors?.length ? '<span class="down">' + D.errors.map(esc).join('；') + '</span>' : ''}</div>`;
+}
+PAGES.cycles = () => {
+  const reg = S.cycReg || 'us'; setTimeout(() => loadCycles(false, reg), 30);
+  const C = S.cyc[reg];
+  const lead = { us: '美國自 1920 年以來共經歷 18 次衰退與 18 段擴張（依美國國家經濟研究局 NBER 認定）。', tw: '台灣自 1954 年以來共經歷 15 次完整景氣循環，現在處於第 16 次循環的擴張期（依國家發展委員會認定）。', intl: '英國、德國、法國、歐元區、日本的衰退（以實質 GDP 連續兩季下滑認定），並與美國、台灣放在同一條時間軸比較。' }[reg];
+  const head = `<h2>景氣循環</h2><p class="lead">${lead}把每一次的長度、GDP 與股市表現放在一起看，找出可以用在投資上的規律。</p>
+    <div class="chips">${[['us', '🇺🇸 美國百年'], ['tw', '🇹🇼 台灣'], ['intl', '🌍 英國・歐洲・日本']].map(([k, l]) => `<button class="chip ${k === reg ? 'on' : ''}" data-cycreg="${k}">${l}</button>`).join('')}<button class="chip" data-go="empire">👑 霸權輪替</button></div>`;
+  if (!C) return head + `<div class="card empty">${cycBusy ? '計算中…（約 10～20 秒）' : '讀取中…'}</div>`;
+  return head + (reg === 'intl' ? intlView(C) : cycView(C));
+};
+document.addEventListener('click', e => { const t = e.target.closest('[data-cycreg]'); if (!t) return; S.cycReg = t.dataset.cycreg; save(); render(); });
+
+/* ================= 霸權輪替：財富與權力如何流動 ================= */
+const EMPIRES = [['葡萄牙', 1450, 1530, '#3b82c4', '大航海時代開端，控制香料貿易航線'], ['西班牙', 1530, 1640, '#c9a24a', '美洲白銀，西班牙銀元通行全球'], ['荷蘭', 1640, 1720, '#e8833a', '東印度公司、阿姆斯特丹交易所、世界最早的現代金融中心'],
+  ['法國', 1720, 1815, '#8b5cf6', '歐陸最大經濟體，拿破崙戰爭後衰落'], ['英國', 1815, 1920, '#d64545', '工業革命、殖民帝國、英鎊與倫敦金融城'], ['美國', 1920, null, '#1e9e5a', '二戰後布列敦森林體系，美元成為世界貨幣']];
+// 占全球 GDP 比重（%）：1500–1973 為 Maddison 歷史估計（購買力平價），2000 年起為 IMF 購買力平價（2030 為預測）
+const GDP_SH = { years: [1500, 1600, 1700, 1820, 1870, 1913, 1950, 1973, 2000, 2010, 2025, 2030],
+  s: [['中國', '#d64545', [25.0, 29.2, 22.3, 32.9, 17.2, 8.9, 4.5, 4.6, 6.7, 12.7, 19.6, 20.4]], ['印度', '#e8833a', [24.5, 22.6, 24.4, 16.0, 12.2, 7.6, 4.2, 3.1, 3.9, 5.3, 8.2, 9.7]],
+    ['英國', '#8b5cf6', [1.1, 1.8, 2.9, 5.2, 9.1, 8.3, 6.5, 4.2, 3.3, 2.7, 2.2, 2.0]], ['美國', '#1e9e5a', [0.3, 0.2, 0.1, 1.8, 8.9, 19.1, 27.3, 22.1, 20.4, 17.1, 14.6, 13.9]]] };
+function empTimeline() {
+  const W = 340, H = 92, L = 4, R = 4, x0 = 1450, x1 = 2030, X = v => L + (v - x0) / (x1 - x0) * (W - L - R);
+  return `<svg class="cy" viewBox="0 0 ${W} ${H}">${EMPIRES.map(([n, a, b, c], i) => { const e = b || new Date().getFullYear(), y = 8 + (i % 2) * 26; return `<rect x="${X(a)}" y="${y}" width="${X(e) - X(a) - 1}" height="20" rx="4" fill="${c}" opacity=".85"><title>${n} ${a}–${b || '至今'}：約 ${e - a} 年</title></rect><text x="${(X(a) + X(e)) / 2}" y="${y + 14}" text-anchor="middle" class="emp-t">${n}</text>`; }).join('')}
+    ${[1500, 1600, 1700, 1800, 1900, 2000].map(y => `<line x1="${X(y)}" x2="${X(y)}" y1="62" y2="66" class="tk"/><text x="${X(y)}" y="78" text-anchor="middle">${y}</text>`).join('')}</svg>`;
+}
+function empShare() {
+  const W = 340, H = 220, L = 26, R = 6, T = 10, B = 22, ys = GDP_SH.years, x0 = 1500, x1 = 2030, X = v => L + (v - x0) / (x1 - x0) * (W - L - R), Y = v => T + (35 - v) / 35 * (H - T - B);
+  return `<svg class="cy" viewBox="0 0 ${W} ${H}">
+    ${[0, 10, 20, 30].map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="${v ? 'gl' : 'z'}"/><text x="${L - 4}" y="${Y(v) + 3}" text-anchor="end">${v}%</text>`).join('')}
+    <rect x="${X(2025)}" y="${T}" width="${X(2030) - X(2025)}" height="${H - T - B}" class="fc"><title>IMF 預測</title></rect>
+    ${GDP_SH.s.map(([n, c, v]) => `<path d="${v.map((x, i) => `${i ? 'L' : 'M'}${X(ys[i]).toFixed(1)},${Y(x).toFixed(1)}`).join('')}" stroke="${c}" class="sl2"/>${v.map((x, i) => `<circle cx="${X(ys[i])}" cy="${Y(x)}" r="2.6" fill="${c}"><title>${n} ${ys[i]}：${x}%</title></circle>`).join('')}<text x="${X(2030) + 1}" y="${Y(v[v.length - 1]) + 3}" class="ev" fill="${c}" text-anchor="end" dx="-6" dy="${n === '英國' ? 9 : n === '美國' ? -4 : 0}">${n}</text>`).join('')}
+    ${[1500, 1600, 1700, 1800, 1900, 2000].map(y => `<text x="${X(y)}" y="${H - 6}" text-anchor="middle">${y}</text>`).join('')}
+  </svg>`;
+}
+PAGES.empire = () => {
+  const cur = new Date().getFullYear(), dur = EMPIRES.filter(e => e[2]).map(e => e[2] - e[1]), avg = Math.round(dur.reduce((a, b) => a + b, 0) / dur.length);
+  const score = [['經濟規模（購買力平價，2025）', [14.6, 19.6, 14.0, 8.2], '%', 'IMF'], ['經濟規模（名目美元，2025）', [26.0, 16.6, 18.0, 3.3], '%', 'IMF'], ['2030 年預測（購買力平價）', [13.9, 20.4, 12.9, 9.7], '%', 'IMF'],
+    ['全球外匯存底中的貨幣占比', [56.7, 2.1, 21.1, null], '%', 'IMF COFER'], ['軍費占全球（2025）', [33.0, 11.6, null, 3.2], '%', 'SIPRI']];
+  const who = [['🇺🇸 美國', '#1e9e5a'], ['🇨🇳 中國', '#d64545'], ['🇪🇺 歐盟', '#3b82c4'], ['🇮🇳 印度', '#e8833a']];
+  const card = score.map(([t, v, u, src]) => { const mx = Math.max(...v.filter(x => x != null)); return `<div class="emp-s"><div class="emp-sh">${t}<small>${src}</small></div>${who.map(([n, c], i) => `<div class="emp-r"><span>${n}</span><div class="emp-b"><i style="width:${v[i] == null ? 0 : Math.max(1, v[i] / mx * 100)}%;background:${c}"></i></div><b>${v[i] == null ? '—' : v[i] + u}</b></div>`).join('')}</div>`; }).join('');
+  return `<h2>霸權輪替</h2>
+    <p class="lead">「財富是流動的」這個說法有歷史根據，但時間點要修正一下：<b>15 世紀是葡萄牙</b>開啟大航海，<b>16 世紀是西班牙</b>（美洲白銀），<b>17 世紀是荷蘭</b>（不是英國），<b>19 世紀才是英國</b>，<b>20 世紀是美國</b>。以下用「誰的貨幣是世界貨幣」與「占全球經濟比重」兩把尺來看規律。</p>
+    <div class="chips"><button class="chip" data-go="cycles">‹ 景氣循環</button></div>
+    <div class="card"><h3 class="gold-bar">👑 世界儲備貨幣霸權（約 600 年）</h3>${empTimeline()}
+      ${EMPIRES.map(([n, a, b, c, d]) => `<div class="emp-l"><i style="background:${c}"></i><b>${n}</b><span>${a}–${b || '至今'}（${(b || cur) - a} 年）</span><em>${d}</em></div>`).join('')}
+      <div class="help">年份是學界常用的大致劃分（各家略有不同），以「哪一國的貨幣在國際貿易與儲備中居主導」為準。過去五個霸權平均維持約 <b>${avg} 年</b>；美國從 1920 年代算起已 ${cur - 1920} 年。</div></div>
+    <div class="card"><h3 class="gold-bar">🌐 500 年來各國占全球 GDP 比重</h3>${empShare()}
+      <div class="w-legend">${GDP_SH.s.map(([n, c]) => `<span><i style="background:${c}"></i>${n}</span>`).join('')}<span class="help">右側淺色區＝IMF 預測</span></div>
+      <div class="help">工業革命前，中國與印度靠人口占全球產出一半；英國在 1870 年前後達到頂峰，隨即被美國超越；美國在 1950 年占全球 27%。依購買力平價計算，中國約在 2016 年超過美國。1500–1973 為 Maddison 歷史估計，2000 年後為 IMF 數據，兩者口徑接近但不完全相同。</div></div>
+    <div class="card"><h3 class="gold-bar">🔁 霸權興衰的固定順序</h3>
+      <div class="emp-seq"><div><b>崛起</b>${['教育普及', '科技創新', '產業競爭力', '經濟產出', '全球貿易', '軍事實力', '金融中心', '儲備貨幣'].map((x, i) => `<span>${i + 1} ${x}</span>`).join('')}</div>
+      <div><b>衰落</b>${['債務累積', '印鈔還債', '貧富差距', '內部分裂', '新強權崛起', '貨幣地位流失'].map((x, i) => `<span class="d">${i + 1} ${x}</span>`).join('')}</div></div>
+      <div class="help">歷史規律（橋水基金達利歐《變化中的世界秩序》整理）：教育與創新最先起來，<b>儲備貨幣總是最後一個得到、也最後一個失去</b>。英國的經濟規模約 1872 年被美國超越，但英鎊直到 1920 年代才失去首位、1944 年布列敦森林會議才正式交棒，落後了 <b>50～70 年</b>。</div></div>
+    <div class="card"><h3 class="gold-bar">⚖️ 現在的競爭者：四強計分卡</h3>${card}
+      <div class="help">歐盟軍費未合併計算；印度盧比在外匯存底中的占比極小，IMF 未單獨列出。外匯存底占比：美元為 2026 年第 2 季，歐元、人民幣為 2025 年第 2 季；2000 年時美元占約 7 成。</div></div>
+    <div class="card"><h3 class="gold-bar">🔮 推算：下一個霸權？</h3>
+      <div class="emp-calc"><div><em>中國經濟規模超越美國（購買力平價）</em><b>約 2016 年</b></div><div><em>英國模式：產出被超越 → 貨幣交棒</em><b>50～70 年</b></div><div><em>若照英國的節奏</em><b>約 2066～2086 年</b></div></div>
+      <ol class="cy-l">
+        <li><b>中國</b>：製造業與經濟規模已具備，但人民幣只占外匯存底約 2%，資本管制、法治與資產可自由進出的信任度、人口快速老化，是成為「貨幣霸權」最大的障礙。依名目美元計算，美國（26%）仍明顯大於中國（17%）。</li>
+        <li><b>印度</b>：人口最多、最年輕，IMF 預測占比持續上升（2030 年近 10%），但目前規模約為中國的四成，是更長期（本世紀後半）的候選。</li>
+        <li><b>歐盟</b>：歐元是第二大儲備貨幣（約 21%），但政治與財政不統一，占比逐年下滑。</li>
+        <li><b>最可能的近 10～20 年</b>：不是單一新霸權，而是「多極化」—美元仍是第一但比重緩慢下降，各國央行增持黃金（2022–2024 年連續三年每年買超 1,000 公噸），區域貨幣與數位支付分食部分角色。</li>
+      </ol>
+      <div class="help">歷史規律只能提供方向，不能精準預測時間點；過去的霸權交替幾乎都伴隨大型戰爭或金融危機，過程可能比推算更快或更慢。</div></div>
+    <div class="card"><h3 class="gold-bar">💡 對投資的意涵</h3><ol class="cy-l">
+      <li>資產不要只放單一貨幣：台幣、美元之外，可適度配置其他市場與貨幣的資產。</li>
+      <li>黃金是「沒有發行國」的儲備資產，在霸權過渡期通常受惠；可參考「金屬・匯率」頁的金價因素。</li>
+      <li>霸權交替是數十年的過程，對個人投資更重要的仍是景氣循環與估值；長期趨勢用來決定配置比例，不用來決定買賣時點。</li>
+      <li>關注領先指標：外匯存底中的美元占比、各國央行買金量、美國財政赤字與利息支出、科技領先（AI、半導體）的歸屬。</li>
+    </ol></div>
+    <div class="help">資料：歷史 GDP 比重為 Angus Maddison《世界經濟千年史》估計；現代 GDP 與預測為 IMF 世界經濟展望（2026 年 10 月版）；外匯存底為 IMF COFER；軍費為斯德哥爾摩國際和平研究所（SIPRI）2026 年報告。</div>`;
+};
+if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['macro', '總經'], ['cycles', '景氣循環'], ['empire', '霸權輪替'], ['metfx', '金屬・匯率'], ['season', '季節性'], ['monitor', '監控'], ['overview', '研究總覽']];
+if (current === 'cycles' || current === 'empire') render();
