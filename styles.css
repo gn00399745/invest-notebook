@@ -807,3 +807,24 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .mg-r b { text-align: right; font-variant-numeric: tabular-nums; } .mg-r b.good { color: var(--green); } .mg-r b.bad { color: var(--red); }
 .mg-r b small { font-size: 10px; margin-left: 2px; color: var(--muted); }
 .mg-r .tv-dot { width: 12px; height: 12px; margin: -6px 0 0 -6px; }
+/* 貴金屬與匯率 */
+.mf-big { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.mf-big > div { background: var(--bg); border-radius: 12px; padding: 10px; }
+.mf-big em { display: block; font-style: normal; font-size: 11px; color: var(--muted); }
+.mf-big b { display: block; font-size: 22px; margin: 2px 0; font-variant-numeric: tabular-nums; }
+.mf-big span { display: block; font-size: 11px; color: var(--muted); }
+.mf-sp { width: 100%; height: 44px; display: block; margin: 4px 0; }
+.mf-sp path { fill: none; stroke: var(--navy-2); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.mf-sp.gold path { stroke: var(--gold); } .mf-sp.neg path { stroke: var(--red); }
+@media (prefers-color-scheme: dark) { .mf-sp path { stroke: #e6ebf3; } }
+.mf-sub { font-size: 13px; font-weight: 700; margin: 10px 0 6px; }
+.mf-f { display: grid; gap: 6px; margin: 6px 0; }
+.mf-fr { display: grid; grid-template-columns: 20px 1fr; gap: 2px 6px; padding: 8px 10px; border-radius: 10px; background: var(--bg); font-size: 13px; }
+.mf-fr i { grid-row: span 2; font-style: normal; font-weight: 800; text-align: center; color: var(--muted); }
+.mf-fr.pos i { color: var(--green); } .mf-fr.neg i { color: var(--red); }
+.mf-fr.pos { box-shadow: inset 3px 0 0 var(--green); } .mf-fr.neg { box-shadow: inset 3px 0 0 var(--red); }
+.mf-fr span { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.mf-do { font-size: 13px; line-height: 1.55; background: rgba(201,162,74,.12); border-radius: 10px; padding: 8px 10px; margin-top: 6px; }
+.mf-do:empty { display: none; }
+.mf-px { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mf-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; } .mf-two em { font-style: normal; font-size: 11px; color: var(--muted); } .mf-two b { display: block; }

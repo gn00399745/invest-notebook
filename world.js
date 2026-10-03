@@ -18,7 +18,7 @@ let worldBusy = false;
 async function loadWorld(force) {
   if (worldBusy || !location.protocol.startsWith('http')) return;
   if (!force && S.world && Date.now() - (S.worldAt || 0) < 6 * 3600e3) {
-    if (!S.twOff && !S.twOffTry) { S.twOffTry = 1; fetch('api/twofficial').then(r => r.json()).then(o => { if (o && (o.cbc || o.dgbas || o.orders)) { S.twOff = o; S.twOffAt = Date.now(); save(); if (current === 'macro') { const y = scrollY; render(); scrollTo(0, y); } } }).catch(() => {}); }
+    if (!S.twOff && !S.twOffTry) { S.twOffTry = 1; fetch('api/twofficial').then(r => r.json()).then(o => { if (o && (o.cbc || o.dgbas || o.orders)) { S.twOff = o; S.twOffAt = Date.now(); save(); if (['macro', 'timing', 'metfx'].includes(current)) { const y = scrollY; render(); scrollTo(0, y); } } }).catch(() => {}); }
     return;
   }
   worldBusy = true; if (current === 'macro') { const st = $('#worldStatus'); if (st) st.textContent = '更新中…（約 10～30 秒）'; }
@@ -31,7 +31,7 @@ async function loadWorld(force) {
     if (force) toast(j.errors?.length ? `已更新（${j.errors.length} 項來源失敗）` : '已更新各國數據');
   } catch (e) { if (force) toast('更新失敗：' + e.message); S.worldErr = e.message; }
   worldBusy = false;
-  if (current === 'macro') { const y = scrollY; render(); scrollTo(0, y); }
+  if (['macro', 'timing', 'metfx'].includes(current)) { const y = scrollY; render(); scrollTo(0, y); }
 }
 
 /* ---------- 判讀 ---------- */

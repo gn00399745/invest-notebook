@@ -210,3 +210,111 @@ if (typeof inflationHint === 'function') {
     return sum + _infH();
   };
 }
+
+/* ================= 貴金屬與匯率研究 ================= */
+const OZ_G = 31.1035;
+const mkOf = sym => Object.values(S.world?.economies || {}).flatMap(e => e.markets || []).find(m => m.sym === sym);
+const sparkSVG = (arr, cls = '') => arr?.length > 2 ? `<svg class="mf-sp ${cls}" viewBox="0 0 100 30" preserveAspectRatio="none"><path d="${sparkPath(arr.map((v, i) => [i, v]), 100, 30)}"/></svg>` : '';
+const pos52 = m => m?.hi52 > m?.lo52 ? (m.price - m.lo52) / (m.hi52 - m.lo52) * 100 : null;
+function rng52(m, dp = 2, label) {
+  if (!m?.hi52) return '';
+  return `${rangeBar(m.lo52, m.hi52, m.price, { label: label || fmt(m.price, dp), ticks: [[m.lo52, '52 週低 ' + fmt(m.lo52, dp)], [m.hi52, '52 週高 ' + fmt(m.hi52, dp)]] })}`;
+}
+function factorList(fs) {
+  const p = fs.filter(f => f[1] === 'pos').length, n = fs.filter(f => f[1] === 'neg').length;
+  return { html: `<div class="mf-f">${fs.map(([t, c, d]) => `<div class="mf-fr ${c}"><i>${c === 'pos' ? '＋' : c === 'neg' ? '－' : '・'}</i><b>${esc(t)}</b><span>${esc(d)}</span></div>`).join('')}</div>`, p, n,
+    verdict: p - n >= 2 ? ['偏多', 'pos'] : n - p >= 2 ? ['偏空', 'neg'] : ['中性', 'neu'] };
+}
+function goldView() {
+  const g = mkOf('GC=F'), si = mkOf('SI=F'), pl = mkOf('PL=F'), tw = mkOf('TWD=X'), dx = mkOf('DX-Y.NYB'), gld = mkOf('00635U.TW');
+  const A = S.world?.economies?.assets || {}, ry = A.realYield, be = A.breakeven;
+  if (!g) return `<div class="card empty">${worldBusy ? '資料載入中…' : '還沒有資料，按「總經」頁右上角的更新。'}</div>`;
+  const twd = tw?.price || fx(), gG = g.price * twd / OZ_G;
+  const gsr = si ? g.price / si.price : null, gsrS = si?.spark?.length === g.spark?.length ? g.spark.map((v, i) => v / si.spark[i]) : null;
+  const r = rsi14(g.spark), p52 = pos52(g);
+  const ffr = S.macro.rows.find(x => x.key === 'ffr');
+  const fs = [];
+  if (ry) fs.push(['實質利率 ' + ry.v + '%', ry.m1 != null ? (ry.v < ry.m1 ? 'pos' : ry.v > ry.m1 ? 'neg' : 'neu') : 'neu', `一個月前 ${ry.m1 ?? '—'}%。實質利率下降＝持有黃金的機會成本降低，是金價最重要的驅動力`]);
+  if (dx) fs.push(['美元指數 近 1 月 ' + pc(dx.chg1m) + '%', dx.chg1m < -0.5 ? 'pos' : dx.chg1m > 0.5 ? 'neg' : 'neu', '黃金以美元計價，美元走弱通常有利金價']);
+  if (ffr && num(ffr.latest) != null) fs.push([`Fed 利率 ${ffr.latest}%`, num(ffr.latest) < num(ffr.prev) ? 'pos' : num(ffr.latest) > num(ffr.prev) ? 'neg' : 'neu', num(ffr.latest) < num(ffr.prev) ? '剛降息，資金成本下降' : '利率不變或上升，對金價中性偏空']);
+  if (be) fs.push(['通膨預期 ' + be.v + '%', be.m1 != null && be.v > be.m1 ? 'pos' : 'neu', '通膨預期上升時，黃金的抗通膨需求增加']);
+  if (r != null) fs.push([`金價 RSI ${fmt(r, 0)}`, r >= 75 ? 'neg' : r <= 35 ? 'pos' : 'neu', r >= 75 ? '短線過熱，追高風險大' : r <= 35 ? '短線超賣' : '短線動能正常']);
+  if (p52 != null) fs.push([`位於 52 週區間 ${fmt(p52, 0)}%`, p52 >= 90 ? 'neu' : p52 <= 20 ? 'pos' : 'neu', p52 >= 90 ? '接近一年高點：趨勢強，但新資金宜分批' : p52 <= 20 ? '接近一年低點' : '區間中段']);
+  const F = factorList(fs);
+  return `<div class="card"><div class="card-head"><h3 class="gold-bar">🥇 黃金</h3><span class="sigp ${F.verdict[1]}">${F.verdict[0]}</span></div>
+      <div class="mf-big"><div><em>國際金價（美元／盎司）</em><b>${fmt(g.price, 1)}</b><span>${chg(g.chg1d, 2)}今日　近 1 月 ${pc(g.chg1m)}%　今年 ${pc(g.ytd)}%</span></div>
+        <div><em>台幣計價（每公克）</em><b>${fmt(gG, 0)}</b><span>每台兩（37.5g）約 ${fmt(gG * 37.5, 0)} 元</span></div></div>
+      ${sparkSVG(g.wk, 'gold')}<div class="help" style="margin:-2px 0 6px">近一年週線</div>
+      ${rng52(g, 0)}
+      <div class="mf-sub">影響金價的因素（${F.p} 個利多、${F.n} 個利空）</div>${F.html}
+      <div class="help">台幣金價＝國際金價 × 美元兌台幣 ÷ 31.1035；銀行黃金存摺另有買賣價差約 1～2%。央行買金、地緣風險屬於難以量化的長期支撐，未列入計分。</div></div>
+    <div class="card"><h3 class="gold-bar">⚖️ 金銀比與其他貴金屬</h3>
+      ${gsr ? `<div class="w-rates"><span>金銀比 <b>${fmt(gsr, 1)}</b></span><span class="help">一盎司黃金可換幾盎司白銀</span></div>
+      ${rangeBar(40, 110, Math.min(110, gsr), { label: '金銀比 ' + fmt(gsr, 1), zones: [[40, 60, 'bad'], [85, 110, 'good']], ticks: [[40, '40'], [60, '60 白銀偏貴'], [85, '85 白銀偏便宜'], [110, '110']] })}
+      ${gsrS ? sparkSVG(gsrS) + '<div class="help" style="margin-top:-2px">近 3 個月金銀比走勢</div>' : ''}
+      <div class="help">長期金銀比多在 50～90 之間。比值高＝白銀相對便宜，景氣回升時白銀（兼具工業用途）常漲得比黃金多；比值低則反之。</div>` : ''}
+      ${gtable(['', '價格', '1 月', '今年', '1 年'], [g, si, pl, mkOf('PA=F'), mkOf('HG=F'), gld].filter(Boolean).map(m => `<div class="gt-r"><span>${esc(m.name)}</span><span>${fmt(m.price, m.price < 100 ? 2 : 0)}</span><span style="${heat(m.chg1m, 8)}">${pc(m.chg1m)}</span><span style="${heat(m.ytd, 30)}">${pc(m.ytd)}</span><span style="${heat(m.chg1y, 40)}">${pc(m.chg1y)}</span></div>`), 'wide')}
+      <div class="help">銅不是貴金屬，列出來作對照：銅漲代表製造業需求強（風險偏好），黃金漲但銅跌則偏向避險。</div></div>
+    ${ry ? `<div class="card"><h3 class="gold-bar">📉 實質利率 vs 金價</h3><div class="mf-two"><div><em>實質利率（%）</em>${sparkSVG(ry.wk, 'neg')}<b>${ry.v}%</b></div><div><em>金價</em>${sparkSVG(g.wk, 'gold')}<b>${fmt(g.price, 0)}</b></div></div>
+      <div class="help">兩條線通常反向：實質利率往下，金價往上。若兩者同時上升，代表有其他買盤（例如各國央行買金、避險需求）在支撐金價。資料：${esc(ry.src)}，${esc(ry.d)}。</div></div>` : ''}`;
+}
+function fxView() {
+  const W = S.world?.economies || {}, R = id => W[id]?.indicators?.find(x => x.k === 'rate')?.v, Y = id => W[id]?.indicators?.find(x => x.k === 'y10')?.v;
+  const ffr = num(S.macro.rows.find(x => x.key === 'ffr')?.latest), us10 = num(S.macro.rows.find(x => x.key === 'us10y')?.latest), cbc = S.twOff?.cbc?.rates?.discount;
+  const tw = mkOf('TWD=X'), jp = mkOf('JPY=X'), eu = mkOf('EURUSD=X'), cn = mkOf('CNY=X'), kr = mkOf('KRW=X'), dx = mkOf('DX-Y.NYB');
+  if (!tw) return `<div class="card empty">${worldBusy ? '資料載入中…' : '還沒有資料，按「總經」頁右上角的更新。'}</div>`;
+  const pair = (m, o) => {
+    if (!m) return '';
+    const p = pos52(m), dp = m.price < 10 ? 4 : 2, fs = [];
+    if (o.diff != null) fs.push([`利差 ${o.diff >= 0 ? '+' : ''}${fmt(o.diff, 2)} 個百分點`, o.diff >= 1.5 ? o.wideIs : o.diff <= 0.5 ? (o.wideIs === 'pos' ? 'neg' : 'pos') : 'neu', o.diffNote]);
+    if (m.chg1m != null) fs.push([`近 1 月 ${pc(m.chg1m)}%`, 'neu', o.trend(m.chg1m)]);
+    if (p != null) fs.push([`52 週區間位置 ${fmt(p, 0)}%`, 'neu', o.posNote(p)]);
+    return `<div class="card"><div class="card-head"><h3 class="gold-bar">${o.ic} ${esc(o.title)}</h3><span class="mf-px">${fmt(m.price, dp)}</span></div>
+      ${sparkSVG(m.wk)}${rng52(m, dp)}
+      <div class="mf-f">${fs.map(([t, c, d]) => `<div class="mf-fr ${c}"><i>・</i><b>${esc(t)}</b><span>${esc(d)}</span></div>`).join('')}</div>
+      <div class="mf-do">${esc(o.action(p))}</div></div>`;
+  };
+  const usd = pair(tw, { ic: '🇺🇸🇹🇼', title: '美元兌台幣', diff: ffr != null && cbc != null ? ffr - cbc : null, wideIs: 'neu',
+    diffNote: `Fed ${ffr ?? '—'}% − 台灣央行 ${cbc ?? '—'}%。美國利率越高於台灣，資金越傾向留在美元，台幣較難大幅升值`,
+    trend: c => c > 0.5 ? '美元走強、台幣貶值：出口股受惠，外資可能匯出' : c < -0.5 ? '台幣升值：外資匯入時常見，出口商匯損' : '匯率大致持平',
+    posNote: p => p >= 80 ? '美元在一年區間高檔（台幣偏弱）' : p <= 20 ? '美元在一年區間低檔（台幣偏強）' : '區間中段',
+    action: p => p == null ? '' : p <= 25 ? '有美元需求（美股、美元保單、出國）：台幣相對強，可分批換美元。' : p >= 75 ? '美元偏貴：換美元可再等等或少量分批；持有美元資產者，換回台幣的價位相對有利。' : '區間中段：有需求就分批換，不必刻意等。' });
+  const yen = pair(jp, { ic: '🇯🇵', title: '美元兌日圓', diff: ffr != null && R('jp') != null ? ffr - R('jp') : null, wideIs: 'neu',
+    diffNote: `美日利差（Fed − 日本短期利率 ${R('jp') ?? '—'}%）。利差縮小（日本升息或美國降息）時日圓傾向升值，並可能引發套利交易平倉、亞洲股市震盪`,
+    trend: c => c > 0.5 ? '日圓走弱' : c < -0.5 ? '日圓走強（留意套利交易平倉）' : '大致持平',
+    posNote: p => p >= 80 ? '日圓在一年區間的弱勢端' : p <= 20 ? '日圓在一年區間的強勢端' : '區間中段',
+    action: p => `日圓兌台幣約 ${fmt(tw.price / jp.price, 4)}（1 萬日圓 ≈ ${fmt(tw.price / jp.price * 10000, 0)} 台幣）。${p >= 75 ? '日圓偏弱：旅遊或日圓資產換匯相對划算。' : p <= 25 ? '日圓偏強：換日圓較貴。' : ''}` });
+  const eur = pair(eu, { ic: '🇪🇺', title: '歐元兌美元', diff: ffr != null && R('eu') != null ? R('eu') - ffr : null, wideIs: 'pos',
+    diffNote: `ECB ${R('eu') ?? '—'}% − Fed ${ffr ?? '—'}%。歐洲利率相對越高，越支撐歐元`,
+    trend: c => c > 0.5 ? '歐元升值（美元相對弱）' : c < -0.5 ? '歐元貶值' : '大致持平',
+    posNote: p => p >= 80 ? '歐元在一年高檔' : p <= 20 ? '歐元在一年低檔' : '區間中段',
+    action: () => `歐元兌台幣約 ${fmt(eu.price * tw.price, 2)}。` });
+  const cny = pair(cn, { ic: '🇨🇳', title: '美元兌人民幣', diff: null, wideIs: 'neu', diffNote: '',
+    trend: c => c > 0.3 ? '人民幣走弱' : c < -0.3 ? '人民幣走強' : '人民幣由中國央行管理，波動較小',
+    posNote: p => p >= 80 ? '人民幣在一年弱勢端' : p <= 20 ? '人民幣在一年強勢端' : '區間中段',
+    action: () => '人民幣升值通常反映中國資金面與出口改善，對港股、陸股與台灣對中出口股偏正面。' });
+  const tbl = [dx, tw, jp, eu, cn, kr, mkOf('HKD=X')].filter(Boolean);
+  const rates = [['🇺🇸 美國', ffr, us10], ['🇹🇼 台灣', cbc, null], ['🇯🇵 日本', R('jp'), Y('jp')], ['🇪🇺 歐元區', R('eu'), Y('eu')]];
+  return `<div class="card"><h3 class="gold-bar">💱 匯率總覽</h3>${gtable(['', '匯率', '1 月', '今年', '52 週位置'], tbl.map(m => `<div class="gt-r"><span>${esc(m.name)}</span><span>${fmt(m.price, m.price < 10 ? 4 : 2)}</span><span style="${heat(m.chg1m, 3)}">${pc(m.chg1m)}</span><span style="${heat(m.ytd, 8)}">${pc(m.ytd)}</span><span>${pos52(m) == null ? '—' : fmt(pos52(m), 0) + '%'}</span></div>`), 'wide')}
+      <div class="help">「美元兌 X」上升＝美元變強、X 貶值。52 週位置：0%＝一年最低、100%＝一年最高。</div></div>
+    <div class="card"><h3 class="gold-bar">🏦 各國利率（匯率的根本）</h3>${hbars(rates.filter(r => r[1] != null).map(r => ({ l: r[0], v: r[1] })), { unit: '%' })}
+      <div class="help">政策利率：美國聯邦基金利率上限、台灣重貼現率、日本短期利率、歐洲央行存款利率。資金會往利率高、貨幣預期升值的地方流，利差變化常領先匯率。${us10 != null ? ` 美國 10 年債 ${us10}%${Y('jp') != null ? `、日本 ${Y('jp')}%` : ''}${Y('eu') != null ? `、德國 ${Y('eu')}%` : ''}。` : ''}</div></div>
+    ${usd}${yen}${eur}${cny}`;
+}
+PAGES.metfx = () => {
+  setTimeout(() => { loadWorld(false); if (!S.twOff) loadWorld(false); }, 30);
+  const tab = S.mfTab || 'gold';
+  return `<h2>貴金屬與匯率</h2><p class="lead">黃金看<b>實質利率、美元、避險需求</b>；匯率看<b>利差、資金流向、景氣相對強弱</b>。下面把這些因素整理成加減分，並附上換匯參考。</p>
+    <div class="chips">${[['gold', '🥇 貴金屬'], ['fx', '💱 匯率']].map(([k, l]) => `<button class="chip ${k === tab ? 'on' : ''}" data-mftab="${k}">${l}</button>`).join('')}<button class="chip" data-go="season" data-seapick="${tab === 'gold' ? 'GC=F' : 'TWD=X'}">📅 季節性</button></div>
+    ${tab === 'gold' ? goldView() : fxView()}
+    <div class="help">資料：Yahoo Finance、FRED、各國央行；${S.world?.updated ? '更新於 ' + new Date(S.world.updated).toLocaleString('zh-TW', { hour12: false }) : ''}。僅供研究參考，不構成投資建議。</div>`;
+};
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-mftab],[data-seapick]'); if (!t) return;
+  if (t.dataset.mftab) { S.mfTab = t.dataset.mftab; save(); return render(); }
+  if (t.dataset.seapick) { S.seaSym = t.dataset.seapick; save(); }
+}, true);
+SEA_SYMS.push(['GC=F', '黃金'], ['TWD=X', '美元兌台幣'], ['JPY=X', '美元兌日圓']);
+SEA_DEF['GC=F'] = ['all', 'mid']; SEA_DEF['TWD=X'] = ['all']; SEA_DEF['JPY=X'] = ['all'];
+if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['macro', '總經'], ['metfx', '金屬・匯率'], ['season', '季節性'], ['monitor', '監控'], ['overview', '研究總覽']];
+if (current === 'metfx') render();
