@@ -148,7 +148,8 @@ function linkRecurring(key, r) {
 
 /* ---------- 記帳 ---------- */
 function applyLedger(e, sign) {
-  if (!e?.acct || e.noBal) return; // noBal：錢已經在填的餘額裡，只記收支不動存款 const a = acctById(e.acct); if (!a) return;
+  if (!e?.acct || e.noBal) return; // noBal：錢已經在填的餘額裡，只記收支不動存款
+  const a = acctById(e.acct); if (!a) return;
   moveCash(a.id, sign * (e.type === '收入' ? 1 : -1) * conv(e.amount, e.ccy || 'TWD', a.ccy || 'TWD'));
 }
 function openLedger(pre = {}, id) {

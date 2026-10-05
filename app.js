@@ -187,7 +187,8 @@ function openModal({ title, body, onSave, onDelete, saveText = '儲存', noSave 
   $('#modalSave').hidden = noSave;
   $('#modalCancel').textContent = noSave ? '關閉' : '取消';
   $('#modalTitle').textContent = title;
-  $('#modalBody').innerHTML = body;
+  // 每次換一個新的內容容器，避免上一個視窗掛的事件（薪資單、對帳試算）殘留到下一個視窗
+  const ob = $('#modalBody'), nb = ob.cloneNode(false); ob.replaceWith(nb); nb.innerHTML = body;
   $('#modalSave').textContent = saveText;
   $('#modalDelete').hidden = !onDelete;
   $('#modalDelete').onclick = () => { if (confirmInline()) { onDelete(); dlg.close(); render(); } };
@@ -1076,7 +1077,7 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferr
 $('#installBtn').addEventListener('click', async () => {
   if (!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; $('#installBtn').hidden = true;
 });
-const APP_VER = '2026.10.03h';
+const APP_VER = '2026.10.05a';
 if ('serviceWorker' in navigator) window.addEventListener('load', () => {
   // 有新版本時自動套用：回到 App 時檢查更新，新的 Service Worker 接手後重新載入一次
   const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;

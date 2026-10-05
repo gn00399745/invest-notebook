@@ -735,6 +735,7 @@ function openTradeForm(pre = {}, id) {
   });
   const body = $('#modalBody'), f = n => body.querySelector(`[name=${n}]`);
   const setShareBtns = () => {
+    if (!body.isConnected) return; // 視窗已關閉或換成別的視窗
     const code = f('code').value.trim().toUpperCase(), tw = /^\d/.test(code), side = body.querySelector('[name=side]:checked').value;
     const h = holdings().find(x => x.code === code);
     const opts = (tw ? [['1 張', 1000], ['2 張', 2000], ['5 張', 5000], ['零股 100', 100]] : [['1 股', 1], ['5 股', 5], ['10 股', 10], ['50 股', 50]]);
@@ -749,11 +750,12 @@ function openTradeForm(pre = {}, id) {
   }));
   let timer;
   const lookup = async () => {
+    if (!body.isConnected) return;
     const code = f('code').value.trim().toUpperCase(); setShareBtns();
     if (!code || t) return;
     $('#codeStat').innerHTML = '<span class="help">查詢中…</span>';
     try {
-      const q = await quote(code); body._q = q;
+      const q = await quote(code); if (!body.isConnected) return; body._q = q;
       if (!f('name').value || f('name')._auto) { f('name').value = q.name || ''; f('name')._auto = true; }
       if (!f('price').value || f('price')._auto) { f('price').value = v.esppDisc ? Math.round(q.price * v.esppDisc) / 100 : q.price; f('price')._auto = true; }
       const n = q.num, c = S.cards.find(x => String(x.code).toUpperCase() === code), vs = c ? valSummary(c) : {};
@@ -763,7 +765,7 @@ function openTradeForm(pre = {}, id) {
       $('#codeStat').innerHTML = `<b>${esc(q.name || code)}</b>　現價 ${q.price}（${esc(q.priceDate)}）${v.esppDisc ? `<br>員工認股價 = 市價 ${q.price} × ${v.esppDisc}% = <b>${Math.round(q.price * v.esppDisc) / 100}</b>（請以公司公告的認購價為準）` : ''}`;
       body._snap = makeSnapshot(code, q, body.querySelector('[name=side]:checked').value);
       $('#snapBox').textContent = body._snap.text;
-    } catch (e) { $('#codeStat').innerHTML = `<span class="down">查不到這個代號（${esc(e.message)}）</span>`; }
+    } catch (e) { if (body.isConnected) $('#codeStat').innerHTML = `<span class="down">查不到這個代號（${esc(e.message)}）</span>`; }
   };
   f('code').addEventListener('input', () => { clearTimeout(timer); f('name')._auto = true; timer = setTimeout(lookup, 600); });
   f('name').addEventListener('input', () => { f('name')._auto = false; });
