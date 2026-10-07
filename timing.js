@@ -632,7 +632,7 @@ const EXT_PLAY = `<div class="ex-play"><div class="ex-pc ice"><b>🧊 冰水區�
 const extZoneOf = d => d ? EXT_Z[d.zone] : null;
 PAGES.extreme = () => {
   const sym = S.extSym || '^TWII', d = S.ext[sym]; setTimeout(() => loadExtreme(sym, false), 30);
-  const head = `<h2>極端訊號</h2><p class="lead">市場大約只有 <b>5% 的時間</b>處在極端行情：<b>冰水區</b>（恐慌超跌）和<b>滾水區</b>（狂熱暴漲）。這頁把今天放進 1990 年以來的歷史分布，告訴你現在多冷、多熱，以及過去在同樣溫度時，之後通常怎麼走。</p>
+  const head = `<h2>極端訊號</h2><p class="lead">市場大約只有 <b>5% 的時間</b>處在極端行情：<b>冰水區</b>（恐慌超跌）和<b>滾水區</b>（狂熱暴漲）。這頁把今天放進數十年的歷史分布（台股約 1997 年、美股 1988 年起），告訴你現在多冷、多熱，以及過去在同樣溫度時，之後通常怎麼走。</p>
     <div class="chips">${EXT_SYMS.map(([k, l]) => `<button class="chip ${k === sym ? 'on' : ''}" data-extsym="${k}">${l}${S.ext[k] ? ` ${EXT_Z[S.ext[k].zone].ic}` : ''}</button>`).join('')}</div>`;
   if (!d) return head + `<div class="card empty">${extBusy[sym] ? '計算中…（第一次約 5～10 秒）' : '讀取中…'}</div>`;
   const Z = extZoneOf(d), F = d.fwd, hz = F.all.map(x => x.h);
