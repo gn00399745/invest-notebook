@@ -73,6 +73,18 @@ async function yIndustry(code) {
   return q ? { ySector: q.sector || q.sectorDisp || '', yIndustry: q.industry || q.industryDisp || '' } : {};
 }
 
+/* ---------------- 個股 beta：近一年週報酬對大盤迴歸 ---------------- */
+function betaOf(bars, idx) {
+  if (!bars?.length || !idx?.length) return null;
+  const im = new Map(idx.map(b => [b.d, b.c])), pts = bars.filter(b => im.has(b.d));
+  const w = pts.filter((_, i) => (pts.length - 1 - i) % 5 === 0); if (w.length < 30) return null;
+  const rs = [], rm = [];
+  for (let i = 1; i < w.length; i++) { rs.push(w[i].c / w[i - 1].c - 1); rm.push(im.get(w[i].d) / im.get(w[i - 1].d) - 1); }
+  const n = rs.length, ms = rs.reduce((a, b) => a + b, 0) / n, mm = rm.reduce((a, b) => a + b, 0) / n;
+  let cov = 0, vm = 0; for (let i = 0; i < n; i++) { cov += (rs[i] - ms) * (rm[i] - mm); vm += (rm[i] - mm) ** 2; }
+  return vm ? { b: r(cov / vm, 2), n } : null;
+}
+
 /* ---------------- 台股：FinMind ---------------- */
 async function fm(dataset, id, start) {
   const tok = process.env.FINMIND_TOKEN ? `&token=${process.env.FINMIND_TOKEN}` : '';
@@ -101,6 +113,7 @@ async function taiwan(code, errors) {
   // 股價與技術面
   const bars = px.filter(b => b.close > 0).map(b => ({ d: b.date, c: b.close, h: b.max, l: b.min, v: b.Trading_Volume / 1000 }));
   if (bars.length > 30) { out.price = r(bars[bars.length - 1].c); out.priceDate = bars[bars.length - 1].d; out.tech = technicals(bars, ' 張'); out.spark = bars.slice(-250).map(b => [b.d, b.c]); }
+  try { out.beta = betaOf(bars, (await yahooBars('^TWII')).bars); } catch (e) { /* 沒有 beta 就只用產業值 */ }
 
   // 財報（單季）
   const byQ = {};
@@ -341,6 +354,7 @@ async function us(code, errors) {
   let px = null;
   try { px = await yahooBars(code); } catch (e) { errors.push(e.message); try { px = await stooqBars(code); } catch (e2) { errors.push(e2.message); } }
   if (px?.bars?.length > 30) { const b = px.bars; out.price = r(b[b.length - 1].c); out.priceDate = b[b.length - 1].d; out.tech = technicals(b, ' 股'); out.spark = b.slice(-250).map(x => [x.d, r(x.c)]); if (px.name) out.name = px.name; }
+  try { if (px?.bars?.length) out.beta = betaOf(px.bars, (await yahooBars('^GSPC')).bars); } catch (e) { /* 只用產業值 */ }
   let got = false;
   try {
     const f = await yahooFin(code); Object.assign(out, f); out.finQuarter = f.quarter; got = true;
