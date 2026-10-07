@@ -1077,7 +1077,7 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferr
 $('#installBtn').addEventListener('click', async () => {
   if (!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; $('#installBtn').hidden = true;
 });
-const APP_VER = '2026.10.07a';
+const APP_VER = '2026.10.07b';
 if ('serviceWorker' in navigator) window.addEventListener('load', () => {
   // 有新版本時自動套用：回到 App 時檢查更新，新的 Service Worker 接手後重新載入一次
   const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;

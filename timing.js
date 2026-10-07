@@ -667,3 +667,127 @@ PAGES.timing = () => {
 document.addEventListener('click', e => { const t = e.target.closest('[data-extgo]'); if (t) { S.extSym = t.dataset.extgo; save(); go('extreme'); } });
 if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['extreme', '極端訊號'], ['macro', '總經'], ['cycles', '週期研究'], ['metfx', '黃金・匯率'], ['monitor', '監控'], ['overview', '研究總覽']];
 if (['extreme', 'timing'].includes(current)) render();
+
+/* ================= 四層整合：週期 → 溫度 → 標的 → 監控 =================
+   週期決定「股票放多少」、極端溫度決定「現在用哪種模式」、個股訊號決定「買賣哪一檔」、監控負責「條件到了提醒我」。 */
+const MODE = {
+  ice: { n: '逆勢承接模式', c: 'ice', ic: '🧊', short: '分批承接，不追殺' },
+  cold: { n: '準備模式', c: 'cold', ic: '❄️', short: '列好清單、備好子彈' },
+  mid: { n: '照計畫模式', c: 'mid', ic: '🌤️', short: '照配置與定期定額' },
+  hot: { n: '放慢模式', c: 'hot', ic: '🔥', short: '新資金放慢，檢查停利線' },
+  boil: { n: '順勢保護模式', c: 'boil', ic: '♨️', short: '抱住部位，移動停利' },
+};
+const EXT_OF = { tw: '^TWII', us: '^GSPC' };
+const zoneOfMkt = id => S.ext[EXT_OF[id]]?.zone || null;
+// 景氣階段 × 溫度 → 一句結論
+function verdict(id) {
+  const P = phaseOf(id)?.ph, z = zoneOfMkt(id), d = S.ext[EXT_OF[id]];
+  if (!z) return null;
+  const M = MODE[z]; let t;
+  if (z === 'ice') t = P === '收縮' || P === '趨緩' ? '景氣偏弱又恐慌超跌：長線最好的承接區之一，但可能還會更冷，預備金分 3～4 批、拉長時間買。' : '景氣還不差卻恐慌超跌：常是錯殺，優先用大盤 ETF 分批承接。';
+  else if (z === 'boil') t = P === '趨緩' || P === '收縮' ? '景氣已轉弱但股市極熱：最該保護獲利——超出配置上限的先減碼，其餘設移動停利。' : '景氣擴張加上極熱行情：趨勢可能延續，持股續抱、設移動停利，新資金不追高。';
+  else if (z === 'hot') t = '偏熱但還不極端：定期定額照扣，單筆放慢，先把停利線寫好。';
+  else if (z === 'cold') t = '偏冷、接近冰水區：準備好要買的清單與分批計畫，等進入冰水區或止跌再動。';
+  else t = P === '收縮' ? '景氣收縮但市場還沒恐慌：保守、保留現金，等冰水區或領先指標回升。' : P === '趨緩' ? '景氣趨緩、市場常溫：不加碼高本益比股，逐步轉向防禦與債券。' : '常溫：照原本的配置比例與定期定額，不用特別做什麼。';
+  return { P, z, M, t, temp: d.temp };
+}
+// 個股判斷加上「大盤模式」
+const _assetCheck0 = assetCheck;
+assetCheck = function (c) {
+  const r = _assetCheck0(c), id = c.market === '美股' ? 'us' : 'tw', z = zoneOfMkt(id);
+  if (!z || r.st[0] === '資料不足') return r;
+  r.why.unshift([`大盤${EXT_Z[z].n}`, z === 'ice' ? 'pos' : z === 'boil' ? 'neg' : z === 'cold' ? 'pos' : z === 'hot' ? 'neg' : 'neu']);
+  const etf = /^00\d/.test(r.code) || /ETF/i.test(c.name || '');
+  if (z === 'boil' && r.h && r.pl > 0 && r.st[1] !== 'neg') r.st = ['續抱＋移動停利', 'gold', '大盤在滾水區：不加碼；跌破月線或從高點回落 8～10% 時分批停利，其餘續抱'];
+  else if (z === 'boil' && !r.h && r.st[1] === 'pos') r.st = ['等回檔再買', 'gold', '個股條件不錯，但大盤在滾水區：設價格提醒，等回到月線或大盤降溫再分批'];
+  else if (z === 'ice' && r.st[1] !== 'neg' && (etf || (r.why.find(w => /估值空間/.test(w[0]))?.[1] === 'pos'))) r.st = ['冰水區分批承接', 'pos', '大盤恐慌超跌、標的估值有空間：預備金分 3～4 批，每再跌 7～10% 或隔 2～3 週買一批'];
+  else if (z === 'ice' && r.st[1] === 'neg') r.st[2] += '；大盤在冰水區：先確認是公司出問題還是市場錯殺，錯殺不急著停損';
+  return r;
+};
+// 依目前判斷，建議要監控的條件
+function suggestMon(x) {
+  const t = `${x.code} ${x.c.name || ''}`.trim(), base = { target: t, code: x.code, notify: '網站內提醒', status: '啟用' };
+  if (x.h && /停利|移動停利/.test(x.st[0])) return { ...base, metric: '距 20 日均線 %', op: '低於', value: '0', cond: '跌破月線（20 日均線）', action: '移動停利：先賣 1/3～1/2，其餘跌破季線再賣' };
+  if (x.h && /停損/.test(x.st[0])) return { ...base, metric: '近 20 日漲跌 %', op: '低於', value: '-10', cond: '近 20 日跌超過 10%', action: '對照研究卡「證明我錯」條件，決定減碼或出場' };
+  if (x.h) return { ...base, metric: '距 60 日均線 %', op: '低於', value: '-3', cond: '跌破季線 3% 以上', action: '停損檢查：基本面沒變就續抱，論點被推翻就出場' };
+  if (/等回檔|好價/.test(x.st[0])) return { ...base, metric: 'RSI', op: '低於', value: '50', cond: 'RSI 降到 50 以下（降溫）', action: '回到研究卡確認估值，分 2～3 批買進' };
+  if (/等趨勢/.test(x.st[0])) return { ...base, metric: '距 60 日均線 %', op: '高於', value: '0', cond: '站回季線', action: '趨勢轉強：分批買進第一批' };
+  if (/承接/.test(x.st[0])) return { ...base, metric: 'RSI', op: '低於', value: '30', cond: 'RSI 跌破 30（超賣）', action: '冰水區分批：買下一批' };
+  return { ...base, metric: '距 20 日均線 %', op: '高於', value: '10', cond: '離月線 10% 以上（短線過熱）', action: '不追高，等回檔' };
+}
+const hasMon = (m) => S.monitors.some(y => y.status !== '已觸發' && y.code === m.code && y.metric === m.metric && y.op === m.op);
+// 系統自動監控：大盤溫度區、景氣階段改變時提醒
+function sysWatch() {
+  S.sysWatch = S.sysWatch || {}; const msgs = [];
+  for (const id of ['tw', 'us']) {
+    const z = zoneOfMkt(id), p = phaseOf(id)?.ph, nm = id === 'tw' ? '台股' : '美股', w = S.sysWatch[id] || {};
+    if (z && w.z && z !== w.z && (['ice', 'boil'].includes(z) || ['ice', 'boil'].includes(w.z))) msgs.push(`${nm}溫度：${EXT_Z[w.z].n} → ${EXT_Z[z].n}（切換為「${MODE[z].n}」）`);
+    if (p && w.p && p !== w.p) msgs.push(`${nm}景氣階段：${w.p} → ${p}`);
+    S.sysWatch[id] = { z: z || w.z, p: p || w.p };
+  }
+  if (msgs.length) {
+    S.monAlerts = [...(S.monAlerts || []), ...msgs]; save();
+    if ('Notification' in window && Notification.permission === 'granted') navigator.serviceWorker?.getRegistration().then(reg => { const o = { body: msgs.join('\n'), icon: 'icons/icon-192.png' }; reg ? reg.showNotification('市場狀態改變', o) : new Notification('市場狀態改變', o); }).catch(() => {});
+  } else save();
+}
+PAGES.timing = () => {
+  setTimeout(() => { loadWorld(false); loadSeason('^GSPC', false); loadExtreme('^TWII', false); loadExtreme('^GSPC', false); if (typeof refreshHoldQuotes === 'function') refreshHoldQuotes(false); sysWatch(); }, 30);
+  const ecos = ['tw', 'us', 'cn', 'jp', 'eu', 'hk', 'kr'].map(id => ({ id, e: ECON.find(x => x.id === id), P: phaseOf(id), m: mktTemp(idxOf(id)), m0: idxOf(id) }));
+  const V = { tw: verdict('tw'), us: verdict('us') }, yr = new Date().getFullYear(), mo = new Date().getMonth();
+  // 0. 今天的結論
+  const top = `<div class="card dc-top"><h3 class="gold-bar">🧭 今天的結論</h3>
+    ${[['tw', '🇹🇼 台股'], ['us', '🇺🇸 美股']].map(([id, l]) => { const v = V[id], P = phaseOf(id); return `<div class="dc-v ${v?.M.c || ''}"><div class="dc-vh"><b>${l}</b>${P ? `<i class="sigp ${PHASE[P.ph].c}">景氣${P.ph}</i>` : ''}${v ? `<i class="dc-z ${v.z}">${EXT_Z[v.z].ic} ${EXT_Z[v.z].n} ${fmt(v.temp, 0)}</i>` : ''}</div>
+      ${v ? `<div class="dc-mode">${v.M.ic} <b>${v.M.n}</b>：${esc(v.M.short)}</div><div class="dc-t">${esc(v.t)}</div>` : '<div class="help">讀取中…</div>'}</div>`; }).join('')}
+    <div class="dc-flow"><span>① 週期<em>放多少</em></span><span>② 溫度<em>用哪種模式</em></span><span>③ 標的<em>買賣哪檔</em></span><span>④ 監控<em>到了提醒我</em></span></div></div>`;
+  // ① 週期
+  const P1 = [phaseOf('tw'), phaseOf('us')], sd = S.season['^GSPC'], sm = sd?.monthly?.mid;
+  const cyc = `<div class="card"><h3 class="gold-bar">① 週期：決定股票放多少</h3>
+    <div class="dc-rows">
+      <div><span class="dc-k l">長週期</span><div>美元當世界貨幣第 <b>${yr - 1920}</b> 年（歷代平均約 94 年）→ 不必恐慌，但配置要分散：海外資產、黃金各留一點。</div></div>
+      <div><span class="dc-k m">中週期</span><div>${[['🇹🇼 台灣', P1[0]], ['🇺🇸 美國', P1[1]]].filter(x => x[1]).map(([l, p]) => `${l}景氣<b>${p.ph}</b>：${esc(PHASE[p.ph].stock)}`).join('<br>') || '總經資料載入中…'}</div></div>
+      <div><span class="dc-k s">短週期</span><div>${sm ? `${yr % 4 === 2 ? '美國期中選舉年' : '季節性'}：${mo + 1} 月歷史平均 <b>${pc(sm[mo]?.avg, 1)}%</b>、${(mo + 1) % 12 + 1} 月 <b>${pc(sm[(mo + 1) % 12]?.avg, 1)}%</b> → 只用來安排分批節奏。` : '季節性資料載入中…'}</div></div>
+    </div>
+    <div class="tm-clock">${Object.entries(PHASE).map(([k, v]) => `<div class="tm-q ${P1.some(p => p?.ph === k) ? 'on' : ''}"><b>${v.ic} ${k}</b>${P1[0]?.ph === k ? '<span class="pill">🇹🇼</span>' : ''}${P1[1]?.ph === k ? '<span class="pill">🇺🇸</span>' : ''}<em>${v.stock}</em></div>`).join('')}</div>
+    <button class="btn-small ghost" data-go="cycles">看週期研究 ›</button></div>`;
+  // ② 溫度
+  const tmp = `<div class="card"><h3 class="gold-bar">② 溫度：決定現在用哪種模式</h3>
+    ${[['^TWII', '🇹🇼 台股'], ['^GSPC', '🇺🇸 美股']].map(([s, l]) => { const d = S.ext[s], Z = d ? EXT_Z[d.zone] : null; return `<div class="ex-mini" data-extgo="${s}"><span>${l}</span>${extThermo(d?.temp, true)}<b class="${Z?.c || ''}">${Z ? `${Z.ic} ${Z.n} ${fmt(d.temp, 0)}` : '讀取中'}</b></div>`; }).join('')}
+    <div class="dc-modes">${Object.entries(MODE).map(([k, m]) => `<span class="${k} ${[zoneOfMkt('tw'), zoneOfMkt('us')].includes(k) ? 'on' : ''}">${m.ic} ${m.n.replace('模式', '')}<em>${m.short}</em></span>`).join('')}</div>
+    <div class="help">約 90% 的時間在中間三格，照計畫就好；只有進入兩端 5% 的極端區才換做法。</div>
+    <details class="rc-sub"><summary>其他市場的短線溫度</summary>${gtable(['市場', '景氣', '溫度', '離季線', 'RSI'], ecos.filter(x => x.m).map(x => `<div class="gt-r click" data-wtab-go="${x.id}"><span>${x.e.flag} ${esc(x.m0.name)}</span><span>${x.P ? `<i class="sigp ${PHASE[x.P.ph].c}">${x.P.ph}</i>` : '—'}</span><span><i class="sigp ${x.m.t[1]}">${x.m.t[0]}</i></span><span style="${heat(-x.m.bias, 6)}">${pc(x.m.bias)}%</span><span>${x.m.rsi == null ? '—' : fmt(x.m.rsi, 0)}</span></div>`), 'ov')}<div class="help">這裡用近 60 日資料粗估：RSI ≥ 70 或高於均線 6% 為偏熱。</div></details>
+    <button class="btn-small ghost" data-go="extreme">看完整極端訊號 ›</button></div>`;
+  // ③ 標的
+  const mine = S.cards.filter(c => c.code && !c.example).map(assetCheck).sort((a, b) => (!!b.h - !!a.h) || ['neg', 'gold', 'pos', 'neu', ''].indexOf(a.st[1]) - ['neg', 'gold', 'pos', 'neu', ''].indexOf(b.st[1]));
+  const need = mine.filter(x => x.st[0] !== '資料不足').map(suggestMon).filter(m => !hasMon(m));
+  const lst = `<div class="card"><h3 class="gold-bar">③ 標的：買賣哪一檔、什麼價位</h3>
+    ${mine.length ? mine.map(x => { const sm = x.st[0] !== '資料不足' ? suggestMon(x) : null, on = sm && hasMon(sm); return `<div class="tm-a ${x.st[1]}" data-card="${x.c.id}" data-go-card="1"><div class="tm-ah"><b>${esc(x.code)} ${esc(x.c.name || '')}</b>${x.h ? '<span class="pill green">持有</span>' : ''}<span class="tm-st ${x.st[1]}">${x.st[0]}</span></div>
+      <div class="tm-why">${x.why.map(([t, cl]) => `<i class="sigp ${cl}">${esc(t)}</i>`).join('')}</div><div class="tm-do">${esc(x.st[2])}</div>
+      ${sm ? `<button class="dc-mon ${on ? 'on' : ''}" data-mkmon="${esc(x.code)}">${on ? '🔔 已監控' : '🔔 設監控'}：${esc(sm.cond)}</button>` : ''}</div>`; }).join('')
+      : '<div class="empty">還沒有研究卡。持股會自動建立研究卡；也可以從「選股雷達」挑標的建卡。</div>'}
+    <div class="help">判斷順序：景氣階段 → 大盤溫度（模式）→ 個股估值空間 → 趨勢（季線）→ 短線熱度。</div></div>`;
+  // ④ 監控
+  const act = S.monitors.filter(m => m.status === '啟用'), auto = act.filter(m => m.code && m.metric), hit = S.monitors.filter(m => m.status === '已觸發').slice(-3);
+  const mon = `<div class="card"><h3 class="gold-bar">④ 監控：條件到了提醒我</h3>
+    <div class="w-rates"><span>啟用中 <b>${act.length}</b> 條</span><span>自動檢查 <b>${auto.length}</b> 條</span><span>已觸發 <b>${S.monitors.filter(m => m.status === '已觸發').length}</b> 條</span></div>
+    <div class="dc-sys"><b>系統自動盯著</b><span>🌡️ 台股、美股進出冰水區／滾水區</span><span>🔄 台灣、美國景氣階段改變</span><div class="help">每次打開網站時檢查，有變化會出現在首頁提醒（有開手機通知也會跳通知）。</div></div>
+    ${hit.length ? `<div class="help">最近觸發：${hit.map(m => esc(`${m.target}：${m.cond || m.metric}`)).join('；')}</div>` : ''}
+    <div class="btn-row" style="margin-top:8px">${need.length ? `<button class="btn-small" data-mkmon="__all">🔔 一次幫 ${need.length} 檔設好建議監控</button>` : ''}<button class="btn-small ghost" id="monCheck">立即檢查</button><button class="btn-small ghost" data-go="monitor">管理監控 ›</button></div></div>`;
+  return `<h2>進出場時機</h2><p class="lead">把週期、極端訊號、個股判斷、監控串成同一套流程：<b>週期決定放多少</b>、<b>溫度決定用哪種模式</b>、<b>個股決定買賣哪檔</b>、<b>監控在條件到了時提醒你</b>。</p>
+    ${top}${cyc}${tmp}${lst}${mon}
+    <details class="card rc-sub" ${S.tmGuide ? 'open' : ''} id="tmGuide"><summary>📋 進場與退場時機清單</summary>${TIMING_GUIDE}</details>`;
+};
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-mkmon]'); if (!t) return; e.stopPropagation();
+  const list = S.cards.filter(c => c.code && !c.example).map(assetCheck).filter(x => x.st[0] !== '資料不足' && (t.dataset.mkmon === '__all' || x.code === t.dataset.mkmon));
+  let n = 0; list.forEach(x => { const m = suggestMon(x); if (!hasMon(m)) { S.monitors.push({ id: uid(), ...m }); n++; } });
+  save(); toast(n ? `已建立 ${n} 條監控，打開網站時會自動檢查` : '這些條件已經在監控中'); const y = scrollY; render(); scrollTo(0, y);
+}, true);
+// 首頁也跑系統監控
+const _homeDC = PAGES.home;
+PAGES.home = () => { setTimeout(() => { loadExtreme('^TWII', false); loadExtreme('^GSPC', false); sysWatch(); }, 200); return _homeDC(); };
+// 監控頁：加上系統自動監控說明與「從進出場時機產生」
+const _monDC = PAGES.monitor;
+PAGES.monitor = () => _monDC().replace('<div class="card"><div class="card-head"><h3 class="gold-bar">條件清單</h3>', `<div class="card"><h3 class="gold-bar">系統自動監控</h3><div class="dc-sys"><span>🌡️ 台股 ${S.ext['^TWII'] ? `${EXT_Z[S.ext['^TWII'].zone].ic} ${EXT_Z[S.ext['^TWII'].zone].n}` : '—'}・美股 ${S.ext['^GSPC'] ? `${EXT_Z[S.ext['^GSPC'].zone].ic} ${EXT_Z[S.ext['^GSPC'].zone].n}` : '—'}：進出冰水區／滾水區時提醒</span><span>🔄 景氣階段：🇹🇼 ${phaseOf('tw')?.ph || '—'}・🇺🇸 ${phaseOf('us')?.ph || '—'}：改變時提醒</span></div>
+    <div class="help">個股的停利、停損、等回檔條件，可以到「進出場時機」按「🔔 設監控」自動產生。</div><button class="btn-small ghost" data-go="timing">到進出場時機產生建議監控 ›</button></div>
+  <div class="card"><div class="card-head"><h3 class="gold-bar">條件清單</h3>`);
+if (['timing', 'monitor'].includes(current)) render();
