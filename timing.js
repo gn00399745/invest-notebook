@@ -957,3 +957,62 @@ PAGES.monitor = () => { setTimeout(() => checkMonitors(false), 100); return _mon
   <div class="no">⚠️ <b>網站關著時收不到</b>：這是網頁 App 的限制。盤中即時提醒請按「📋 複製給券商」，貼到券商 App 的到價提醒。</div></div></div>
   <div class="card"><h3 class="gold-bar">系統自動監控</h3>`); };
 if (['cards', 'timing', 'monitor'].includes(current)) render();
+
+/* ================= DCF 折現率：依產業定位估算（CAPM） =================
+   折現率 ＝ 無風險利率 ＋ beta × 股票風險溢酬 ＋ 規模溢酬
+   beta：產業 beta 與個股近一年實際 beta 各半（只有一個時就用那一個）。 */
+const IND_BETA = {
+  ai: [1.15, 1.3, 1.1, 1.0, 1.25, 1.15, 1.3, 1.4, 1.2, 1.1, 1.3, 1.15],
+  ev: [1.4, 1.3, 1.3, 1.2, 1.2, 1.0, 1.2], fin: [0.8, 1.0, 1.1, 1.0], cons: [0.5, 0.6, 0.7, 1.0],
+  ship: [1.4, 1.2, 1.0, 0.9], sat: [1.5, 1.3, 1.3, 1.2, 1.2], champ: [1.2, 1.2, 1.1, 1.0, 0.9, 0.9], bio: [0.8, 1.5, 1.0, 0.9],
+};
+// 永續成長率：成熟內需低、科技成長高
+const IND_TG = { ai: 3, ev: 2.5, fin: 2, cons: 1.5, ship: 1.5, sat: 3, champ: 2, bio: 2.5 };
+const ERP = { tw: 6, us: 5 }; // 股票風險溢酬（假設值；台股含國家風險）
+function rfOf(us) { const t = mkOf('^TNX'); return us ? (t?.price > 0 && t.price < 15 ? +t.price.toFixed(2) : 4.2) : 1.6; }
+function discountRate(c, extra = {}) {
+  const us = c.market === '美股', f = findLayer(c.layer), id = f?.ch.id;
+  const bInd = f ? IND_BETA[id]?.[f.i] : null, bMe = c.beta?.b != null && c.beta.b > 0.2 && c.beta.b < 3 ? c.beta.b : null;
+  const beta = bInd != null && bMe != null ? (bInd + bMe) / 2 : bInd ?? bMe ?? 1;
+  const rf = rfOf(us), erp = us ? ERP.us : ERP.tw;
+  const cap = extra.cap; // 市值（台幣元或美元）
+  const size = cap == null ? 0 : us ? (cap < 2e9 ? 2 : cap < 1e10 ? 1 : 0) : (cap < 1e10 ? 2 : cap < 5e10 ? 1 : 0);
+  const r = Math.max(7, Math.min(16, rf + beta * erp + size));
+  const tg = Math.min(id ? IND_TG[id] : 2.5, r - 4);
+  const parts = `無風險利率 ${rf}%（${us ? '美國 10 年債' : '台灣 10 年公債約'}）＋ beta ${beta.toFixed(2)} × 風險溢酬 ${erp}%${size ? ` ＋ 小型股溢酬 ${size}%` : ''}`;
+  const bWhy = [bInd != null ? `產業 ${bInd}（${f.l.n}）` : '', bMe != null ? `個股近一年 ${bMe}` : ''].filter(Boolean).join('、') || '未定位，用 1.0';
+  return { r: Math.round(r * 10) / 10, tg, beta, fin: id === 'fin' && f.i < 2, why: `${parts}；beta 取${bWhy}${bInd != null && bMe != null ? '的平均' : ''}。永續成長 ${tg}%（${f ? f.ch.name : '一般'}）` };
+}
+function applyDR(c, extra) {
+  const i = c.dcfIn; if (!i || !i.auto) return;
+  const D = discountRate(c, extra); i.r = String(D.r); i.tg = String(D.tg); i.rWhy = D.why; i.fin = D.fin;
+  const res = dcfCalc(i);
+  if (res && !res.neg && !D.fin && (isBlankish(c.val[1].assume) || c.val[1].auto)) c.val[1] = { assume: `【自動】${i.basis === 'eps' ? '近四季淨利（擴產期自由現金流為負，暫以獲利代替）' : '近四季自由現金流'}、前 5 年成長 ${i.g}%、折現率 ${i.r}%（依產業估算）、永續成長 ${i.tg}%`, fair: String(Math.round(res.perShare * 10) / 10), note: '折現率＝無風險利率＋beta×風險溢酬，可在 DCF 試算調整', auto: true };
+  if (D.fin && c.val[1].auto) c.val[1] = { assume: '【自動】銀行、壽險的現金流包含存放款與保費，DCF 不適用', fair: '', note: '改用股價淨值比與殖利率比較同業', auto: true };
+}
+const _afterAF = window.afterAutoFill;
+window.afterAutoFill = (c, d) => {
+  if (d.beta) c.beta = d.beta;
+  _afterAF(c, d);
+  if (c.dcfIn?.auto && d.dcf) {
+    // 擴產期資本支出大、自由現金流為負，但有獲利：改用近四季淨利當現金流
+    if (d.dcf.fcfTTM <= 0 && d.epsTTM > 0) { const k = d.market === '美股' ? 1e6 : 1e8; c.dcfIn.fcf = String(Math.round(d.epsTTM * d.dcf.shares / k * 10) / 10); c.dcfIn.basis = 'eps'; } else c.dcfIn.basis = 'fcf';
+    applyDR(c, { cap: d.price && d.dcf.shares ? d.price * d.dcf.shares : null });
+  }
+};
+// DCF 區塊：顯示折現率怎麼來的，並可依產業重算
+const _dcfHTML0 = dcfHTML;
+dcfHTML = function (c) {
+  const h = _dcfHTML0(c), i = c.dcfIn || {}, D = discountRate(c);
+  const note = `<div class="dr-box">${i.basis === 'eps' ? '<div class="help">⚠️ 這家近四季資本支出大於營業現金流（擴產中），現金流欄位改用<b>近四季淨利</b>估算；擴產結束、現金流轉正後再按「⚡ 自動帶入」更新。</div>' : ''}<div><b>折現率建議 ${D.r}%</b>・永續成長 ${D.tg}%</div><div class="help">${esc(i.rWhy || D.why)}</div>
+    ${D.fin ? '<div class="help down">金融股（銀行、壽險）不適合用 DCF，請看股價淨值比與殖利率。</div>' : ''}
+    <button type="button" class="btn-small ghost" data-dcfre="1">套用建議折現率</button></div>`;
+  return h.replace('<div class="result" id="dcfResult">', note + '<div class="result" id="dcfResult">');
+};
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-dcfre]'); if (!t) return;
+  const c = S.cards.find(x => x.id === openCardId); if (!c) return;
+  const D = discountRate(c, { cap: num(c.price) && num(c.dcfIn?.shares) ? num(c.price) * num(c.dcfIn.shares) * (c.market === '美股' ? 1e6 : 1e8) : null });
+  c.dcfIn = Object.assign(c.dcfIn || {}, { r: String(D.r), tg: String(D.tg), rWhy: D.why, auto: true }); applyDR(c);
+  save(); toast(`折現率 ${D.r}%、永續成長 ${D.tg}%`); const y = scrollY; render(); scrollTo(0, y);
+});
