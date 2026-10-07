@@ -791,3 +791,25 @@ PAGES.monitor = () => _monDC().replace('<div class="card"><div class="card-head"
     <div class="help">個股的停利、停損、等回檔條件，可以到「進出場時機」按「🔔 設監控」自動產生。</div><button class="btn-small ghost" data-go="timing">到進出場時機產生建議監控 ›</button></div>
   <div class="card"><div class="card-head"><h3 class="gold-bar">條件清單</h3>`);
 if (['timing', 'monitor'].includes(current)) render();
+
+/* ---------- 研究卡直接顯示「現在該怎麼做」 ---------- */
+const _cardsDC = PAGES.cards;
+PAGES.cards = () => {
+  let h = _cardsDC();
+  if (openCardId) {
+    const c = S.cards.find(x => x.id === openCardId); if (!c || !c.code) return h;
+    const x = assetCheck(c), id = c.market === '美股' ? 'us' : 'tw', z = zoneOfMkt(id), P = phaseOf(id), sm = x.st[0] !== '資料不足' ? suggestMon(x) : null, on = sm && hasMon(sm);
+    const box = `<div class="card dc-card tm-a ${x.st[1]}"><div class="tm-ah"><b>🎯 現在該怎麼做</b><span class="tm-st ${x.st[1]}">${x.st[0]}</span></div>
+      <div class="dc-ctx">${P ? `<i class="sigp ${PHASE[P.ph].c}">${id === 'us' ? '美國' : '台灣'}景氣${P.ph}</i>` : ''}${z ? `<i class="dc-z ${z}">大盤${EXT_Z[z].ic}${EXT_Z[z].n}・${MODE[z].n}</i>` : ''}</div>
+      <div class="tm-why">${x.why.filter(w => !/^大盤/.test(w[0])).map(([t, cl]) => `<i class="sigp ${cl}">${esc(t)}</i>`).join('')}</div><div class="tm-do">${esc(x.st[2])}</div>
+      <div class="btn-row" style="margin-top:6px">${sm ? `<button class="dc-mon ${on ? 'on' : ''}" data-mkmon="${esc(x.code)}" style="width:auto;flex:1">${on ? '🔔 已監控' : '🔔 設監控'}：${esc(sm.cond)}</button>` : ''}<button class="btn-small ghost" data-go="timing">看整體 ›</button></div></div>`;
+    const i = h.indexOf('</section>'); return i < 0 ? h : h.slice(0, i + 10) + box + h.slice(i + 10);
+  }
+  S.cards.filter(c => c.code && !c.example).forEach(c => {
+    const x = assetCheck(c); if (x.st[0] === '資料不足') return;
+    const k = `data-card="${c.id}">`, a = h.indexOf(k); if (a < 0) return; const b = h.indexOf('<div class="rc-i-layer">', a); if (b < 0) return;
+    h = h.slice(0, b) + `<div class="rc-act ${x.st[1]}">🎯 ${esc(x.st[0])}</div>` + h.slice(b);
+  });
+  return h;
+};
+if (current === 'cards') render();
