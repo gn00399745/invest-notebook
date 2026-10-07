@@ -569,3 +569,101 @@ const _goCyc = go;
 go = function (page) { if (page === 'season' || page === 'empire') { S.cycReg = page; page = 'cycles'; } return _goCyc(page); };
 if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['macro', '總經'], ['cycles', '週期研究'], ['metfx', '黃金・匯率'], ['monitor', '監控'], ['overview', '研究總覽']];
 if (['cycles', 'season', 'empire'].includes(current)) go(current);
+
+/* ================= 極端訊號：冰水區（左側逆勢）／滾水區（右側順勢） =================
+   概念參考「投資癮的非常態投資學｜5% 極端訊號」課程公開簡介：市場約 5% 的時間處在極端行情，
+   超跌＝冰水區、暴漲＝滾水區。以下指標、門檻與做法為本工具自行設計（課程 2026/10/19 開課，內容未納入）。 */
+const EXT_SYMS = [['^TWII', '台股加權'], ['^GSPC', '標普 500'], ['^IXIC', '那斯達克'], ['^SOX', '費半']];
+const EXT_Z = {
+  ice: { n: '冰水區', ic: '🧊', c: 'ice', side: '左側逆勢', one: '歷史最冷的 5%：恐慌拋售，長線分批承接的機會' },
+  cold: { n: '偏冷', ic: '❄️', c: 'cold', side: '留意', one: '比平常冷，接近極端區，準備好資金與清單' },
+  mid: { n: '常溫', ic: '🌤️', c: 'mid', side: '照計畫', one: '約 60% 的時間在這裡：照原本的配置與定期定額' },
+  hot: { n: '偏熱', ic: '🔥', c: 'hot', side: '留意', one: '比平常熱，新資金放慢、檢查停利線' },
+  boil: { n: '滾水區', ic: '♨️', c: 'boil', side: '右側順勢', one: '歷史最熱的 5%：趨勢極強，抱住部位但用移動停利保護' },
+};
+S.ext = S.ext || {};
+let extBusy = {};
+async function loadExtreme(sym, force) {
+  if (extBusy[sym] || !location.protocol.startsWith('http')) return;
+  const c = S.ext[sym]; if (!force && c && Date.now() - (c.at || 0) < 6 * 3600e3) return;
+  extBusy[sym] = 1; if (current === 'extreme') render();
+  try { const j = await (await fetch('api/extreme?sym=' + encodeURIComponent(sym), { signal: AbortSignal.timeout(60000) })).json(); if (j.error) throw new Error(j.error); j.at = Date.now(); S.ext[sym] = j; save(); }
+  catch (e) { if (current === 'extreme') toast('極端訊號讀取失敗：' + e.message); }
+  delete extBusy[sym]; if (['extreme', 'timing'].includes(current)) { const y = scrollY; render(); scrollTo(0, y); }
+}
+// 溫度計：0～100，兩端 5% 為極端區
+function extThermo(t, small) {
+  const z = t == null ? null : t <= 5 ? 'ice' : t <= 20 ? 'cold' : t < 80 ? 'mid' : t < 95 ? 'hot' : 'boil';
+  return `<div class="ex-th ${small ? 'sm' : ''}"><div class="ex-tr"><i class="ice" style="width:5%"></i><i class="cold" style="width:15%"></i><i class="mid" style="width:60%"></i><i class="hot" style="width:15%"></i><i class="boil" style="width:5%"></i>
+    ${t != null ? `<b class="ex-dot ${z}" style="left:${Math.max(1, Math.min(99, t))}%">${small ? '' : `<span>${fmt(t, 0)}</span>`}</b>` : ''}</div>
+    ${small ? '' : '<div class="ex-ax"><span>🧊 冰水 5</span><span style="left:20%">20</span><span style="left:50%">常溫</span><span style="left:80%">80</span><span style="left:100%">滾水 95 ♨️</span></div>'}</div>`;
+}
+// 指標條：歷史 5%／中位數／95% 刻度＋目前位置
+function extMetric(m) {
+  const X = v => Math.max(0, Math.min(100, (v - m.lo) / (m.hi - m.lo || 1) * 100));
+  const z = m.pct <= 5 ? 'ice' : m.pct >= 95 ? 'boil' : m.pct <= 20 ? 'cold' : m.pct >= 80 ? 'hot' : 'mid';
+  const u = m.unit, f = v => `${v > 0 && u ? '+' : ''}${v}${u}`;
+  return `<div class="ex-m"><div class="ex-mh"><span>${esc(m.name)}</span><b class="${z}">${f(m.v)}</b><em>歷史第 ${fmt(m.pct, 0)} 百分位</em></div>
+    <div class="ex-mb"><i class="z ice" style="left:0;width:${X(m.p5)}%"></i><i class="z boil" style="left:${X(m.p95)}%;width:${100 - X(m.p95)}%"></i><i class="tk" style="left:${X(m.p50)}%"></i><b class="${z}" style="left:${X(m.v)}%"></b></div>
+    <div class="ex-ma"><span>最低 ${f(m.lo)}</span><span>冰水線 ${f(m.p5)}・中位 ${f(m.p50)}・滾水線 ${f(m.p95)}</span><span>最高 ${f(m.hi)}</span></div></div>`;
+}
+function extHist(d) {
+  const h = d.hist || []; if (h.length < 10) return '';
+  const W = 340, H = 110, L = 22, R = 4, T = 6, B = 16, X = i => L + i * (W - L - R) / (h.length - 1), Y = v => T + (100 - v) * (H - T - B) / 100;
+  const yr = +d.histStart.slice(0, 4), m0 = +d.histStart.slice(5, 7);
+  const ticks = []; for (let k = 0; k < h.length; k++) { const mo = (m0 - 1 + Math.round(k * 5 / 21)) % 12; if (k && mo === 0 && !ticks.some(t => Math.abs(t - k) < 8)) ticks.push(k); }
+  return `<svg class="ex-hs" viewBox="0 0 ${W} ${H}"><rect x="${L}" y="${Y(100)}" width="${W - L - R}" height="${Y(95) - Y(100)}" class="boil"/><rect x="${L}" y="${Y(5)}" width="${W - L - R}" height="${Y(0) - Y(5)}" class="ice"/>
+    ${[5, 50, 95].map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${L - 3}" y="${Y(v) + 3}" text-anchor="end">${v}</text>`).join('')}
+    <path d="${h.map((v, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join('')}"/>
+    ${h.map((v, i) => v <= 5 || v >= 95 ? `<circle cx="${X(i)}" cy="${Y(v)}" r="2.2" class="${v <= 5 ? 'ice' : 'boil'}"/>` : '').join('')}
+    ${ticks.map(k => `<text x="${X(k)}" y="${H - 3}" text-anchor="middle">${yr + Math.floor((m0 - 1 + k * 5 / 21) / 12)}</text>`).join('')}</svg>`;
+}
+const EXT_PLAY = `<div class="ex-play"><div class="ex-pc ice"><b>🧊 冰水區：左側逆勢</b><ul>
+    <li><b>先確認是「市場」冷，不是公司壞掉</b>：優先用大盤 ETF 承接；個股要回研究卡確認論點沒被推翻。</li>
+    <li><b>事先切好子彈</b>：把預備金分 3～4 批，例如進入冰水區買第 1 批，之後每再跌 7～10% 或每隔 2～3 週再買 1 批。</li>
+    <li><b>只用閒錢、不開槓桿</b>：冰水區常常更冷（下表「進入後再跌」），要撐得過再跌 15～20%。</li>
+    <li><b>出場看時間與結構</b>：溫度回到常溫、站回季線後，依原本的配置比例再平衡。</li></ul></div>
+  <div class="ex-pc boil"><b>♨️ 滾水區：右側順勢</b><ul>
+    <li><b>不急著放空、不急著全賣</b>：極熱常常更熱，歷史上滾水區之後 3 個月多半仍上漲。</li>
+    <li><b>用移動停利保護</b>：例如跌破月線（20 日線）或從高點回落 8～10% 才分批出場。</li>
+    <li><b>新資金放慢</b>：定期定額照扣，但不單筆追高；超出配置上限的部位先再平衡。</li>
+    <li><b>不加槓桿</b>：滾水區的波動也大，留現金給下一次冰水區。</li></ul></div></div>
+  <div class="help">「左側」＝在下跌趨勢還沒結束前分批買（買在恐慌）；「右側」＝趨勢確立後跟隨（不預測頂部）。兩者都靠事先寫好的規則，而不是當下的情緒。</div>`;
+const extZoneOf = d => d ? EXT_Z[d.zone] : null;
+PAGES.extreme = () => {
+  const sym = S.extSym || '^TWII', d = S.ext[sym]; setTimeout(() => loadExtreme(sym, false), 30);
+  const head = `<h2>極端訊號</h2><p class="lead">市場大約只有 <b>5% 的時間</b>處在極端行情：<b>冰水區</b>（恐慌超跌）和<b>滾水區</b>（狂熱暴漲）。這頁把今天放進 1990 年以來的歷史分布，告訴你現在多冷、多熱，以及過去在同樣溫度時，之後通常怎麼走。</p>
+    <div class="chips">${EXT_SYMS.map(([k, l]) => `<button class="chip ${k === sym ? 'on' : ''}" data-extsym="${k}">${l}${S.ext[k] ? ` ${EXT_Z[S.ext[k].zone].ic}` : ''}</button>`).join('')}</div>`;
+  if (!d) return head + `<div class="card empty">${extBusy[sym] ? '計算中…（第一次約 5～10 秒）' : '讀取中…'}</div>`;
+  const Z = extZoneOf(d), F = d.fwd, hz = F.all.map(x => x.h);
+  const row = (k, l) => `<div class="gt-r ${d.zone === k ? 'hl' : ''}"><span>${l}</span>${F[k].map((x, i) => `<span style="${heat(x.avg - (F.all[i].avg || 0), 4)}">${x.avg == null ? '—' : pc(x.avg)}%<small>${x.win ?? '—'}%</small></span>`).join('')}</div>`;
+  const ep = (list, k) => list.length ? list.map(e => `<div class="ex-ep ${k}"><b>${esc(e.d)}</b><span>${e.ongoing ? '<i class="pill gold">進行中</i>' : `${e.days} 天`}</span><span>${k === 'ice' ? '之後再跌' : '之後再漲'} <em class="${k === 'ice' ? 'down' : 'up'}">${pc(e.further)}%</em></span><span>3 個月 <em class="${e.m3 >= 0 ? 'up' : 'down'}">${e.m3 == null ? '—' : pc(e.m3) + '%'}</em></span><span>1 年 <em class="${e.m12 >= 0 ? 'up' : 'down'}">${e.m12 == null ? '—' : pc(e.m12) + '%'}</em></span></div>`).join('') : '<div class="empty">期間內沒有</div>';
+  return head + `<div class="card ex-now ${Z.c}"><div class="ex-big"><i>${Z.ic}</i><div><b>${esc(d.name)}：${Z.n}</b><span>綜合溫度 ${fmt(d.temp, 0)}／100・已持續 ${d.daysIn} 個交易日・${esc(Z.side)}</span></div></div>
+      ${extThermo(d.temp)}<div class="tm-ph">${esc(Z.one)}</div>
+      <div class="help">綜合溫度＝下面四個指標在歷史上的百分位平均，再換算成歷史排名。≤5＝冰水區、≥95＝滾水區（各約占歷史 5% 的交易日）。收盤 ${fmt(d.price, 0)}（${esc(d.lastDate)}）。</div></div>
+    <div class="card"><h3 class="gold-bar">📏 四個溫度計</h3>${d.metrics.map(extMetric).join('')}
+      ${d.vix ? `<div class="ex-m"><div class="ex-mh"><span>VIX 恐慌指數（美股）</span><b class="${d.vix.pct >= 95 ? 'ice' : d.vix.pct <= 5 ? 'boil' : 'mid'}">${d.vix.v}</b><em>歷史第 ${fmt(d.vix.pct, 0)} 百分位</em></div><div class="help">VIX 越高＝越恐慌（和股價溫度相反）。歷史中位數 ${d.vix.p50}，高於 ${d.vix.p95} 屬極度恐慌、低於 ${d.vix.p5} 屬極度安逸。</div></div>` : ''}
+      <div class="help">藍色區＝歷史最低 5%（冰水線以下）、紅色區＝最高 5%（滾水線以上），直線＝中位數。</div></div>
+    <div class="card"><h3 class="gold-bar">📈 近兩年溫度</h3>${extHist(d)}<div class="help">每點＝一週。藍點進入冰水區、紅點進入滾水區。</div></div>
+    <div class="card"><h3 class="gold-bar">🔁 歷史上，處在各溫度之後的報酬</h3>${gtable(['溫度', ...hz], [row('ice', '🧊 冰水'), row('cold', '❄️ 偏冷'), row('all', '全部日子'), row('hot', '🔥 偏熱'), row('boil', '♨️ 滾水')], 'ex-fw')}
+      <div class="help">每格＝平均報酬，小字＝上漲機率。顏色比較的是「比全部日子好或差」。${esc(d.name)}自 ${esc(d.since.slice(0, 4))} 年起算。過去的統計不保證未來，樣本也會集中在少數幾次大事件。</div></div>
+    <div class="card"><h3 class="gold-bar">🧊 歷次冰水區</h3>${ep(d.episodes.ice, 'ice')}<div class="help">「之後再跌」＝進入冰水區後一年內最多再跌多少：提醒你冰水區常常還會更冷，所以要分批。</div></div>
+    <div class="card"><h3 class="gold-bar">♨️ 歷次滾水區</h3>${ep(d.episodes.boil, 'boil')}</div>
+    <div class="card"><h3 class="gold-bar">🧭 遇到極端行情怎麼做</h3>${EXT_PLAY}</div>
+    <div class="help">概念參考投資癮 Wade「非常態投資學｜5% 極端訊號」課程公開簡介；指標、門檻、做法為本工具自行設計，不是課程內容，也不是投資建議。資料：${esc(d.src)}。</div>`;
+};
+document.addEventListener('click', e => { const t = e.target.closest('[data-extsym]'); if (t) { S.extSym = t.dataset.extsym; save(); render(); } });
+// 進出場時機頁：加一張極端訊號摘要
+const _tmExt = PAGES.timing;
+PAGES.timing = () => {
+  setTimeout(() => { loadExtreme('^TWII', false); loadExtreme('^GSPC', false); }, 60);
+  const card = `<div class="card"><h3 class="gold-bar">②-1 極端訊號（市場是否進入冰水區／滾水區）</h3>
+    ${[['^TWII', '🇹🇼 台股'], ['^GSPC', '🇺🇸 美股']].map(([s, l]) => { const d = S.ext[s], Z = extZoneOf(d); return `<div class="ex-mini" data-extgo="${s}"><span>${l}</span>${extThermo(d?.temp, true)}<b class="${Z?.c || ''}">${Z ? `${Z.ic} ${Z.n} ${fmt(d.temp, 0)}` : '讀取中'}</b></div>`; }).join('')}
+    <div class="help">平常（常溫）照計畫；只有進入兩端 5% 的極端區才改變做法：冰水區分批逆勢承接、滾水區順勢抱住並用移動停利。</div><button class="btn-small ghost" data-go="extreme">看完整極端訊號 ›</button></div>`;
+  const h = _tmExt(), at = h.indexOf('<div class="card"><h3 class="gold-bar">③');
+  const at2 = at >= 0 ? at : h.indexOf('<div class="card"><h3 class="gold-bar">④');
+  return at2 >= 0 ? h.slice(0, at2) + card + h.slice(at2) : h + card;
+};
+document.addEventListener('click', e => { const t = e.target.closest('[data-extgo]'); if (t) { S.extSym = t.dataset.extgo; save(); go('extreme'); } });
+if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['extreme', '極端訊號'], ['macro', '總經'], ['cycles', '週期研究'], ['metfx', '黃金・匯率'], ['monitor', '監控'], ['overview', '研究總覽']];
+if (['extreme', 'timing'].includes(current)) render();
