@@ -812,7 +812,8 @@ PAGES.cards = () => {
   S.cards.filter(c => c.code && !c.example).forEach(c => {
     const x = assetCheck(c); if (x.st[0] === '資料不足') return;
     const k = `data-card="${c.id}">`, a = h.indexOf(k); if (a < 0) return; const sp = '<span class="spacer"></span>', b = h.indexOf(sp, a); if (b < 0) return;
-    h = h.slice(0, b + sp.length) + `<span class="rc-act ${x.st[1]}">${esc(x.st[0])}</span>` + h.slice(b + sp.length);
+    const e = h.indexOf('</div>', b); if (e < 0) return; // rc-i-top 結尾＝燈號之後
+    h = h.slice(0, e) + `<span class="rc-act ${x.st[1]}">${esc(x.st[0])}</span>` + h.slice(e);
   });
   return h;
 };
