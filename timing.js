@@ -777,7 +777,7 @@ PAGES.timing = () => {
     <details class="card rc-sub" ${S.tmGuide ? 'open' : ''} id="tmGuide"><summary>📋 進場與退場時機清單</summary>${TIMING_GUIDE}</details>`;
 };
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-mkmon]'); if (!t) return; e.stopPropagation();
+  const t = e.target.closest('[data-mkmon]'); if (!t || t.dataset.mkmon === '__all') return; e.stopPropagation();
   const list = S.cards.filter(c => c.code && !c.example).map(assetCheck).filter(x => x.st[0] !== '資料不足' && (t.dataset.mkmon === '__all' || x.code === t.dataset.mkmon));
   let n = 0; list.forEach(x => { const m = suggestMon(x); if (!hasMon(m)) { S.monitors.push({ id: uid(), ...m }); n++; } });
   save(); toast(n ? `已建立 ${n} 條監控，打開網站時會自動檢查` : '這些條件已經在監控中'); const y = scrollY; render(); scrollTo(0, y);
@@ -818,3 +818,142 @@ PAGES.cards = () => {
   return h;
 };
 if (current === 'cards') render();
+
+/* ================= 研究卡連動最新股價＋到價提醒價位 =================
+   研究卡的財報、估值是「研究當下」的資料；股價與技術指標則每 30 分鐘自動更新（打開網站時），
+   進出場建議與到價監控都用最新價計算。 */
+S.cq = S.cq || {};
+let cqBusy = false;
+async function refreshCardQuotes(force) {
+  if (cqBusy || !location.protocol.startsWith('http')) return;
+  const codes = [...new Set(S.cards.filter(c => c.code && !c.example).map(c => String(c.code).toUpperCase()))].filter(k => force || !S.cq[k] || Date.now() - S.cq[k].t > 30 * 60e3);
+  if (!codes.length) return; cqBusy = true; let n = 0;
+  for (const k of codes) {
+    try { const d = await quote(k); S.cq[k] = { n: d.num, px: d.price, d: d.priceDate, t: Date.now() }; n++;
+      S.cards.filter(c => String(c.code).toUpperCase() === k && !c.example).forEach(c => { c.price = String(d.price); c.priceAt = d.priceDate; }); } catch (e) { S.cq[k] = Object.assign(S.cq[k] || {}, { t: Date.now() }); }
+  }
+  cqBusy = false; save();
+  if (n && ['cards', 'timing', 'monitor'].includes(current)) { const y = scrollY; render(); scrollTo(0, y); }
+}
+const cqOf = code => S.cq[String(code || '').toUpperCase()];
+// 判斷時改用最新股價與技術指標
+const _assetCheck1 = assetCheck;
+assetCheck = function (c) {
+  const q = cqOf(c.code); if (!q?.n || c.example) return _assetCheck1(c);
+  const n = q.n, c2 = Object.assign({}, c, { price: String(q.px), date: q.d, tech: [{ read: `價 ${n.last}｜MA20 ${n.ma20}｜MA60 ${n.ma60}` }, { read: `RSI(14) ${n.rsi}` }, ...c.tech.slice(2)] });
+  const r = _assetCheck1(c2); r.c = c; r.live = q.d; return r;
+};
+// 台股升降單位
+const tick = (p, tw) => !tw ? 0.01 : p < 10 ? 0.01 : p < 50 ? 0.05 : p < 100 ? 0.1 : p < 500 ? 0.5 : p < 1000 ? 1 : 5;
+const rnd = (p, tw, up) => { const t = tick(p, tw); return Math.round((up ? Math.ceil(p / t) : Math.floor(p / t)) * t * 100) / 100; };
+// 依現況算出可買、可賣的提醒價位；dyn＝跟著均線每天更新
+function priceLevels(x) {
+  const q = cqOf(x.code), n = q?.n; if (!n?.last) return [];
+  const tw = /^\d/.test(x.code), px = n.last, vs = typeof valSummary === 'function' ? valSummary(x.c) : {}, out = [];
+  const add = (kind, label, p, op, dyn, why) => { if (!p || !isFinite(p)) return; p = rnd(p, tw, op === '高於'); if (op === '低於' ? p >= px : p <= px) return; if (out.some(o => Math.abs(o.p / p - 1) < 0.01)) return; out.push({ kind, label, p, op, dyn, why }); };
+  if (x.h) {
+    const cost = x.h.cost / x.h.shares;
+    if (vs.avg && vs.avg > px) add('tp', '分批停利', vs.avg, '高於', '', '到合理價均值');
+    else if (n.resistance > px) add('tp', '分批停利', n.resistance, '高於', '', '近 60 日高點（壓力）');
+    if (n.ma20 && px > n.ma20) add('trail', '移動停利', n.ma20, '低於', 'ma20', '跌破月線');
+    add('stop', '停損檢查', Math.max(n.ma60 ? n.ma60 * 0.97 : 0, cost * 0.85), '低於', n.ma60 && n.ma60 * 0.97 > cost * 0.85 ? 'ma60' : '', n.ma60 && n.ma60 * 0.97 > cost * 0.85 ? '跌破季線 3%' : '虧損 15%');
+  } else {
+    if (n.ma20 && px > n.ma20) add('buy', '第一批買點', n.ma20, '低於', 'ma20', '回測月線');
+    if (n.ma60 && px > n.ma60) add('buy', '第二批買點', n.ma60, '低於', 'ma60', '回測季線');
+    if (vs.avg && vs.avg * 0.85 < px) add('buy', '便宜價', vs.avg * 0.85, '低於', '', '合理價打 85 折');
+    if (!out.length && n.support < px) add('buy', '支撐買點', n.support, '低於', '', '近 60 日低點');
+    if (n.ma60 && px < n.ma60) add('break', '趨勢轉強', n.ma60, '高於', 'ma60', '站回季線');
+  }
+  return out.slice(0, 3);
+}
+const VERB = { buy: '跌到', break: '站上', tp: '漲到', trail: '跌破', stop: '跌破' };
+const LV_C = { buy: 'pos', break: 'pos', tp: 'gold', trail: 'gold', stop: 'neg' };
+const fmtP = p => p >= 100 ? fmt(p, p % 1 ? 1 : 0) : fmt(p, 2);
+function levelsHTML(x) {
+  const L = priceLevels(x); if (!L.length) return '';
+  const on = L.filter(l => hasLvl(x.code, l)).length;
+  return `<div class="pl"><div class="pl-row">${L.map(l => `<span class="pl-i ${LV_C[l.kind]}"><em>${l.label}</em><b>${fmtP(l.p)}</b><small>${l.why}${l.dyn ? '・每日更新' : ''}</small></span>`).join('')}</div>
+    <div class="pl-act"><button class="dcx-mon ${on === L.length ? 'on' : ''}" data-mklvl="${esc(x.code)}">${on === L.length ? '🔔 已設到價提醒' : `🔔 這 ${L.length} 個價位到了提醒我`}</button><button class="pl-copy" data-cplvl="${esc(x.code)}">📋 複製給券商</button></div></div>`;
+}
+const hasLvl = (code, l) => S.monitors.some(m => m.status === '啟用' && m.code === code && m.lvl === l.kind + l.label);
+function mkLevelMons(x) {
+  let n = 0;
+  priceLevels(x).forEach(l => {
+    const ex = S.monitors.find(m => m.status === '啟用' && m.code === x.code && m.lvl === l.kind + l.label);
+    const m = { target: `${x.code} ${x.c.name || ''}`.trim(), code: x.code, metric: '收盤價', op: l.op, value: String(l.p), dyn: l.dyn, lvl: l.kind + l.label,
+      cond: `${l.label}：收盤${VERB[l.kind]} ${fmtP(l.p)}（${l.why}${l.dyn ? '，價位每日跟著均線更新' : ''}）`,
+      action: { buy: '依分批計畫買進一批，先回研究卡確認論點沒變', break: '趨勢轉強：買第一批', tp: '先賣 1/3～1/2 鎖住獲利', trail: '移動停利：賣出一部分，其餘跌破季線再賣', stop: '對照「證明我錯」條件，論點被推翻就出場' }[l.kind],
+      notify: '網站內提醒', status: '啟用' };
+    if (ex) Object.assign(ex, m); else { S.monitors.push({ id: uid(), ...m }); n++; }
+  });
+  return n;
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-mklvl],[data-cplvl]'); if (!t) return; e.stopPropagation(); e.preventDefault();
+  const code = t.dataset.mklvl || t.dataset.cplvl, c = S.cards.find(y => y.code === code && !y.example) || S.cards.find(y => y.code === code); if (!c) return;
+  const x = assetCheck(c);
+  if (t.dataset.cplvl) { const L = priceLevels(x); copy(`${code} ${c.name || ''}\n` + L.map(l => `${l.label}：${VERB[l.kind]} ${fmtP(l.p)}（${l.why}）`).join('\n')); return; }
+  const n = mkLevelMons(x); save(); toast(n ? `已設 ${n} 個到價提醒` : '已更新到價提醒的價位'); const y = scrollY; render(); scrollTo(0, y);
+}, true);
+// 監控檢查：會跟著均線移動的價位，每次檢查前先更新
+checkMonitors = async function (manual) {
+  const list = S.monitors.filter(m => m.status === '啟用' && m.code && m.metric && num(m.value) != null);
+  if (!list.length) { if (manual) toast('沒有可自動檢查的條件（需填代號、指標與數值）'); return; }
+  if (!manual && S.monCheckedAt && Date.now() - S.monCheckedAt < 30 * 60e3) return;
+  S.monCheckedAt = Date.now(); const hits = [];
+  for (const m of list) {
+    try {
+      const d = await quote(m.code), n = d.num;
+      if (m.dyn && n[m.dyn]) { const tw = /^\d/.test(m.code), p = rnd(n[m.dyn] * (m.lvl?.startsWith('stop') ? 0.97 : 1), tw, m.op === '高於'); m.value = String(p); m.cond = m.cond.replace(/(跌破|站上|跌到|漲到) [\d,.]+/, `$1 ${fmtP(p)}`); }
+      const v = metricVal(m.metric, n); m.lastVal = v; m.lastCheck = d.priceDate;
+      if (v != null && (m.op === '低於' ? v < num(m.value) : v > num(m.value))) { m.status = '已觸發'; m.triggeredAt = today(); hits.push(`${m.target || m.code}：${m.cond || `${m.metric} ${v}（${m.op} ${m.value}）`}，現價 ${v}`); }
+    } catch (e) { m.lastVal = null; m.lastCheck = '檢查失敗'; }
+  }
+  save();
+  if (hits.length) {
+    S.monAlerts = [...(S.monAlerts || []), ...hits]; save();
+    if ('Notification' in window && Notification.permission === 'granted') { try { const reg = await navigator.serviceWorker?.getRegistration(); const opt = { body: hits.join('\n'), icon: 'icons/icon-192.png' }; reg ? reg.showNotification('到價提醒', opt) : new Notification('到價提醒', opt); } catch (e) { /* ignore */ } }
+  }
+  if (manual) toast(hits.length ? `${hits.length} 個條件觸發` : '已檢查，沒有條件觸發');
+  if (['monitor', 'home', 'timing'].includes(current)) render();
+};
+// 研究卡、進出場時機：顯示價位、自動更新股價
+const _cardsLv = PAGES.cards;
+PAGES.cards = () => {
+  setTimeout(() => refreshCardQuotes(false), 50);
+  let h = _cardsLv(); if (!openCardId) return h;
+  const c = S.cards.find(x => x.id === openCardId); if (!c?.code) return h;
+  const x = assetCheck(c), lv = levelsHTML(x), q = cqOf(c.code);
+  const live = q?.d ? `<div class="dcx-live">股價與技術指標已更新到 ${esc(q.d)}；財報與估值是研究日 ${esc(c.date || '—')} 的資料</div>` : '';
+  const i = h.indexOf('<button class="dcx-mon'), j = i >= 0 ? h.indexOf('</button>', i) + 9 : -1;
+  if (j > 8 && lv) h = h.slice(0, i) + lv + h.slice(j); // 用到價價位取代原本單一條件
+  const k = h.indexOf('<div class="dcx-do">'); if (k >= 0 && live) { const e2 = h.indexOf('</div>', k) + 6; h = h.slice(0, e2) + live + h.slice(e2); }
+  return h;
+};
+const _tmLv = PAGES.timing;
+PAGES.timing = () => {
+  setTimeout(() => refreshCardQuotes(false), 80);
+  let h = _tmLv();
+  S.cards.filter(c => c.code && !c.example).forEach(c => {
+    const x = assetCheck(c), lv = levelsHTML(x); if (!lv) return;
+    const a = h.indexOf(`data-card="${c.id}" data-go-card="1"`); if (a < 0) return;
+    const i = h.indexOf('<button class="dc-mon', a), nx = h.indexOf('class="tm-a ', a + 10);
+    if (i < 0 || (nx >= 0 && i > nx)) return; const j = h.indexOf('</button>', i) + 9;
+    h = h.slice(0, i) + lv + h.slice(j);
+  });
+  return h.replace('個股決定買賣哪檔</b>', '個股決定買賣哪檔、在什麼價位</b>');
+};
+// 全部一鍵：改為設定到價價位
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-mkmon="__all"]'); if (!t) return; e.stopPropagation(); e.preventDefault();
+  let n = 0; S.cards.filter(c => c.code && !c.example).forEach(c => { n += mkLevelMons(assetCheck(c)); });
+  save(); toast(n ? `已設 ${n} 個到價提醒` : '到價提醒已是最新價位'); const y = scrollY; render(); scrollTo(0, y);
+}, true);
+// 監控頁：說明到價通知能做到什麼、做不到什麼
+const _monLv = PAGES.monitor;
+PAGES.monitor = () => { setTimeout(() => checkMonitors(false), 100); return _monLv().replace('<div class="card"><h3 class="gold-bar">系統自動監控</h3>', `<div class="card"><h3 class="gold-bar">📣 到價通知做得到什麼</h3><div class="pl-note">
+  <div class="ok">✅ <b>打開網站時</b>：自動抓最新收盤價檢查所有條件（最多 30 分鐘一次），觸發會出現在首頁，開了手機通知也會跳通知。</div>
+  <div class="ok">✅ <b>價位會跟著走</b>：「移動停利」「回測月線／季線」這類價位，每次檢查前會依最新均線重算。</div>
+  <div class="no">⚠️ <b>網站關著時收不到</b>：這是網頁 App 的限制。盤中即時提醒請按「📋 複製給券商」，貼到券商 App 的到價提醒。</div></div></div>
+  <div class="card"><h3 class="gold-bar">系統自動監控</h3>`); };
+if (['cards', 'timing', 'monitor'].includes(current)) render();

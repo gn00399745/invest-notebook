@@ -968,3 +968,15 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .dcx-ev .pos { background: rgba(30,158,90,.12); color: var(--green); } .dcx-ev .neg { background: rgba(214,69,69,.12); color: var(--red); } .dcx-ev .neu { background: rgba(212,154,0,.13); color: #a68b00; }
 .dcx-mon { display: block; width: 100%; margin-top: 10px; text-align: left; font-size: 13px; padding: 8px 10px; border-radius: 10px; border: 1px dashed var(--gold, #c9a24a); background: rgba(201,162,74,.06); color: inherit; }
 .dcx-mon.on { border-style: solid; background: rgba(201,162,74,.16); }
+/* 到價提醒價位 */
+.pl { margin-top: 10px; }
+.pl-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 6px; }
+.pl-i { border-radius: 10px; padding: 6px 8px; background: #f1f3f7; display: flex; flex-direction: column; line-height: 1.25; }
+.pl-i em { font-style: normal; font-size: 11px; font-weight: 700; } .pl-i b { font-size: 17px; } .pl-i small { font-size: 10px; color: var(--muted, #7a8599); }
+.pl-i.pos { background: rgba(30,158,90,.09); } .pl-i.pos em { color: var(--green); }
+.pl-i.gold { background: rgba(201,162,74,.12); } .pl-i.gold em { color: #a8802a; }
+.pl-i.neg { background: rgba(214,69,69,.08); } .pl-i.neg em { color: var(--red); }
+.pl-act { display: flex; gap: 6px; margin-top: 8px; } .pl-act .dcx-mon { margin: 0; flex: 1; }
+.pl-copy { font-size: 12px; border-radius: 10px; border: 1px solid var(--line, #e3e6ec); background: transparent; padding: 6px 8px; white-space: nowrap; color: inherit; }
+.dcx-live { font-size: 11px; color: var(--muted, #7a8599); margin-top: 4px; }
+.pl-note { display: grid; gap: 6px; font-size: 13px; } .pl-note .no { color: #9a5b16; }
