@@ -799,16 +799,20 @@ PAGES.cards = () => {
   if (openCardId) {
     const c = S.cards.find(x => x.id === openCardId); if (!c || !c.code) return h;
     const x = assetCheck(c), id = c.market === '美股' ? 'us' : 'tw', z = zoneOfMkt(id), P = phaseOf(id), sm = x.st[0] !== '資料不足' ? suggestMon(x) : null, on = sm && hasMon(sm);
-    const box = `<div class="card dc-card tm-a ${x.st[1]}"><div class="tm-ah"><b>🎯 現在該怎麼做</b><span class="tm-st ${x.st[1]}">${x.st[0]}</span></div>
-      <div class="dc-ctx">${P ? `<i class="sigp ${PHASE[P.ph].c}">${id === 'us' ? '美國' : '台灣'}景氣${P.ph}</i>` : ''}${z ? `<i class="dc-z ${z}">大盤${EXT_Z[z].ic}${EXT_Z[z].n}・${MODE[z].n}</i>` : ''}</div>
-      <div class="tm-why">${x.why.filter(w => !/^大盤/.test(w[0])).map(([t, cl]) => `<i class="sigp ${cl}">${esc(t)}</i>`).join('')}</div><div class="tm-do">${esc(x.st[2])}</div>
-      <div class="btn-row" style="margin-top:6px">${sm ? `<button class="dc-mon ${on ? 'on' : ''}" data-mkmon="${esc(x.code)}" style="width:auto;flex:1">${on ? '🔔 已監控' : '🔔 設監控'}：${esc(sm.cond)}</button>` : ''}<button class="btn-small ghost" data-go="timing">看整體 ›</button></div></div>`;
+    const ctx = [z ? `大盤 ${EXT_Z[z].ic} ${EXT_Z[z].n}（${MODE[z].n.replace('模式', '')}）` : '', P ? `${id === 'us' ? '美國' : '台灣'}景氣${P.ph}` : ''].filter(Boolean).join('・');
+    const ev = x.why.filter(w => !/^大盤|景氣/.test(w[0]));
+    const box = `<div class="card dcx ${x.st[1]}"><div class="dcx-h"><span>🎯 現在該怎麼做</span><button class="dcx-link" data-go="timing">看整體 ›</button></div>
+      <div class="dcx-act ${x.st[1]}">${esc(x.st[0])}</div>
+      <div class="dcx-do">${esc(x.st[2])}</div>
+      ${ctx ? `<div class="dcx-ctx">${esc(ctx)}</div>` : ''}
+      ${ev.length ? `<div class="dcx-ev">${ev.map(([t, cl]) => `<span class="${cl}">${esc(t)}</span>`).join('')}</div>` : ''}
+      ${sm ? `<button class="dcx-mon ${on ? 'on' : ''}" data-mkmon="${esc(x.code)}">${on ? '🔔 已在監控' : '🔔 幫我盯著'}：${esc(sm.cond)}</button>` : ''}</div>`;
     const i = h.indexOf('</section>'); return i < 0 ? h : h.slice(0, i + 10) + box + h.slice(i + 10);
   }
   S.cards.filter(c => c.code && !c.example).forEach(c => {
     const x = assetCheck(c); if (x.st[0] === '資料不足') return;
-    const k = `data-card="${c.id}">`, a = h.indexOf(k); if (a < 0) return; const b = h.indexOf('<div class="rc-i-layer">', a); if (b < 0) return;
-    h = h.slice(0, b) + `<div class="rc-act ${x.st[1]}">🎯 ${esc(x.st[0])}</div>` + h.slice(b);
+    const k = `data-card="${c.id}">`, a = h.indexOf(k); if (a < 0) return; const sp = '<span class="spacer"></span>', b = h.indexOf(sp, a); if (b < 0) return;
+    h = h.slice(0, b + sp.length) + `<span class="rc-act ${x.st[1]}">${esc(x.st[0])}</span>` + h.slice(b + sp.length);
   });
   return h;
 };
