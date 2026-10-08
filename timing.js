@@ -986,7 +986,8 @@ function discountRate(c, extra = {}) {
 function applyDR(c, extra) {
   const i = c.dcfIn; if (!i || !i.auto) return;
   const D = discountRate(c, extra); i.r = String(D.r); i.tg = String(D.tg); i.rWhy = D.why; i.fin = D.fin;
-  const res = dcfCalc(i);
+  const res = i.bad ? null : dcfCalc(i);
+  if (i.bad && (isBlankish(c.val[1].assume) || c.val[1].auto)) c.val[1] = { assume: '【自動】近四季現金流暴增、前一年為負，看不出經常性現金流，DCF 暫不估算', fair: '', note: '查財報附註後，在 DCF 試算填入經常性自由現金流', auto: true };
   if (res && !res.neg && !D.fin && (isBlankish(c.val[1].assume) || c.val[1].auto)) c.val[1] = { assume: `【自動】${i.basis === 'eps' ? '近四季淨利（自由現金流為負，暫以獲利代替）' : i.basis === 'norm' ? '正常化自由現金流（排除一次性暴增）' : '近四季自由現金流'}、前 5 年成長 ${i.g}%、折現率 ${i.r}%（依產業估算）、永續成長 ${i.tg}%`, fair: String(Math.round(res.perShare * 10) / 10), note: '折現率＝無風險利率＋beta×風險溢酬，可在 DCF 試算調整', auto: true };
   if (D.fin && c.val[1].auto) c.val[1] = { assume: '【自動】銀行、壽險的現金流包含存放款與保費，DCF 不適用', fair: '', note: '改用股價淨值比與殖利率比較同業', auto: true };
 }
@@ -998,21 +999,21 @@ window.afterAutoFill = (c, d) => {
     const D = d.dcf, k = d.market === '美股' ? 1e6 : 1e8, notes = [];
     // 一次性暴增偵測：近四季現金流是前一年的 2 倍以上（或前一年為負），或營收年增超過 80%
     const spike = (D.fcfTTM > 0 && D.fcfPrev != null && (D.fcfPrev <= 0 || D.fcfTTM > 2 * D.fcfPrev)) || (D.revGttm ?? D.revG) > 80;
-    let base = D.fcfTTM, basis = 'fcf';
+    let base = D.fcfTTM, basis = 'fcf', bad = false;
+    const what = D.fcfPrev != null ? `前一年 ${fmt(D.fcfPrev / k, 1)}→近四季 ${fmt(D.fcfTTM / k, 1)}${k === 1e8 ? ' 億' : ' 百萬'}` : `營收年增 ${D.revGttm ?? D.revG}%`;
     if (spike) {
-      const cands = [D.fcfAvg, D.fcfPrev != null ? (D.fcfTTM + Math.max(D.fcfPrev, 0)) / 2 : null].filter(x => x != null && x > 0);
-      base = cands.length ? Math.min(...cands, D.fcfTTM) : D.fcfTTM * 0.5; basis = 'norm';
-      notes.push(`近四季現金流或營收暴增（${D.fcfPrev != null ? `前一年 ${fmt(D.fcfPrev / k, 1)}→近四季 ${fmt(D.fcfTTM / k, 1)}` : `營收年增 ${D.revGttm ?? D.revG}%`}），可能含處分資產、建案入帳等一次性收入，改用${D.fcfAvg ? `近 ${D.years} 年平均` : '前後兩年平均'}`);
+      if (D.fcfPrev > 0) { base = Math.min(D.fcfPrev, D.fcfAvg || D.fcfPrev); basis = 'norm'; notes.push(`近四季現金流暴增（${what}），可能含處分資產、建案入帳等一次性收入，改用暴增前一年的現金流`); }
+      else { bad = true; notes.push(`近四季現金流暴增（${what}），前一年卻是負的，看不出哪些是經常性收入。DCF 先不估，請查財報附註的一次性收入，再在下方填入「經常性」自由現金流`); }
     }
-    if (base <= 0 && d.epsTTM > 0) { const e = spike && D.epsPrev != null ? Math.min(d.epsTTM, (d.epsTTM + Math.max(D.epsPrev, 0)) / 2) : d.epsTTM; base = e * D.shares; basis = 'eps'; }
-    c.dcfIn.fcf = String(Math.round(base / k * 10) / 10); c.dcfIn.basis = basis; c.dcfIn.note = notes.join('；');
+    if (!bad && base <= 0 && d.epsTTM > 0) { base = d.epsTTM * D.shares; basis = 'eps'; }
+    c.dcfIn.fcf = bad ? '' : String(Math.round(base / k * 10) / 10); c.dcfIn.basis = basis; c.dcfIn.note = notes.join('；'); c.dcfIn.bad = bad;
     // 成長率：用近四季營收年增的一半，限制在 2～12%；有暴增時最多 5%
     const gr = D.revGttm ?? D.revG, g0 = gr == null ? 6 : Math.max(2, Math.min(12, gr / 2));
     c.dcfIn.g = String(Math.round(spike ? Math.min(g0, 5) : g0));
-    // 本益比法也用正常化後的 EPS
-    if (spike && D.epsPrev != null && d.epsTTM > 0 && d.valuation?.peMedian && /^近四季 EPS/.test(c.val[0].assume || '')) {
-      const e = Math.min(d.epsTTM, (d.epsTTM + Math.max(D.epsPrev, 0)) / 2);
-      c.val[0] = { assume: `正常化 EPS ${fmt(e, 2)} 元（近四季 ${d.epsTTM}、前一年 ${D.epsPrev} 的平均）× 近 3 年本益比中位數 ${d.valuation.peMedian} 倍`, fair: String(Math.round(e * d.valuation.peMedian * 10) / 10), note: '近四季獲利暴增，可能含一次性收入，已用前後兩年平均', auto: true };
+    // 本益比法：獲利暴增時改用暴增前一年的 EPS
+    if (spike && d.epsTTM > 0 && d.valuation?.peMedian && /^近四季 EPS/.test(c.val[0].assume || '')) {
+      if (D.epsPrev > 0) { const e = Math.min(d.epsTTM, D.epsPrev); c.val[0] = { assume: `前一年 EPS ${e} 元（近四季 ${d.epsTTM} 元疑似含一次性收入）× 近 3 年本益比中位數 ${d.valuation.peMedian} 倍`, fair: String(Math.round(e * d.valuation.peMedian * 10) / 10), note: '近四季獲利暴增，改用暴增前的獲利估算', auto: true }; }
+      else c.val[0] = { assume: `【自動】近四季 EPS ${d.epsTTM} 元暴增、前一年虧損，無法判斷經常性獲利`, fair: '', note: '請查財報附註扣除一次性收入後自行估算', auto: true };
     }
     applyDR(c, { cap: d.price && D.shares ? d.price * D.shares : null });
   }
