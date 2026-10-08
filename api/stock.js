@@ -170,7 +170,19 @@ async function taiwan(code, errors) {
     const fcfs = q4.map(q => { const o = ocfKey ? single(q, ocfKey) : null, c = capKey ? neg(single(q, capKey)) : null; return o != null && c != null ? o + c : null; });
     const shareCap = Object.entries(bsMap[lastQ] || {}).find(([k]) => /^OrdinaryShare$|^CapitalStock$|^ShareCapital$/.test(k))?.[1];
     const shares = shareCap ? shareCap / 10 : (A.IncomeAfterTaxes && A.EPS ? A.IncomeAfterTaxes / A.EPS : null);
-    if (fcfs.every(x => x != null) && shares) out.dcf = { fcfTTM: fcfs.reduce((a, b) => a + b, 0), shares, revG: r(revG, 1), currency: '元' };
+    if (fcfs.every(x => x != null) && shares) {
+      // 正常化用：前一年的四季、所有可取得季度的年平均、近四季營收年增、前一年 EPS
+      const fq = q => { const o = ocfKey ? single(q, ocfKey) : null, c = capKey ? neg(single(q, capKey)) : null; return o != null && c != null ? o + c : null; };
+      const sum = a => a.reduce((x, y) => x + y, 0);
+      const prev4 = qs.slice(-8, -4).map(fq), allF = qs.map(fq).filter(x => x != null);
+      const revSum = a => a.length === 4 && a.every(q => byQ[q]?.Revenue != null) ? sum(a.map(q => byQ[q].Revenue)) : null;
+      const rT = revSum(qs.slice(-4)), rP = revSum(qs.slice(-8, -4));
+      const eP = qs.slice(-8, -4).map(q => byQ[q]?.EPS).filter(x => x != null);
+      out.dcf = { fcfTTM: sum(fcfs), shares, revG: r(revG, 1), currency: '元',
+        fcfPrev: prev4.length === 4 && prev4.every(x => x != null) ? sum(prev4) : null,
+        fcfAvg: allF.length >= 6 ? sum(allF) / (allF.length / 4) : null, years: r(allF.length / 4, 1),
+        revGttm: rT && rP ? r((rT / rP - 1) * 100, 1) : null, epsPrev: eP.length === 4 ? r(sum(eP)) : null };
+    }
   }
 
   // 月營收
@@ -273,7 +285,12 @@ async function yahooFin(sym) {
     dcf: (() => {
       const f = (S.quarterlyFreeCashFlow || []).slice(-4).map(x => x.v);
       const sh = (S.quarterlyDilutedAverageShares || S.quarterlyBasicAverageShares || []).slice(-1)[0]?.v;
-      return f.length === 4 && sh ? { fcfTTM: f.reduce((a, b) => a + b, 0), shares: sh, revG: R.cur && R.prev ? r((R.cur / R.prev - 1) * 100, 1) : null, currency: '美元' } : null;
+      const all = (S.quarterlyFreeCashFlow || []).map(x => x.v), p4 = all.slice(-8, -4), sm = a => a.reduce((x, y) => x + y, 0);
+      const rv = (S.quarterlyTotalRevenue || []).map(x => x.v), rT = rv.length >= 8 ? sm(rv.slice(-4)) : null, rP = rv.length >= 8 ? sm(rv.slice(-8, -4)) : null;
+      const ep = (S.quarterlyDilutedEPS?.length ? S.quarterlyDilutedEPS : S.quarterlyBasicEPS || []).map(x => x.v).slice(-8, -4);
+      return f.length === 4 && sh ? { fcfTTM: sm(f), shares: sh, revG: R.cur && R.prev ? r((R.cur / R.prev - 1) * 100, 1) : null, currency: '美元',
+        fcfPrev: p4.length === 4 ? sm(p4) : null, fcfAvg: all.length >= 6 ? sm(all) / (all.length / 4) : null, years: r(all.length / 4, 1),
+        revGttm: rT && rP ? r((rT / rP - 1) * 100, 1) : null, epsPrev: ep.length === 4 ? r(sm(ep)) : null } : null;
     })(),
     guideLight: R.cur && R.prev ? ((R.cur / R.prev - 1) * 100 > 15 ? '綠' : R.cur < R.prev ? '紅' : '黃') : null,
     guideNote: R.cur && R.prev ? `最新一季營收年增 ${r((R.cur / R.prev - 1) * 100, 1)}%（以營運動能暫代，請再用財報電話會議指引覆核）` : '',
