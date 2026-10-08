@@ -1080,3 +1080,177 @@ PAGES.cards = () => {
 };
 const _afterFV = window.afterAutoFill;
 window.afterAutoFill = (c, d) => { _afterFV(c, d); c.valx = d.valx || []; };
+
+/* ================= 估值模型集錦（參考 InvestingPro 的模型分類） =================
+   DCF：5 年／10 年 × 營收退出、EBITDA 退出、永續成長；同業倍數；盈利能力價值 EPV；杜邦 ROE。
+   全部在瀏覽器端用「自動帶入」取得的財報數字計算，不增加伺服器負擔；同業資料一天抓一次。 */
+const TGT_M = { ai: 30, ev: 15, fin: 30, cons: 22, ship: 15, sat: 35, champ: 18, bio: 25 }; // 成熟期 EBITDA 利潤率假設 %
+const MAT = { evRev: 3, evEbitda: 10 }; // 10 年後的成熟倍數上限
+const peersOf = c => { const tw = /^\d/.test(c.code); return Object.entries(CODE_LAYER).filter(([k, v]) => v === c.layer && k !== c.code && (tw ? /^\d{4}$/.test(k) : /^[A-Z.]+$/.test(k))).map(([k]) => k).slice(0, 10); };
+let peerBusy = {};
+async function loadPeers(c, force) {
+  if (!c.code || peerBusy[c.id] || !location.protocol.startsWith('http')) return;
+  if (!force && c.peers && Date.now() - (c.peers.at || 0) < 24 * 3600e3 && c.peers.layer === c.layer) return;
+  peerBusy[c.id] = 1;
+  try { const j = await (await fetch(`api/peers?code=${encodeURIComponent(c.code)}&peers=${peersOf(c).join(',')}`, { signal: AbortSignal.timeout(40000) })).json(); if (!j.error) { j.at = Date.now(); j.layer = c.layer; c.peers = j; save(); } } catch (e) { /* 略過 */ }
+  delete peerBusy[c.id]; if (openCardId === c.id) { const y = scrollY; render(); scrollTo(0, y); }
+}
+function dcfProject(c, N, mode) {
+  const F = c.fm, D = discountRate(c), mo = c.mo || {}; if (!F?.rev || !F.shares) return null;
+  const f = findLayer(c.layer), id = f?.ch.id, r = (num(mo.r) || D.r) / 100, tg = Math.min(D.tg, r * 100 - 5) / 100;
+  const spike = /暴增/.test(c.dcfIn?.note || '');
+  const gRaw = F.revP > 0 ? F.rev / F.revP - 1 : F.revG != null ? F.revG / 100 : 0.06;
+  const g0 = num(mo.g) != null ? num(mo.g) / 100 : Math.max(-0.1, Math.min(spike ? 0.1 : 0.6, gRaw));
+  const m0 = Math.max(-0.5, Math.min(0.8, (F.ebitda ?? F.opInc ?? 0) / F.rev)), mT = num(mo.m) != null ? num(mo.m) / 100 : Math.max(m0, (TGT_M[id] ?? 20) / 100);
+  const da0 = F.da > 0 ? F.da / F.rev : 0.05, cx0 = F.capex != null ? F.capex / F.rev : da0, tax = F.taxRate ?? 0.2;
+  let rev = F.rev, pv = 0; const rows = [];
+  for (let t = 1; t <= N; t++) {
+    const k = N > 1 ? (t - 1) / (N - 1) : 1, g = g0 + (tg - g0) * k, m = m0 + (mT - m0) * (t / N);
+    rev *= 1 + g; const ebitda = rev * m, da = rev * da0, cx = rev * (cx0 + (da0 - cx0) * (t / N)), taxes = Math.max(0, ebitda - da) * tax, fcf = ebitda - taxes - cx;
+    pv += fcf / (1 + r) ** t; rows.push({ t, rev, g, m, ebitda, fcf });
+  }
+  const L = rows[N - 1], disc = (1 + r) ** N, nd = (F.debt || 0) - (F.cash || 0), P = c.peers?.med || {};
+  const pePS = /^\d/.test(c.code) ? P.ps : (P.evRev || P.ps);
+  const evRevX = Math.min(N >= 10 ? MAT.evRev : 99, pePS || 3), evEbX = Math.min(N >= 10 ? MAT.evEbitda : 99, P.evEbitda || (P.pe ? P.pe * 0.65 : 12));
+  const tv = { gordon: L.fcf > 0 && r > tg ? L.fcf * (1 + tg) / (r - tg) : null, ebitda: L.ebitda > 0 ? L.ebitda * evEbX : null, rev: L.rev * evRevX };
+  const ps = x => x == null ? null : (pv + x / disc - nd) / F.shares;
+  return { N, r, tg, g0, m0, mT, rows, pv, nd, evRevX, evEbX, fair: { gordon: ps(tv.gordon), ebitda: ps(tv.ebitda), rev: ps(tv.rev) }, tvShare: tv.gordon ? tv.gordon / disc / (pv + tv.gordon / disc) : null };
+}
+function epvOf(c) {
+  const F = c.fm, D = discountRate(c); if (!F?.rev || !F.shares) return null;
+  const om = F.opMarginAvg ?? (F.opInc != null ? F.opInc / F.rev : null); if (!(om > 0)) return { na: '平均營業利益率不是正的（虧損公司），不適用' };
+  const ebit = om * F.rev, r = (num(c.mo?.r) || D.r) / 100, v = (ebit * (1 - (F.taxRate ?? 0.2)) / r - ((F.debt || 0) - (F.cash || 0))) / F.shares;
+  return { fair: v, om, ebit, r };
+}
+function dupontOf(c) {
+  const F = c.fm; if (!F?.rev || !F.equity || !F.assets) return null;
+  const avg = (a, b) => b ? (a + b) / 2 : a;
+  const now = { roe: F.ni / avg(F.equity, F.equityP), margin: F.ni / F.rev, turn: F.rev / avg(F.assets, F.assetsP), lev: avg(F.assets, F.assetsP) / avg(F.equity, F.equityP) };
+  const prev = F.niP != null && F.revP && F.equityP && F.assetsP ? { roe: F.niP / F.equityP, margin: F.niP / F.revP, turn: F.revP / F.assetsP, lev: F.assetsP / F.equityP } : null;
+  return { now, prev, peerRoe: c.peers?.med?.roe ?? (c.peers?.med?.pb && c.peers?.med?.pe ? c.peers.med.pb / c.peers.med.pe * 100 : null) };
+}
+function peerFair(c) {
+  const P = c.peers, F = c.fm || {}, px = num(c.price); if (!P?.med) return [];
+  const M = P.med, S0 = P.self || {}, sh = F.shares, nd = (F.debt || 0) - (F.cash || 0), out = [];
+  const eps = px && S0.pe > 0 ? px / S0.pe : (F.ni > 0 && sh ? F.ni / sh : null);
+  const add = (k, name, fair, how) => { if (fair > 0 && isFinite(fair)) out.push({ k, name, fair: Math.round(fair * 100) / 100, assume: how }); };
+  if (eps > 0 && M.pe) add('ppe', '同業本益比', eps * M.pe, `EPS ${fmt(eps, 2)} × 同業本益比中位數 ${M.pe} 倍`);
+  if (S0.fpe > 0 && M.fpe && px) add('pfpe', '同業預估本益比', px / S0.fpe * M.fpe, `明年預估 EPS ${fmt(px / S0.fpe, 2)} × 同業預估本益比中位數 ${M.fpe} 倍`);
+  const bps = px && S0.pb > 0 ? px / S0.pb : (F.equity && sh ? F.equity / sh : null);
+  if (bps > 0 && M.pb) add('ppb', '同業股價淨值比', bps * M.pb, `每股淨值 ${fmt(bps, 2)} × 同業中位數 ${M.pb} 倍`);
+  if (F.rev && sh && M.ps) add('pps', '同業股價營收比', F.rev / sh * M.ps, `每股營收 ${fmt(F.rev / sh, 2)} × 同業中位數 ${M.ps} 倍`);
+  if (F.rev && sh && M.evRev) add('pevr', '同業企業價值／營收', (F.rev * M.evRev - nd) / sh, `營收 × 同業中位數 ${M.evRev} 倍 − 淨負債`);
+  if (F.ebitda > 0 && sh && M.evEbitda) add('peve', '同業企業價值／EBITDA', (F.ebitda * M.evEbitda - nd) / sh, `EBITDA × 同業中位數 ${M.evEbitda} 倍 − 淨負債`);
+  if (S0.dy > 0 && M.dy && px) add('pdy', '同業殖利率', px * S0.dy / M.dy, `股利 ${fmt(px * S0.dy / 100, 2)} ÷ 同業殖利率中位數 ${M.dy}%`);
+  return out;
+}
+// 模型結果併入綜合公允價值
+function modelRows(c) {
+  const rows = [];
+  for (const N of [5, 10]) { const p = dcfProject(c, N); if (!p) continue;
+    [['rev', '營收退出'], ['ebitda', 'EBITDA 退出'], ['gordon', '永續成長']].forEach(([k, l]) => { const v = p.fair[k]; if (v > 0) rows.push({ k: `d${k}${N}`, name: `${N} 年 DCF ${l}`, fair: Math.round(v * 100) / 100, assume: `營收年增 ${fmt(p.g0 * 100, 0)}% 逐年降到 ${fmt(p.tg * 100, 1)}%、EBITDA 率 ${fmt(p.m0 * 100, 0)}%→${fmt(p.mT * 100, 0)}%、折現率 ${fmt(p.r * 100, 1)}%${k === 'rev' ? `、退出 ${fmt(p.evRevX, 1)} 倍營收` : k === 'ebitda' ? `、退出 ${fmt(p.evEbX, 1)} 倍 EBITDA` : ''}`, model: 1 }); }); }
+  peerFair(c).forEach(x => rows.push({ ...x, model: 1 }));
+  const e = epvOf(c); if (e?.fair > 0) rows.push({ k: 'epv', name: '盈利能力價值 EPV', fair: Math.round(e.fair * 100) / 100, assume: `平均營業利益率 ${fmt(e.om * 100, 1)}% × 近四季營收，稅後 ÷ 折現率 ${fmt(e.r * 100, 1)}%（假設不再成長）`, model: 1 });
+  return rows;
+}
+Object.assign(FV_W, { drev5: 0.4, debitda5: 0.4, dgordon5: 0.4, drev10: 0.3, debitda10: 0.3, dgordon10: 0.3, ppe: 0.4, pfpe: 0.4, ppb: 0.3, pps: 0.4, pevr: 0.4, peve: 0.4, pdy: 0.3, epv: 0.3 });
+const _fairComp0 = fairComposite;
+fairComposite = function (c) {
+  const extra = c.fm ? modelRows(c) : [];
+  if (!extra.length) return _fairComp0(c);
+  const saved = c.valx; c.valx = (saved || []).concat(extra.map(x => ({ ...x })));
+  try { const R = _fairComp0(c); R.M.forEach(m => { if (m.k === 'epv' && R.loss) { m.w = 0; m.used = false; } }); return R; } finally { c.valx = saved; }
+};
+// 研究卡：模型集錦區塊
+function modelGalleryHTML(c) {
+  if (!c.fm) return `<details class="rc-sub mg"><summary>📚 估值模型集錦</summary><div class="help">按上方「⚡ 自動帶入」取得完整財報資料後，就會算出 DCF（5 年／10 年 × 三種終值）、同業倍數、盈利能力價值與杜邦分析。</div></details>`;
+  const P5 = dcfProject(c, 5), P10 = dcfProject(c, 10), cur = c.fm.cur === '美元' ? '美元' : '元', px = num(c.price);
+  const fv = v => v == null ? '<em>不適用</em>' : `<b class="${px ? (v >= px ? 'up' : 'down') : ''}">${fmt(v, v < 100 ? 2 : 1)}</b>`;
+  const mo = c.mo || {}, D = discountRate(c);
+  const dcf = P5 ? `<div class="mg-sec"><b>① 現金流折現 DCF</b>
+    <div class="mg-in"><label>起始營收成長 %<input data-mo="g" inputmode="decimal" value="${esc(mo.g ?? '')}" placeholder="${fmt(P5.g0 * 100, 0)}"></label><label>成熟 EBITDA 率 %<input data-mo="m" inputmode="decimal" value="${esc(mo.m ?? '')}" placeholder="${fmt(P5.mT * 100, 0)}"></label><label>折現率 %<input data-mo="r" inputmode="decimal" value="${esc(mo.r ?? '')}" placeholder="${D.r}"></label></div>
+    <div class="mg-t"><div class="h"><span>終值算法</span><span>5 年</span><span>10 年</span></div>
+      ${[['rev', '營收退出'], ['ebitda', 'EBITDA 退出'], ['gordon', '永續成長']].map(([k, l]) => `<div><span>${l}</span><span>${fv(P5.fair[k])}</span><span>${fv(P10?.fair[k])}</span></div>`).join('')}</div>
+    <div class="help">營收年增從 ${fmt(P5.g0 * 100, 0)}% 逐年降到永續 ${fmt(P5.tg * 100, 1)}%；EBITDA 率從 ${fmt(P5.m0 * 100, 0)}% 走向 ${fmt(P5.mT * 100, 0)}%；資本支出逐步降到折舊水準；折現率 ${fmt(P5.r * 100, 1)}%。退出倍數：5 年用同業中位數（營收 ${fmt(P5.evRevX, 1)} 倍、EBITDA ${fmt(P5.evEbX, 1)} 倍），10 年改用成熟倍數（最高 ${MAT.evRev}、${MAT.evEbitda} 倍）。5 年後營收約 ${fmt(P5.rows[4].rev / (cur === '元' ? 1e8 : 1e9), 1)} ${cur === '元' ? '億元' : '十億美元'}、10 年後 ${fmt(P10.rows[9].rev / (cur === '元' ? 1e8 : 1e9), 1)}。</div>
+    <div class="help">留白＝用系統預設；改了數字會即時重算，並納入綜合公允價值。</div></div>` : '';
+  const P = c.peers, pr = peerFair(c);
+  const peer = `<div class="mg-sec"><b>② 同業倍數比較</b>${!P ? `<div class="help">${peerBusy[c.id] ? '同業資料讀取中…' : '同業資料讀取中（第一次約 5～10 秒）'}</div>` : `
+    <div class="help">比較對象：${esc(P.basis || '')}</div>
+    <div class="mg-peers"><div class="h"><span>公司</span><span>本益比</span><span>淨值比</span><span>${/^\d/.test(c.code) ? '營收比' : 'EV/營收'}</span><span>${/^\d/.test(c.code) ? '殖利率' : 'EV/EBITDA'}</span></div>
+      ${[{ code: c.code, name: '本公司', ...P.self, me: 1 }, ...(P.peers || [])].map(x => `<div class="${x.me ? 'me' : ''}"><span>${esc(x.code)} ${esc((x.name || '').slice(0, 6))}</span><span>${x.pe > 0 ? fmt(x.pe, 1) : '—'}</span><span>${x.pb > 0 ? fmt(x.pb, 2) : '—'}</span><span>${/^\d/.test(c.code) ? (x.ps > 0 ? fmt(x.ps, 1) : '—') : (x.evRev > 0 ? fmt(x.evRev, 1) : '—')}</span><span>${/^\d/.test(c.code) ? (x.dy > 0 ? fmt(x.dy, 1) + '%' : '—') : (x.evEbitda > 0 ? fmt(x.evEbitda, 1) : '—')}</span></div>`).join('')}
+      <div class="md"><span>同業中位數</span><span>${P.med.pe ?? '—'}</span><span>${P.med.pb ?? '—'}</span><span>${(/^\d/.test(c.code) ? P.med.ps : P.med.evRev) ?? '—'}</span><span>${/^\d/.test(c.code) ? (P.med.dy != null ? P.med.dy + '%' : '—') : (P.med.evEbitda ?? '—')}</span></div></div>
+    ${pr.length ? `<div class="mg-imp">${pr.map(x => `<div><span>${esc(x.name)}</span>${fv(x.fair)}<small>${esc(x.assume)}</small></div>`).join('')}</div>` : '<div class="help">本公司缺少可比較的獲利或營收資料。</div>'}`}</div>`;
+  const E = epvOf(c);
+  const epv = `<div class="mg-sec"><b>③ 盈利能力價值 EPV</b>${E?.fair ? `<div class="mg-imp"><div><span>EPV（不成長的價值）</span>${fv(E.fair)}<small>平均營業利益率 ${fmt(E.om * 100, 1)}%（近 ${c.fm.years} 年）× 近四季營收，稅後 ÷ 折現率 ${fmt(E.r * 100, 1)}%，再扣淨負債</small></div></div><div class="help">假設公司維持現在的獲利、完全不成長，常當作估值的下限；股價低於 EPV 代表市場幾乎沒有替成長付錢。</div>` : `<div class="help">${esc(E?.na || '資料不足')}</div>`}</div>`;
+  const DP = dupontOf(c), pc1 = v => v == null || !isFinite(v) ? '—' : fmt(v * 100, 1) + '%', x2 = v => v == null || !isFinite(v) ? '—' : fmt(v, 2);
+  const arrow = (a, b) => a == null || b == null ? '' : a > b ? '<i class="up">▲</i>' : a < b ? '<i class="down">▼</i>' : '';
+  const dup = `<div class="mg-sec"><b>④ 杜邦 ROE 分析</b>${DP ? `<div class="mg-t dp"><div class="h"><span></span><span>近四季</span><span>前一年</span></div>
+      <div><span>股東權益報酬率 ROE</span><span>${pc1(DP.now.roe)} ${arrow(DP.now.roe, DP.prev?.roe)}</span><span>${pc1(DP.prev?.roe)}</span></div>
+      <div><span>＝ 淨利率</span><span>${pc1(DP.now.margin)} ${arrow(DP.now.margin, DP.prev?.margin)}</span><span>${pc1(DP.prev?.margin)}</span></div>
+      <div><span>× 資產週轉率</span><span>${x2(DP.now.turn)} ${arrow(DP.now.turn, DP.prev?.turn)}</span><span>${x2(DP.prev?.turn)}</span></div>
+      <div><span>× 財務槓桿</span><span>${x2(DP.now.lev)} ${arrow(DP.now.lev, DP.prev?.lev)}</span><span>${x2(DP.prev?.lev)}</span></div></div>
+      <div class="help">${DP.peerRoe != null ? `同業 ROE 中位數約 ${fmt(DP.peerRoe, 1)}%（由同業股價淨值比 ÷ 本益比推算）。` : ''}ROE 上升如果主要來自淨利率或週轉率，是體質變好；如果主要來自財務槓桿（借更多錢），風險也跟著變高。</div>` : '<div class="help">缺少資產或股東權益資料。</div>'}</div>`;
+  return `<details class="rc-sub mg" id="mgBox" ${S.mgOpen ? 'open' : ''}><summary>📚 估值模型集錦</summary>${dcf}${peer}${epv}${dup}
+    <div class="help">模型分類參考 InvestingPro 的模型集錦；假設由本工具自行設定，可以修改。所有算得出數字的模型都會出現在上方綜合公允價值，離群的自動剔除。</div></details>`;
+}
+const _cardsMG = PAGES.cards;
+PAGES.cards = () => {
+  let h = _cardsMG(); if (!openCardId) return h;
+  const c = S.cards.find(x => x.id === openCardId); if (!c) return h;
+  if (c.fm) setTimeout(() => loadPeers(c), 60);
+  const i = h.indexOf('<details class="rc-sub"><summary>🧮 DCF 試算器');
+  return i >= 0 ? h.slice(0, i) + modelGalleryHTML(c) + h.slice(i) : h;
+};
+const _afterMG = window.afterAutoFill;
+window.afterAutoFill = (c, d) => { _afterMG(c, d); if (d.fm) { c.fm = Object.assign({}, d.fm, { revG: d.dcf?.revGttm ?? d.dcf?.revG ?? null }); c.peers = null; } };
+document.addEventListener('change', e => {
+  const k = e.target.dataset?.mo; if (!k) return; const c = S.cards.find(x => x.id === openCardId); if (!c) return;
+  c.mo = Object.assign(c.mo || {}, { [k]: e.target.value.trim() }); if (!c.mo[k]) delete c.mo[k]; save(); const y = scrollY; render(); scrollTo(0, y);
+});
+document.addEventListener('toggle', e => { if (e.target.id === 'mgBox') { S.mgOpen = e.target.open; save(); } }, true);
+
+/* ================= 策略組合（類似 InvestingPro ProPicks）：台股每月換股＋歷史回測 ================= */
+S.picks = S.picks || null;
+let picksBusy = false;
+async function loadPicks(force) {
+  if (picksBusy || !location.protocol.startsWith('http')) return;
+  if (!force && S.picks && Date.now() - (S.picks.at || 0) < 12 * 3600e3) return;
+  picksBusy = true; if (current === 'picks') render();
+  try { const j = await (await fetch('api/strategy', { signal: AbortSignal.timeout(120000) })).json(); if (j.error) throw new Error(j.error); j.at = Date.now(); S.picks = j; save(); }
+  catch (e) { if (current === 'picks') toast('策略資料讀取失敗：' + e.message); }
+  picksBusy = false; if (current === 'picks') { const y = scrollY; render(); scrollTo(0, y); }
+}
+const PK_COL = { mom20: '#3b82c4', lowvol20: '#1e9e5a', div20: '#c9a24a', trend15: '#8b5cf6', tech15: '#e07b39', multi20: '#d64545' };
+function pkSpark(cv, bc, col) {
+  const W = 300, H = 70, all = cv.concat(bc).map(Math.log), lo = Math.min(...all), hi = Math.max(...all), X = i => i * W / (cv.length - 1), Y = v => H - 4 - (Math.log(v) - lo) / (hi - lo || 1) * (H - 8);
+  const path = a => a.map((v, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join('');
+  return `<svg class="pk-sp" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path d="${path(bc)}" class="b"/><path d="${path(cv)}" style="stroke:${col}"/></svg>`;
+}
+PAGES.picks = () => {
+  setTimeout(() => loadPicks(false), 30);
+  const D = S.picks, head = `<h2>策略組合</h2><p class="lead">像 InvestingPro 的 ProPicks：用固定規則每月從台股市值前 150 大挑股票、等權重持有，並用過去約 10 年的資料回測，跟 0050（含息）比較。</p><div class="note">⚠️ 回測報酬<b>明顯高估</b>：候選池是「今天」的市值前 150 大，等於事先知道哪些公司後來長大了（倖存者偏差），動能類策略特別嚴重。請把重點放在<b>策略之間的相對特性</b>（波動、回檔、跟大盤的差距）與<b>本月選出的股票</b>，不要把歷史年化報酬當成預期報酬。</div>`;
+  if (!D) return head + `<div class="card empty">${picksBusy ? '回測計算中…（第一次約 10～30 秒）' : '讀取中…'}</div>`;
+  const B = D.bench.stats, open = S.pkOpen || '', yr = s => `${s.slice(0, 4)}`;
+  const box = (l, v, b) => `<div class="pk-b"><em>${l}</em><b class="${v >= 0 ? 'up' : 'down'}">${v == null ? '—' : pc(v) + '%'}</b>${b != null ? `<small>0050 ${pc(b)}%</small>` : ''}</div>`;
+  const cards = D.strategies.map(s => `<div class="card pk">
+      <div class="pk-h"><span class="pk-tag" style="background:${PK_COL[s.id]}">${esc(s.tag)}</span><span class="spacer"></span><button class="pk-see" data-pkopen="${s.id}">👁 ${open === s.id ? '收起' : '查看股票'}</button></div>
+      <h3>${esc(s.name)}</h3><div class="help">${esc(s.desc)}</div>
+      <div class="pk-mid"><div class="help">🕒 ${yr(D.from)}–${yr(D.to)}<br>🔁 每月換股・${s.n} 檔</div>${pkSpark(s.curve, D.bench.curve, PK_COL[s.id])}</div>
+      <div class="pk-row">${box('總報酬（1 年）', s.stats.r1, B.r1)}${box('總報酬（5 年）', s.stats.r5, B.r5)}</div>
+      <div class="pk-mini">年化 ${pc(s.stats.cagr)}%（0050 ${pc(B.cagr)}%）・最大回檔 ${s.stats.mdd}%（0050 ${B.mdd}%）・3 年 ${pc(s.stats.r3)}%</div>
+      ${open === s.id ? `<div class="pk-list"><div class="pk-li h"><span>本月持股</span><span>12 月漲幅</span><span>波動</span><span>殖利率</span></div>
+        ${s.holdings.map(x => { const m = S.cards.find(c => String(c.code) === x.code && !c.example); return `<div class="pk-li"><span><b>${esc(x.code)} ${esc(x.name)}</b>${x.isNew ? '<i class="pill gold">新進</i>' : ''}<small>${esc(x.ind || '')}・${m ? `<a class="pk-a" data-card="${m.id}" data-go-card="1">研究卡 ›</a>` : `<a class="pk-a" data-radarcard="${esc(x.code)}" data-n="${esc(x.name)}">＋ 研究卡</a>`}</small></span><span class="${x.mom >= 0 ? 'up' : 'down'}">${pc(x.mom)}%</span><span>${x.vol}%</span><span>${x.yld}%</span></div>`; }).join('')}
+        ${s.out.length ? `<div class="help">本月移出：${s.out.map(x => esc(`${x.code} ${x.name}`)).join('、')}</div>` : ''}</div>` : ''}
+    </div>`).join('');
+  return head + `<div class="card pk-bench"><b>比較基準：0050（含息）</b><div class="pk-mini">1 年 ${pc(B.r1)}%・5 年 ${pc(B.r5)}%・年化 ${pc(B.cagr)}%・最大回檔 ${B.mdd}%</div><div class="help">每月月底依規則重新選股、等權重，已扣除換股成本（手續費＋證交稅，約換掉部分的 0.6%）。候選池 ${D.universe} 檔，資料到 ${esc(D.to)}。</div></div>
+    <div class="pk-grid">${cards}</div>
+    <div class="card"><div class="help">⚠️ ${esc(D.note)} 另外，回測沒有考慮滑價與停牌。策略是「規則」不是「建議」：放進研究卡、確認基本面，再依自己的配置決定要不要買。</div><button class="btn-small ghost" id="pkRefresh">重新計算</button></div>`;
+};
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-pkopen],#pkRefresh'); if (!t) return;
+  if (t.id === 'pkRefresh') return loadPicks(true);
+  S.pkOpen = S.pkOpen === t.dataset.pkopen ? '' : t.dataset.pkopen; save(); const y = scrollY; render(); scrollTo(0, y);
+});
+if (typeof GROUPS !== 'undefined') GROUPS.research = [['radar', '選股雷達'], ['picks', '策略組合'], ['cards', '研究卡'], ['industry', '產業定位'], ['etf', 'ETF 健檢'], ['claims', '待驗主張'], ['learn', '技術教學']];
+if (current === 'picks') render();
+if (typeof FLOWS !== 'undefined' && !FLOWS[0].steps.some(s => s[0] === 'picks')) FLOWS[0].steps.splice(1, 0, ['picks', '策略組合']);
