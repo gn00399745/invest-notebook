@@ -210,6 +210,16 @@ async function taiwan(code, errors) {
     out.valLight = curPE ? (curPE < q1 ? '綠' : curPE > q3 ? '紅' : '黃') : null;
     out.valNote = curPE ? `目前本益比 ${r(curPE, 1)} 倍，近 3 年中位數 ${r(med, 1)} 倍` : '';
   }
+  // 其他估值法：股價淨值比、殖利率（都跟自己近 3 年的歷史比）
+  const med = a => { const b = a.filter(x => x > 0).sort((x, y) => x - y); return b.length > 60 ? b[Math.floor(b.length / 2)] : null; };
+  const lastPer = per[per.length - 1], px0 = out.price;
+  if (px0 && lastPer) {
+    out.valx = [];
+    const pbM = med(per.map(x => x.PBR)), pbC = lastPer.PBR;
+    if (pbM && pbC > 0) out.valx.push({ k: 'pb', name: '股價淨值比法', fair: r(px0 * pbM / pbC, 1), assume: `每股淨值 ${r(px0 / pbC, 1)} 元 × 近 3 年股價淨值比中位數 ${r(pbM, 2)} 倍（目前 ${r(pbC, 2)} 倍）` });
+    const dyM = med(per.map(x => x.dividend_yield)), dyC = lastPer.dividend_yield;
+    if (dyM && dyM >= 1 && dyC > 0) out.valx.push({ k: 'dy', name: '殖利率法', fair: r(px0 * dyC / dyM, 1), assume: `近一年現金股利約 ${r(px0 * dyC / 100, 2)} 元 ÷ 近 3 年殖利率中位數 ${r(dyM, 2)}%（目前 ${r(dyC, 2)}%）`, dy: r(dyC, 2) });
+  }
   if (div.length) { const d = div.sort((a, b) => a.date.localeCompare(b.date)).slice(-4); out.dividends = d.map(x => `${x.date}｜現金 ${r((x.CashEarningsDistribution || 0) + (x.CashStatutorySurplus || 0), 2)} 元`).join('；'); }
 
   // 籌碼
@@ -281,6 +291,7 @@ async function yahooFin(sym) {
   const lyD = (rev.find(yAgo(L)) || {}).d;
   const src = `Yahoo Finance｜季末 ${L}${lyD ? ` vs ${lyD}` : '（無去年同期）'}`;
   return {
+    _rev: rev, _sh: S.quarterlyDilutedAverageShares || S.quarterlyBasicAverageShares || [],
     quarter: L, epsTTM: epsArr.length === 4 ? r(epsArr.reduce((a, b) => a + b, 0)) : null,
     dcf: (() => {
       const f = (S.quarterlyFreeCashFlow || []).slice(-4).map(x => x.v);
@@ -386,6 +397,21 @@ async function us(code, errors) {
   if (!got && process.env.SEC_USER_AGENT) {
     try { const { facts, title } = await secFacts(code); out.name = out.name || title; Object.assign(out, usFin(facts)); out.finQuarter = out.quarter; } catch (e) { errors.push(e.message); }
   }
+  // 營收倍數法（股價營收比跟自己的歷史比）：虧損、現金流為負的成長股也能估
+  try {
+    const rv = out._rev || [], sh = out._sh || [];
+    if (rv.length >= 7 && sh.length) {
+      const wk = await (await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(code)}?range=5y&interval=1wk`, { signal: T(), headers: UA })).json();
+      const R = wk.chart.result[0], cl = R.indicators.quote[0].close, ts = R.timestamp;
+      const pxAt = d => { const t = Date.parse(d) / 1000; let p = null; for (let i = 0; i < ts.length && ts[i] <= t + 7 * 86400; i++) if (cl[i] != null) p = cl[i]; return p; };
+      const shAt = d => (sh.filter(x => x.d <= d).pop() || sh[0]).v, ps = [];
+      for (let i = 3; i < rv.length; i++) { const ttm = rv.slice(i - 3, i + 1).reduce((a, b) => a + b.v, 0), p = pxAt(rv[i].d); if (ttm > 0 && p) ps.push(p * shAt(rv[i].d) / ttm); }
+      const ttmNow = rv.slice(-4).reduce((a, b) => a + b.v, 0), shNow = sh[sh.length - 1].v, b = [...ps].sort((x, y) => x - y);
+      if (b.length >= 4 && ttmNow > 0 && out.price) { const m = b[Math.floor(b.length / 2)], cur = out.price * shNow / ttmNow;
+        out.valx = [{ k: 'ps', name: '營收倍數法', fair: r(m * ttmNow / shNow, 2), assume: `近四季營收每股 ${r(ttmNow / shNow, 2)} 美元 × 過去 ${b.length} 季股價營收比中位數 ${r(m, 1)} 倍（目前 ${r(cur, 1)} 倍）` }]; }
+    }
+  } catch (e) { /* 資料不足就略過 */ }
+  delete out._rev; delete out._sh;
   out.chipNote = '美股沒有三大法人資料，可改看機構持股（13F）與空單比率';
   return out;
 }
