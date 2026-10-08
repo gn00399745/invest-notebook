@@ -997,3 +997,6 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .fv-list > div em { font-style: normal; font-size: 11px; color: var(--muted, #7a8599); text-align: right; min-width: 64px; }
 .fv-list > div small { grid-column: 1 / -1; font-size: 11px; color: var(--muted, #7a8599); }
 .fv-list > div.off { opacity: .5; } .fv-list > div.off b { text-decoration: line-through; }
+
+.fv-calc { margin-top: 8px; font-size: 12.5px; } .fv-calc summary { font-weight: 700; cursor: pointer; padding: 4px 0; }
+.fv-calc > div { margin: 6px 0; line-height: 1.5; } .fv-calc > div > div { color: var(--muted, #5b6476); }

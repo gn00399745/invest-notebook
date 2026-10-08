@@ -1055,6 +1055,7 @@ function fairComposite(c) {
   const avg = sw ? U.reduce((s, m) => s + m.fair * m.w, 0) / sw : null, p = num(c.price);
   return { M, U, avg, min: U.length ? Math.min(...U.map(m => m.fair)) : null, max: U.length ? Math.max(...U.map(m => m.fair)) : null, upside: avg && p ? (avg / p - 1) * 100 : null, fin, loss };
 }
+const FV_WHY = F => F.fin ? '金融股：股價淨值比 2、殖利率 1、本益比 1，DCF 不用（現金流含存放款）' : F.loss ? '虧損公司：營收倍數 1.5，其餘 1；股價淨值比、殖利率各 0.5' : '一般公司：本益比、DCF、營收倍數、分析師／外部各 1；股價淨值比、殖利率各 0.5（殖利率 4% 以上的高股息股提高到 1）';
 valSummary = function (c) { const F = fairComposite(c); return { avg: F.avg, upside: F.upside, min: F.min, max: F.max }; };
 function fairCardHTML(c) {
   const F = fairComposite(c), p = num(c.price); if (!F.M.length) return '';
@@ -1063,6 +1064,11 @@ function fairCardHTML(c) {
   return `<div class="fv"><div class="fv-h"><b>⚖️ 綜合公允價值 ${F.avg ? fmt(F.avg, F.avg < 100 ? 2 : 1) : '—'}</b>${F.upside != null ? `<span class="${F.upside >= 0 ? 'up' : 'down'}">${F.upside >= 0 ? '低估' : '高估'} ${fmt(Math.abs(F.upside), 1)}%</span>` : ''}</div>
     <div class="fv-bar">${F.U.length ? `<i class="rng" style="left:${X(F.min)}%;width:${X(F.max) - X(F.min)}%"></i>` : ''}${F.M.map(m => `<i class="dot ${m.used ? '' : 'off'}" style="left:${X(m.fair)}%"></i>`).join('')}${p ? `<b class="px" style="left:${X(p)}%"><span>現價 ${fmt(p, p < 100 ? 2 : 0)}</span></b>` : ''}${F.avg ? `<b class="av" style="left:${X(F.avg)}%"></b>` : ''}</div>
     <div class="fv-list">${F.M.map(m => `<div class="${m.used ? '' : 'off'}"><span>${esc(m.name)}</span><b>${fmt(m.fair, m.fair < 100 ? 2 : 1)}</b><em>${m.used ? `權重 ${Math.round(m.w / sw * 100)}%` : m.out ? '離群，未納入' : '不適用'}</em>${m.assume ? `<small>${esc(String(m.assume).replace(/^【自動】/, ''))}</small>` : ''}</div>`).join('')}</div>
+    ${F.U.length ? `<details class="fv-calc"><summary>🧮 計算過程</summary>
+      <div><b>① 各方法的合理價</b>${F.M.map(m => `<div>・${esc(m.name)}：${esc(String(m.assume || '').replace(/^【自動】/, '') || '（自己填入）')} → <b>${fmt(m.fair, m.fair < 100 ? 2 : 1)}</b></div>`).join('')}</div>
+      <div><b>② 權重</b><div>・${FV_WHY(F)}</div>${F.M.filter(m => m.out).map(m => `<div>・${esc(m.name)} ${fmt(m.fair, 1)} 跟其他方法的中位數差 2.5 倍以上，視為離群、不納入</div>`).join('')}</div>
+      <div><b>③ 加權平均</b><div>（${F.U.map(m => `${fmt(m.fair, m.fair < 100 ? 2 : 1)} × ${m.w}`).join(' ＋ ')}）÷ ${F.U.reduce((s, m) => s + m.w, 0)} ＝ <b>${fmt(F.avg, F.avg < 100 ? 2 : 1)}</b></div></div>
+      ${F.upside != null ? `<div><b>④ 跟現價比</b><div>${fmt(F.avg, 1)} ÷ ${fmt(num(c.price), 1)} − 1 ＝ ${F.upside >= 0 ? '+' : ''}${fmt(F.upside, 1)}%（正數＝低估）</div></div>` : ''}</details>` : ''}
     <div class="help">把多種估值法依公司類型加權平均${F.fin ? '（金融股以股價淨值比為主、不用 DCF）' : F.loss ? '（虧損公司以營收倍數為主）' : ''}；跟其他方法中位數差 2.5 倍以上的視為離群、不納入。InvestingPro 之類網站的「公允價值」也是多種模型的綜合結果，可以填在「分析師／外部公允價值」，並在備註寫上來源與日期。</div></div>`;
 }
 const _cardsFV = PAGES.cards;
