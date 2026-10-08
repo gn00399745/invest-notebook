@@ -183,6 +183,23 @@ async function taiwan(code, errors) {
         fcfAvg: allF.length >= 6 ? sum(allF) / (allF.length / 4) : null, years: r(allF.length / 4, 1),
         revGttm: rT && rP ? r((rT / rP - 1) * 100, 1) : null, epsPrev: eP.length === 4 ? r(sum(eP)) : null };
     }
+    // 估值模型用的財務資料（近四季合計、前一年、資產負債）
+    {
+      const sumQ = (qq, f) => { const v = qq.map(f); return v.length && v.every(x => x != null) ? v.reduce((a, b) => a + b, 0) : null; };
+      const L4 = qs.slice(-4), P4 = qs.slice(-8, -4), fv = k => q => byQ[q]?.[k] ?? null;
+      const da = q => { const d = single(q, 'Depreciation'), a = single(q, 'AmortizationExpense'); return d == null ? null : d + (a || 0); };
+      const B = bsMap[lastQ] || {}, BP = bsMap[P4[P4.length - 1]] || {}, g = (o, k) => o[k] ?? null;
+      const debtOf = o => ['ShorttermBorrowings', 'ShortTermBorrowings', 'LongtermBorrowings', 'BondsPayable', 'CurrentPortionOfLongtermLiabilities', 'ShorttermNotesAndBillsPayable'].reduce((t, k) => t + (o[k] || 0), 0);
+      const revT = sumQ(L4, fv('Revenue')), opT = sumQ(L4, fv('OperatingIncome')), daT = sumQ(L4, da), taxT = sumQ(L4, fv('TAX')), niT = sumQ(L4, fv('IncomeAfterTaxes'));
+      const allRev = qs.map(fv('Revenue')), allOp = qs.map(fv('OperatingIncome')), ok = allRev.map((v, i) => v != null && allOp[i] != null);
+      const opAvg = ok.filter(Boolean).length >= 6 ? allOp.filter((_, i) => ok[i]).reduce((a, b) => a + b, 0) / allRev.filter((_, i) => ok[i]).reduce((a, b) => a + b, 0) : null;
+      out.fm = { cur: '元', rev: revT, revP: sumQ(P4, fv('Revenue')), opInc: opT, opIncP: sumQ(P4, fv('OperatingIncome')), da: daT, ebitda: opT != null && daT != null ? opT + daT : null,
+        capex: capKey ? sumQ(L4, q => { const c = single(q, capKey); return c == null ? null : Math.abs(c); }) : null,
+        ni: niT, niP: sumQ(P4, fv('IncomeAfterTaxes')), taxRate: taxT != null && niT != null && niT + taxT > 0 ? Math.min(0.4, Math.max(0, taxT / (niT + taxT))) : 0.2,
+        opMarginAvg: opAvg, years: r(ok.filter(Boolean).length / 4, 1),
+        assets: g(B, 'TotalAssets'), assetsP: g(BP, 'TotalAssets'), equity: g(B, 'EquityAttributableToOwnersOfParent') ?? g(B, 'Equity'), equityP: g(BP, 'EquityAttributableToOwnersOfParent') ?? g(BP, 'Equity'),
+        cash: g(B, 'CashAndCashEquivalents'), debt: debtOf(B), shares };
+    }
   }
 
   // 月營收
@@ -268,7 +285,7 @@ async function stooqBars(sym) {
   return { bars };
 }
 async function yahooFin(sym) {
-  const types = ['quarterlyTotalRevenue', 'quarterlyGrossProfit', 'quarterlyOperatingIncome', 'quarterlyDilutedEPS', 'quarterlyBasicEPS', 'quarterlyOperatingCashFlow', 'quarterlyCapitalExpenditure', 'quarterlyFreeCashFlow', 'quarterlyInventory', 'trailingPeRatio', 'quarterlyDilutedAverageShares', 'quarterlyBasicAverageShares', 'annualTotalRevenue', 'annualDilutedAverageShares'];
+  const types = ['quarterlyTotalRevenue', 'quarterlyGrossProfit', 'quarterlyOperatingIncome', 'quarterlyDilutedEPS', 'quarterlyBasicEPS', 'quarterlyOperatingCashFlow', 'quarterlyCapitalExpenditure', 'quarterlyFreeCashFlow', 'quarterlyInventory', 'trailingPeRatio', 'quarterlyDilutedAverageShares', 'quarterlyBasicAverageShares', 'annualTotalRevenue', 'annualDilutedAverageShares', 'quarterlyEBITDA', 'quarterlyReconciledDepreciation', 'quarterlyNetIncome', 'quarterlyTaxRateForCalcs', 'quarterlyTotalDebt', 'quarterlyCashAndCashEquivalents', 'quarterlyTotalAssets', 'quarterlyStockholdersEquity', 'annualOperatingIncome'];
   const p2 = Math.floor(Date.now() / 1000), p1 = p2 - 3 * 365 * 86400;
   const res = await fetch(`https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(sym)}?type=${types.join(',')}&period1=${p1}&period2=${p2}`, { signal: T(), headers: UA });
   if (!res.ok) throw new Error('Yahoo 財報 HTTP ' + res.status);
@@ -290,7 +307,19 @@ async function yahooFin(sym) {
   const pes = (S.trailingPeRatio || []).map(x => x.v).filter(x => x > 0).sort((a, b) => a - b);
   const lyD = (rev.find(yAgo(L)) || {}).d;
   const src = `Yahoo Finance｜季末 ${L}${lyD ? ` vs ${lyD}` : '（無去年同期）'}`;
+  // 估值模型用的財務資料
+  const qs4 = (k, from = -4, to) => { const a = (S[k] || []).slice(from, to); return a.length === 4 ? a.reduce((x, y) => x + y.v, 0) : null; };
+  const lastV = k => (S[k] || []).slice(-1)[0]?.v ?? null, prevV = k => (S[k] || []).slice(-5, -4)[0]?.v ?? null;
+  const aR = S.annualTotalRevenue || [], aO = S.annualOperatingIncome || [];
+  const opAvg = aR.length >= 2 && aO.length >= 2 ? aO.slice(-4).reduce((a, b) => a + b.v, 0) / aR.slice(-aO.slice(-4).length).reduce((a, b) => a + b.v, 0) : null;
+  const daT = qs4('quarterlyReconciledDepreciation'), opT = qs4('quarterlyOperatingIncome');
+  const fm = { cur: '美元', rev: qs4('quarterlyTotalRevenue'), revP: qs4('quarterlyTotalRevenue', -8, -4), opInc: opT, opIncP: qs4('quarterlyOperatingIncome', -8, -4), da: daT,
+    ebitda: qs4('quarterlyEBITDA') ?? (opT != null && daT != null ? opT + daT : null), capex: qs4('quarterlyCapitalExpenditure') != null ? Math.abs(qs4('quarterlyCapitalExpenditure')) : null,
+    ni: qs4('quarterlyNetIncome'), niP: qs4('quarterlyNetIncome', -8, -4), taxRate: Math.min(0.4, Math.max(0, lastV('quarterlyTaxRateForCalcs') ?? 0.21)), opMarginAvg: opAvg, years: aR.length,
+    assets: lastV('quarterlyTotalAssets'), assetsP: prevV('quarterlyTotalAssets'), equity: lastV('quarterlyStockholdersEquity'), equityP: prevV('quarterlyStockholdersEquity'),
+    cash: lastV('quarterlyCashAndCashEquivalents'), debt: lastV('quarterlyTotalDebt') ?? 0, shares: (S.quarterlyDilutedAverageShares || S.quarterlyBasicAverageShares || []).slice(-1)[0]?.v ?? null };
   return {
+    fm,
     _rev: rev, _sh: S.quarterlyDilutedAverageShares || S.quarterlyBasicAverageShares || [], _arev: S.annualTotalRevenue || [], _ash: S.annualDilutedAverageShares || [],
     quarter: L, epsTTM: epsArr.length === 4 ? r(epsArr.reduce((a, b) => a + b, 0)) : null,
     dcf: (() => {
