@@ -268,7 +268,7 @@ async function stooqBars(sym) {
   return { bars };
 }
 async function yahooFin(sym) {
-  const types = ['quarterlyTotalRevenue', 'quarterlyGrossProfit', 'quarterlyOperatingIncome', 'quarterlyDilutedEPS', 'quarterlyBasicEPS', 'quarterlyOperatingCashFlow', 'quarterlyCapitalExpenditure', 'quarterlyFreeCashFlow', 'quarterlyInventory', 'trailingPeRatio', 'quarterlyDilutedAverageShares', 'quarterlyBasicAverageShares'];
+  const types = ['quarterlyTotalRevenue', 'quarterlyGrossProfit', 'quarterlyOperatingIncome', 'quarterlyDilutedEPS', 'quarterlyBasicEPS', 'quarterlyOperatingCashFlow', 'quarterlyCapitalExpenditure', 'quarterlyFreeCashFlow', 'quarterlyInventory', 'trailingPeRatio', 'quarterlyDilutedAverageShares', 'quarterlyBasicAverageShares', 'annualTotalRevenue', 'annualDilutedAverageShares'];
   const p2 = Math.floor(Date.now() / 1000), p1 = p2 - 3 * 365 * 86400;
   const res = await fetch(`https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(sym)}?type=${types.join(',')}&period1=${p1}&period2=${p2}`, { signal: T(), headers: UA });
   if (!res.ok) throw new Error('Yahoo 財報 HTTP ' + res.status);
@@ -291,7 +291,7 @@ async function yahooFin(sym) {
   const lyD = (rev.find(yAgo(L)) || {}).d;
   const src = `Yahoo Finance｜季末 ${L}${lyD ? ` vs ${lyD}` : '（無去年同期）'}`;
   return {
-    _rev: rev, _sh: S.quarterlyDilutedAverageShares || S.quarterlyBasicAverageShares || [],
+    _rev: rev, _sh: S.quarterlyDilutedAverageShares || S.quarterlyBasicAverageShares || [], _arev: S.annualTotalRevenue || [], _ash: S.annualDilutedAverageShares || [],
     quarter: L, epsTTM: epsArr.length === 4 ? r(epsArr.reduce((a, b) => a + b, 0)) : null,
     dcf: (() => {
       const f = (S.quarterlyFreeCashFlow || []).slice(-4).map(x => x.v);
@@ -399,19 +399,21 @@ async function us(code, errors) {
   }
   // 營收倍數法（股價營收比跟自己的歷史比）：虧損、現金流為負的成長股也能估
   try {
-    const rv = out._rev || [], sh = out._sh || [];
-    if (rv.length >= 7 && sh.length) {
+    const rv = out._rev || [], sh = out._sh || [], ar = out._arev || [], ash = out._ash || [];
+    if ((rv.length >= 4 || ar.length >= 3) && (sh.length || ash.length)) {
       const wk = await (await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(code)}?range=5y&interval=1wk`, { signal: T(), headers: UA })).json();
       const R = wk.chart.result[0], cl = R.indicators.quote[0].close, ts = R.timestamp;
       const pxAt = d => { const t = Date.parse(d) / 1000; let p = null; for (let i = 0; i < ts.length && ts[i] <= t + 7 * 86400; i++) if (cl[i] != null) p = cl[i]; return p; };
       const shAt = d => (sh.filter(x => x.d <= d).pop() || sh[0]).v, ps = [];
-      for (let i = 3; i < rv.length; i++) { const ttm = rv.slice(i - 3, i + 1).reduce((a, b) => a + b.v, 0), p = pxAt(rv[i].d); if (ttm > 0 && p) ps.push(p * shAt(rv[i].d) / ttm); }
-      const ttmNow = rv.slice(-4).reduce((a, b) => a + b.v, 0), shNow = sh[sh.length - 1].v, b = [...ps].sort((x, y) => x - y);
-      if (b.length >= 4 && ttmNow > 0 && out.price) { const m = b[Math.floor(b.length / 2)], cur = out.price * shNow / ttmNow;
-        out.valx = [{ k: 'ps', name: '營收倍數法', fair: r(m * ttmNow / shNow, 2), assume: `近四季營收每股 ${r(ttmNow / shNow, 2)} 美元 × 過去 ${b.length} 季股價營收比中位數 ${r(m, 1)} 倍（目前 ${r(cur, 1)} 倍）` }]; }
+      for (let i = 3; i < rv.length; i++) { const ttm = rv.slice(i - 3, i + 1).reduce((a, b) => a + b.v, 0), p = pxAt(rv[i].d); if (ttm > 0 && p && sh.length) ps.push(p * shAt(rv[i].d) / ttm); }
+      // 年度營收：每個會計年度底的股價營收比（季度資料不夠時補上）
+      ar.forEach(a => { const p = pxAt(a.d), s2 = (ash.find(x => x.d === a.d) || ash[ash.length - 1] || sh[sh.length - 1])?.v; if (p && s2 && a.v > 0 && Date.parse(a.d) >= ts[0] * 1000) ps.push(p * s2 / a.v); });
+      const ttmNow = rv.length >= 4 ? rv.slice(-4).reduce((a, b) => a + b.v, 0) : ar[ar.length - 1]?.v, shNow = (sh[sh.length - 1] || ash[ash.length - 1]).v, b = [...ps].sort((x, y) => x - y);
+      if (b.length >= 3 && ttmNow > 0 && out.price) { const m = b[Math.floor(b.length / 2)], cur = out.price * shNow / ttmNow;
+        out.valx = [{ k: 'ps', name: '營收倍數法', fair: r(m * ttmNow / shNow, 2), assume: `近四季營收每股 ${r(ttmNow / shNow, 2)} 美元 × 過去 ${b.length} 個時點股價營收比中位數 ${r(m, 1)} 倍（目前 ${r(cur, 1)} 倍）` }]; }
     }
   } catch (e) { /* 資料不足就略過 */ }
-  delete out._rev; delete out._sh;
+  delete out._rev; delete out._sh; delete out._arev; delete out._ash;
   out.chipNote = '美股沒有三大法人資料，可改看機構持股（13F）與空單比率';
   return out;
 }
