@@ -982,3 +982,18 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .pl-note { display: grid; gap: 6px; font-size: 13px; } .pl-note .no { color: #9a5b16; }
 .dr-box { background: var(--bg, #f5f7fa); border-radius: 10px; padding: 8px 10px; margin: 8px 0; font-size: 13px; display: grid; gap: 4px; }
 .dr-box .btn-small { justify-self: start; }
+/* 綜合公允價值 */
+.fv { background: var(--bg, #f5f7fa); border-radius: 12px; padding: 10px 12px; margin: 10px 0; }
+.fv-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; } .fv-h b { font-size: 16px; } .fv-h span { font-weight: 700; }
+.fv-bar { position: relative; height: 30px; margin: 22px 4px 8px; }
+.fv-bar::before { content: ''; position: absolute; left: 0; right: 0; top: 13px; height: 4px; border-radius: 2px; background: #e3e6ec; }
+.fv-bar .rng { position: absolute; top: 11px; height: 8px; border-radius: 4px; background: rgba(201,162,74,.45); }
+.fv-bar .dot { position: absolute; top: 9px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #a8802a; border: 2px solid #fff; }
+.fv-bar .dot.off { background: #c4cbd6; }
+.fv-bar .av { position: absolute; top: 4px; width: 4px; height: 22px; margin-left: -2px; background: var(--gold, #c9a24a); border-radius: 2px; }
+.fv-bar .px { position: absolute; top: 2px; width: 2px; height: 26px; margin-left: -1px; background: var(--text, #1d2433); }
+.fv-bar .px span { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.fv-list { display: grid; gap: 4px; } .fv-list > div { display: grid; grid-template-columns: 1fr auto auto; gap: 2px 8px; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed var(--line, #e3e6ec); }
+.fv-list > div em { font-style: normal; font-size: 11px; color: var(--muted, #7a8599); text-align: right; min-width: 64px; }
+.fv-list > div small { grid-column: 1 / -1; font-size: 11px; color: var(--muted, #7a8599); }
+.fv-list > div.off { opacity: .5; } .fv-list > div.off b { text-decoration: line-through; }
