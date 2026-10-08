@@ -978,7 +978,7 @@ function discountRate(c, extra = {}) {
   const cap = extra.cap; // 市值（台幣元或美元）
   const size = cap == null ? 0 : us ? (cap < 2e9 ? 2 : cap < 1e10 ? 1 : 0) : (cap < 1e10 ? 2 : cap < 5e10 ? 1 : 0);
   const r = Math.max(7, Math.min(16, rf + beta * erp + size));
-  const tg = Math.min(id ? IND_TG[id] : 2.5, r - 4);
+  const tg = Math.max(0.5, Math.min(id ? IND_TG[id] : 2.5, r - 5));
   const parts = `無風險利率 ${rf}%（${us ? '美國 10 年債' : '台灣 10 年公債約'}）＋ beta ${beta.toFixed(2)} × 風險溢酬 ${erp}%${size ? ` ＋ 小型股溢酬 ${size}%` : ''}`;
   const bWhy = [bInd != null ? `產業 ${bInd}（${f.l.n}）` : '', bMe != null ? `個股近一年 ${bMe}` : ''].filter(Boolean).join('、') || '未定位，用 1.0';
   return { r: Math.round(r * 10) / 10, tg, beta, fin: id === 'fin' && f.i < 2, why: `${parts}；beta 取${bWhy}${bInd != null && bMe != null ? '的平均' : ''}。永續成長 ${tg}%（${f ? f.ch.name : '一般'}）` };
@@ -987,7 +987,7 @@ function applyDR(c, extra) {
   const i = c.dcfIn; if (!i || !i.auto) return;
   const D = discountRate(c, extra); i.r = String(D.r); i.tg = String(D.tg); i.rWhy = D.why; i.fin = D.fin;
   const res = dcfCalc(i);
-  if (res && !res.neg && !D.fin && (isBlankish(c.val[1].assume) || c.val[1].auto)) c.val[1] = { assume: `【自動】${i.basis === 'eps' ? '近四季淨利（擴產期自由現金流為負，暫以獲利代替）' : '近四季自由現金流'}、前 5 年成長 ${i.g}%、折現率 ${i.r}%（依產業估算）、永續成長 ${i.tg}%`, fair: String(Math.round(res.perShare * 10) / 10), note: '折現率＝無風險利率＋beta×風險溢酬，可在 DCF 試算調整', auto: true };
+  if (res && !res.neg && !D.fin && (isBlankish(c.val[1].assume) || c.val[1].auto)) c.val[1] = { assume: `【自動】${i.basis === 'eps' ? '近四季淨利（自由現金流為負，暫以獲利代替）' : i.basis === 'norm' ? '正常化自由現金流（排除一次性暴增）' : '近四季自由現金流'}、前 5 年成長 ${i.g}%、折現率 ${i.r}%（依產業估算）、永續成長 ${i.tg}%`, fair: String(Math.round(res.perShare * 10) / 10), note: '折現率＝無風險利率＋beta×風險溢酬，可在 DCF 試算調整', auto: true };
   if (D.fin && c.val[1].auto) c.val[1] = { assume: '【自動】銀行、壽險的現金流包含存放款與保費，DCF 不適用', fair: '', note: '改用股價淨值比與殖利率比較同業', auto: true };
 }
 const _afterAF = window.afterAutoFill;
@@ -995,16 +995,33 @@ window.afterAutoFill = (c, d) => {
   if (d.beta) c.beta = d.beta;
   _afterAF(c, d);
   if (c.dcfIn?.auto && d.dcf) {
-    // 擴產期資本支出大、自由現金流為負，但有獲利：改用近四季淨利當現金流
-    if (d.dcf.fcfTTM <= 0 && d.epsTTM > 0) { const k = d.market === '美股' ? 1e6 : 1e8; c.dcfIn.fcf = String(Math.round(d.epsTTM * d.dcf.shares / k * 10) / 10); c.dcfIn.basis = 'eps'; } else c.dcfIn.basis = 'fcf';
-    applyDR(c, { cap: d.price && d.dcf.shares ? d.price * d.dcf.shares : null });
+    const D = d.dcf, k = d.market === '美股' ? 1e6 : 1e8, notes = [];
+    // 一次性暴增偵測：近四季現金流是前一年的 2 倍以上（或前一年為負），或營收年增超過 80%
+    const spike = (D.fcfTTM > 0 && D.fcfPrev != null && (D.fcfPrev <= 0 || D.fcfTTM > 2 * D.fcfPrev)) || (D.revGttm ?? D.revG) > 80;
+    let base = D.fcfTTM, basis = 'fcf';
+    if (spike) {
+      const cands = [D.fcfAvg, D.fcfPrev != null ? (D.fcfTTM + Math.max(D.fcfPrev, 0)) / 2 : null].filter(x => x != null && x > 0);
+      base = cands.length ? Math.min(...cands, D.fcfTTM) : D.fcfTTM * 0.5; basis = 'norm';
+      notes.push(`近四季現金流或營收暴增（${D.fcfPrev != null ? `前一年 ${fmt(D.fcfPrev / k, 1)}→近四季 ${fmt(D.fcfTTM / k, 1)}` : `營收年增 ${D.revGttm ?? D.revG}%`}），可能含處分資產、建案入帳等一次性收入，改用${D.fcfAvg ? `近 ${D.years} 年平均` : '前後兩年平均'}`);
+    }
+    if (base <= 0 && d.epsTTM > 0) { const e = spike && D.epsPrev != null ? Math.min(d.epsTTM, (d.epsTTM + Math.max(D.epsPrev, 0)) / 2) : d.epsTTM; base = e * D.shares; basis = 'eps'; }
+    c.dcfIn.fcf = String(Math.round(base / k * 10) / 10); c.dcfIn.basis = basis; c.dcfIn.note = notes.join('；');
+    // 成長率：用近四季營收年增的一半，限制在 2～12%；有暴增時最多 5%
+    const gr = D.revGttm ?? D.revG, g0 = gr == null ? 6 : Math.max(2, Math.min(12, gr / 2));
+    c.dcfIn.g = String(Math.round(spike ? Math.min(g0, 5) : g0));
+    // 本益比法也用正常化後的 EPS
+    if (spike && D.epsPrev != null && d.epsTTM > 0 && d.valuation?.peMedian && /^近四季 EPS/.test(c.val[0].assume || '')) {
+      const e = Math.min(d.epsTTM, (d.epsTTM + Math.max(D.epsPrev, 0)) / 2);
+      c.val[0] = { assume: `正常化 EPS ${fmt(e, 2)} 元（近四季 ${d.epsTTM}、前一年 ${D.epsPrev} 的平均）× 近 3 年本益比中位數 ${d.valuation.peMedian} 倍`, fair: String(Math.round(e * d.valuation.peMedian * 10) / 10), note: '近四季獲利暴增，可能含一次性收入，已用前後兩年平均', auto: true };
+    }
+    applyDR(c, { cap: d.price && D.shares ? d.price * D.shares : null });
   }
 };
 // DCF 區塊：顯示折現率怎麼來的，並可依產業重算
 const _dcfHTML0 = dcfHTML;
 dcfHTML = function (c) {
   const h = _dcfHTML0(c), i = c.dcfIn || {}, D = discountRate(c);
-  const note = `<div class="dr-box">${i.basis === 'eps' ? '<div class="help">⚠️ 這家近四季資本支出大於營業現金流（擴產中），現金流欄位改用<b>近四季淨利</b>估算；擴產結束、現金流轉正後再按「⚡ 自動帶入」更新。</div>' : ''}<div><b>折現率建議 ${D.r}%</b>・永續成長 ${D.tg}%</div><div class="help">${esc(i.rWhy || D.why)}</div>
+  const note = `<div class="dr-box">${i.note ? `<div class="help">⚠️ ${esc(i.note)}。</div>` : ''}${i.basis === 'eps' ? '<div class="help">⚠️ 這家近四季資本支出大於營業現金流（擴產中），現金流欄位改用<b>近四季淨利</b>估算；擴產結束、現金流轉正後再按「⚡ 自動帶入」更新。</div>' : ''}<div><b>折現率建議 ${D.r}%</b>・永續成長 ${D.tg}%</div><div class="help">${esc(i.rWhy || D.why)}</div>
     ${D.fin ? '<div class="help down">金融股（銀行、壽險）不適合用 DCF，請看股價淨值比與殖利率。</div>' : ''}
     <button type="button" class="btn-small ghost" data-dcfre="1">套用建議折現率</button></div>`;
   return h.replace('<div class="result" id="dcfResult">', note + '<div class="result" id="dcfResult">');
