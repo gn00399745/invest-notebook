@@ -1254,3 +1254,46 @@ document.addEventListener('click', e => {
 if (typeof GROUPS !== 'undefined') GROUPS.research = [['radar', '選股雷達'], ['picks', '策略組合'], ['cards', '研究卡'], ['industry', '產業定位'], ['etf', 'ETF 健檢'], ['claims', '待驗主張'], ['learn', '技術教學']];
 if (current === 'picks') render();
 if (typeof FLOWS !== 'undefined' && !FLOWS[0].steps.some(s => s[0] === 'picks')) FLOWS[0].steps.splice(1, 0, ['picks', '策略組合']);
+
+/* ================= 研究卡清單：搜尋、產業、動作篩選與排序 ================= */
+const RC_SORT = [['date', '研究日（新→舊）'], ['up', '估值空間（大→小）'], ['chg', '近 20 日漲幅'], ['code', '代號']];
+const rcInfo = c => { const f = findLayer(c.layer), x = c.example ? null : assetCheck(c); return { c, f, chain: f ? f.ch.name : '未定位', layer: f ? `${f.ch.name}｜${f.i + 1} ${f.l.n}` : '未定位', act: x && x.st[0] !== '資料不足' ? x.st[0] : '', up: valSummary(c).upside, chg: chg20(c) }; };
+const _cardsRC = PAGES.cards;
+PAGES.cards = () => {
+  const h = _cardsRC(); if (openCardId) return h;
+  const F = S.rcF = S.rcF || {}, all = S.cards.map(rcInfo);
+  // 抽出每張卡片的 HTML
+  const blocks = {}, re = /<button class="rc-item" data-card="([^"]+)">[\s\S]*?<\/button>/g; let m, first = -1, last = -1;
+  while ((m = re.exec(h))) { blocks[m[1]] = m[0]; if (first < 0) first = m.index; last = m.index + m[0].length; }
+  if (first < 0) return h;
+  const q = (F.q || '').trim().toLowerCase();
+  const ok = i => (!F.chain || i.chain === F.chain) && (!F.layer || i.layer === F.layer) && (!F.act || i.act === F.act);
+  let list = all.filter(i => blocks[i.c.id] && ok(i));
+  const key = { date: i => i.c.date || '', up: i => i.up ?? -1e9, chg: i => i.chg ?? -1e9, code: i => String(i.c.code) }[F.sort || 'date'];
+  const order = Object.keys(blocks); // 原本的順序（持有中優先）
+  if (F.sort && F.sort !== 'date') list.sort((a, b) => F.sort === 'code' ? key(a).localeCompare(key(b)) : key(b) - key(a)); else list.sort((a, b) => order.indexOf(a.c.id) - order.indexOf(b.c.id));
+  const qOf = i => `${i.c.code} ${i.c.name || ''} ${i.layer} ${i.act}`.toLowerCase();
+  const body = list.map(i => blocks[i.c.id].replace('<button class="rc-item"', `<button class="rc-item" data-q="${esc(qOf(i))}"${q && !qOf(i).includes(q) ? ' hidden' : ''}`)).join('');
+  const opt = (arr, cur, none) => `<option value="">${none}</option>` + [...new Set(arr)].filter(Boolean).sort().map(v => `<option ${v === cur ? 'selected' : ''}>${esc(v)}</option>`).join('');
+  const layers = all.filter(i => !F.chain || i.chain === F.chain).map(i => i.layer);
+  const bar = `<div class="rc-tools"><input type="search" id="rcQ" placeholder="🔍 搜尋代號、名稱、產業" value="${esc(F.q || '')}" autocomplete="off">
+    <div class="rc-sel"><select data-rcf2="chain">${opt(all.map(i => i.chain), F.chain, '全部產業鏈')}</select>
+      <select data-rcf2="layer">${opt(layers, F.layer, '全部層級')}</select>
+      <select data-rcf2="act">${opt(all.map(i => i.act), F.act, '全部動作')}</select>
+      <select data-rcf2="sort">${RC_SORT.map(([k, l]) => `<option value="${k}" ${k === (F.sort || 'date') ? 'selected' : ''}>排序：${l}</option>`).join('')}</select></div>
+    ${F.chain || F.layer || F.act || F.q ? `<div class="help">顯示 ${list.length} 張・<a class="pk-a" id="rcClear">清除篩選</a></div>` : ''}</div>`;
+  const newBtn = h.indexOf('<button class="rc-new"'), gridStart = h.lastIndexOf('<div class="rc-grid">', newBtn);
+  const pre = h.slice(0, gridStart), mid = h.slice(gridStart, first), post = h.slice(last);
+  return pre + bar + mid + (body || '') + post + (list.length ? '' : '<div class="card empty">沒有符合條件的研究卡。</div>');
+};
+document.addEventListener('input', e => {
+  if (e.target.id !== 'rcQ') return;
+  const q = e.target.value.trim().toLowerCase(); S.rcF = Object.assign(S.rcF || {}, { q: e.target.value }); save();
+  document.querySelectorAll('.rc-item[data-q]').forEach(b => { b.hidden = !!q && !b.dataset.q.includes(q); });
+});
+document.addEventListener('change', e => {
+  const k = e.target.dataset?.rcf2; if (!k) return;
+  S.rcF = Object.assign(S.rcF || {}, { [k]: e.target.value }); if (k === 'chain') S.rcF.layer = ''; save(); render();
+});
+document.addEventListener('click', e => { if (e.target.id === 'rcClear') { S.rcF = { sort: S.rcF?.sort }; save(); render(); } });
+if (current === 'cards') render();

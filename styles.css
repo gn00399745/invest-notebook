@@ -1027,3 +1027,7 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .pk-li .btn-small { grid-column: 1 / -1; justify-self: start; padding: 2px 8px; font-size: 11px; } .pk-li.h { font-size: 11px; color: var(--muted, #7a8599); }
 
 .pk-a { color: #3b82c4; font-weight: 600; cursor: pointer; }
+.rc-tools { display: grid; gap: 8px; margin: 10px 0 12px; }
+.rc-tools input[type=search] { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line, #e3e6ec); font-size: 15px; background: var(--card, #fff); color: var(--text); }
+.rc-sel { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .rc-sel select { padding: 8px; border-radius: 10px; border: 1px solid var(--line, #e3e6ec); font-size: 13px; background: var(--card, #fff); color: var(--text); min-width: 0; }
+.rc-item[hidden] { display: none !important; }
