@@ -36,14 +36,23 @@ function plLedgerExp() {
 /* ---------- 退休金估算（今日幣值，每月） ---------- */
 function plPension(p, ra) {
   const by = num(p.birth), age = PL_YEAR - by, n = Math.max(0, ra - age);
-  const startAge = num(p.start) ? num(p.start) - by : 25, svc = Math.max(0, ra - startAge);
-  const slip = plSlip(), out = { items: [], lump: 0, svc, notes: [] };
+  const gov = p.sys === 'gov' || p.sys === 'govdc';
+  let svc, svcT;
+  if (gov) {
+    const sd = p.startDate ? new Date(p.startDate) : null;
+    if (sd && !isNaN(sd)) {
+      const rd = new Date(by + ra, 6, 1), mo = Math.max(0, (rd.getFullYear() - sd.getFullYear()) * 12 + rd.getMonth() - sd.getMonth());
+      svc = mo / 12; svcT = `${Math.floor(mo / 12)} 年${mo % 12 ? ` ${mo % 12} 個月` : ''}`;
+    }
+  } else { const startAge = num(p.start) ? num(p.start) - by : 25; svc = Math.max(0, ra - startAge); svcT = `${svc} 年`; }
+  const slip = plSlip(), out = { items: [], lump: 0, svc: svc || 0, svcT, notes: [] };
+  if (gov && svc == null) { out.notes.push('填初任公職起始日才能算年資'); return out; }
   if (p.sys === 'gov' || p.sys === 'govdc') {
     const bp = num(p.pay) || slip.pay || 0; out.bp = bp; out.bpSrc = num(p.pay) ? '自己填' : slip.pay ? '依薪資單退撫扣款推算' : '';
     if (!bp) { out.notes.push('填入本俸才能估算'); return out; }
     const fin = bp * Math.min(1.25, 1.01 ** n);            // 到退休時的本(年功)俸，以今日幣值估
     if (p.sys === 'gov') {
-      if (svc < 15) { out.notes.push(`年資 ${svc} 年，未滿 15 年不能領月退`); }
+      if (svc < 15) { out.notes.push(`年資 ${svcT}，未滿 15 年不能領月退`); }
       else {
         const rate = Math.min(svc, 35) * 2 + Math.max(0, Math.min(svc, 40) - 35);                       // 新制：每年 2%，35 年後每年 1%
         const capR = 39 + 1.5 * (Math.min(svc, 35) - 15) + 0.5 * Math.max(0, Math.min(svc, 40) - 35);   // 替代率上限（凍結在 112 年）
@@ -51,17 +60,17 @@ function plPension(p, ra) {
         let mon = Math.min(formula, cap), from = ra, adj = '';
         if (ra < 60) { from = 65; adj = '（未滿 60 歲退休，65 歲起領）'; }
         else if (ra < 65) { mon *= 1 - 0.04 * (65 - ra); adj = `（提前 ${65 - ra} 年起領，減 ${4 * (65 - ra)}%）`; }
-        out.items.push({ n: '退撫月退休金', v: mon, from, d: `平均俸額 × 2 × 年資 ${svc} 年 × 2%${formula > cap ? `，受替代率上限 ${fmt(capR, 1)}% 限制` : ''}${adj}` });
+        out.items.push({ n: '退撫月退休金', v: mon, from, d: `平均俸額 × 2 × 年資 ${svcT}（35 年內每年 2%、之後每年 1%）${formula > cap ? `，受替代率上限 ${fmt(capR, 1)}% 限制` : ''}${adj}` });
       }
       out.lump = fin * 1.2 * Math.min(svc, 35);
-      out.lumpD = `公保一次養老給付：本俸 × 1.2 個月 × 年資 ${Math.min(svc, 35)} 年`;
+      out.lumpD = `公保一次養老給付：本俸 × 1.2 個月 × 年資 ${fmt(Math.min(svc, 35), Math.min(svc, 35) % 1 ? 1 : 0)} 年`;
     } else {
       const yrs = Math.min(n, svc), c = bp * 2 * 0.15, rr = 0.02; let acc = 0;
       for (let y = 0; y < yrs; y++) acc = acc * (1 + rr) + c * 12;
       const from = Math.max(ra, 60), yrsPay = Math.max(1, num(p.life) - from), ar = 0.015;
       const ann = acc * ar / (1 - (1 + ar) ** -yrsPay) / 12;
       out.items.push({ n: '退撫個人專戶年金', v: ann, from, d: `本俸 × 2 × 15% 每月提撥，累積約 ${fmt(acc)} 分 ${yrsPay} 年領` });
-      out.items.push({ n: '公保養老年金', v: fin * Math.min(svc, 35) * 0.013, from: Math.max(ra, 65), d: `本俸 × 年資 ${Math.min(svc, 35)} 年 × 1.3%（65 歲起）` });
+      out.items.push({ n: '公保養老年金', v: fin * Math.min(svc, 35) * 0.013, from: Math.max(ra, 65), d: `本俸 × 年資 ${fmt(Math.min(svc, 35), Math.min(svc, 35) % 1 ? 1 : 0)} 年 × 1.3%（65 歲起）` });
     }
   } else if (p.sys === 'labor') {
     const g = num(p.gross) || slip.gross || 0; out.gross = g; out.bpSrc = num(p.gross) ? '自己填' : slip.gross ? '依薪資單應發' : '';
@@ -151,7 +160,8 @@ PAGES.plan = () => {
   const p = plP(), slip = plSlip(), L = plLedgerExp();
   setTimeout(plFill, 0);
   const sysBody = p.sys === 'gov' || p.sys === 'govdc'
-    ? `${plIn('pay', '目前本(年功)俸', slip.pay ? `薪資單推算約 ${fmt(slip.pay)}，不準可以改` : '看薪資明細的「本俸」或「年功俸」', slip.pay ? String(slip.pay) : '')}${plIn('start', '到職年（西元）', '算年資用', num(p.birth) ? String(num(p.birth) + 25) : '')}`
+    ? `${plIn('pay', '目前本(年功)俸', slip.pay ? `薪資單推算約 ${fmt(slip.pay)}，不準可以改` : '看薪資明細的「本俸」或「年功俸」', slip.pay ? String(slip.pay) : '')}<label class="f"><span>初任公職起始日</span><input type="date" data-pl="startDate" value="${esc(p.startDate || '')}"><em class="help">看派令或公務人員履歷上的初任日期</em></label>
+      <div class="help" style="grid-column:1/-1">要更準確（含舊制年資、危勞職務）可到 <a href="https://iocs.mocs.gov.tw/medmvc/cal1010000" target="_blank" rel="noopener">銓敘部退休試算 ↗</a>，需要出生日期與初任公職起始日。</div>`
     : p.sys === 'labor' ? `${plIn('gross', '目前月薪', slip.gross ? `薪資單應發 ${fmt(slip.gross)}` : '', slip.gross ? String(slip.gross) : '')}${plIn('start', '開始工作年（西元）', '', num(p.birth) ? String(num(p.birth) + 23) : '')}${plIn('lpBal', '勞退帳戶目前累積（選填）', '勞保局 e 化服務可查')}`
     : plIn('manualPen', '退休後每月固定收入', '今日幣值');
   const expSrc = p.expSrc || (L ? 'ledger' : 'city');
@@ -200,7 +210,7 @@ function plFill() {
   // 摘要列
   set('pl_me_v', `${R.age} 歲 → ${R.ra} 歲退休`); set('pl_me_d', `還有 ${R.n} 年・錢要用到 ${R.life} 歲`);
   set('pl_pen_v', R.P.items.length ? `約 ${fmt(penM)} 元` : R.P.notes[0] || '—');
-  set('pl_pen_d', `${PL_SYS.find(x => x[0] === p.sys)?.[1] || ''}${R.P.svc ? `・年資 ${R.P.svc} 年` : ''}${R.P.lump ? `・一次 ${fmt(R.P.lump / 1e4)} 萬` : ''}`);
+  set('pl_pen_d', `${PL_SYS.find(x => x[0] === p.sys)?.[1] || ''}${R.P.svcT ? `・退休時年資 ${R.P.svcT}` : ''}${R.P.lump ? `・一次 ${fmt(R.P.lump / 1e4)} 萬` : ''}`);
   set('plPenD', [...R.P.items.map(x => `<b>${x.n}</b> ${fmt(x.v)}／月：${esc(x.d)}`), R.P.lumpD ? `<b>一次入帳</b> ${fmt(R.P.lump)}：${esc(R.P.lumpD)}` : '', ...R.P.notes, R.P.bpSrc ? `本俸／月薪來源：${R.P.bpSrc}` : ''].filter(Boolean).join('<br>'));
   set('pl_exp_v', `約 ${fmt(R.E.v)} 元`); set('pl_exp_d', R.E.d);
   set('pl_have_v', `${fmt(R.N.have)} 元`); set('pl_have_d', `已先扣下緊急預備金 ${fmt(R.N.ef)}`);
