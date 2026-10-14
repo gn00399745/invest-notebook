@@ -3,7 +3,11 @@
 
 const PL_YEAR = new Date().getFullYear();
 const PL_DEF = { birth: '', sys: '', start: '', retAge: 65, life: 90, pay: '', gross: '', lpBal: '', manualPen: '', lump: '',
-  expSrc: '', city: '全國平均', people: 1, level: 1, expManual: '', rS: 7, rB: 3, infl: 2, stock: '' };
+  expSrc: '', city: '全國平均', people: 1, level: 1, expManual: '', rS: 7, rB: 3, infl: 2, stock: '',
+  xTrav: 60000, xMed: 3000, xFam: 0, xHome: 30000, xLtc: 20000, ltcAge: 80, penAdj: 1, penErode: 1, finPay: '' };
+// 特殊花費：旅遊（每年）、醫療與保險（每月）、孝親／家人（每月）、換車與房屋修繕（每年平均）、長照（某歲起每月）
+const plExtraM = (p, a) => (num(p.xTrav) || 0) / 12 + (num(p.xMed) || 0) + (num(p.xFam) || 0) + (num(p.xHome) || 0) / 12 + (a >= (num(p.ltcAge) || 80) ? num(p.xLtc) || 0 : 0);
+const plNeedM = (R, a) => R.E.v + plExtraM(R.q, a);
 // 主計總處 112 年家庭收支調查：平均每人月消費支出（元）
 const PL_CITY = { 全國平均: 25726, 臺北市: 34014, 新北市: 26226, 桃園市: 25235, 臺中市: 26957, 臺南市: 22661, 高雄市: 26399, 基隆市: 24234, 新竹市: 31211, 新竹縣: 29578, 嘉義市: 25599,
   宜蘭縣: 23808, 苗栗縣: 21017, 彰化縣: 19292, 南投縣: 18650, 雲林縣: 20356, 嘉義縣: 19410, 屏東縣: 21594, 臺東縣: 21412, 花蓮縣: 21484, 澎湖縣: 20971 };
@@ -50,7 +54,7 @@ function plPension(p, ra) {
   if (p.sys === 'gov' || p.sys === 'govdc') {
     const bp = num(p.pay) || slip.pay || 0; out.bp = bp; out.bpSrc = num(p.pay) ? '自己填' : slip.pay ? '依薪資單退撫扣款推算' : '';
     if (!bp) { out.notes.push('填入本俸才能估算'); return out; }
-    const fin = bp * Math.min(1.25, 1.01 ** n);            // 到退休時的本(年功)俸，以今日幣值估
+    const finAuto = bp * Math.min(1.25, 1.01 ** n), fin = num(p.finPay) || finAuto; out.finAuto = finAuto; out.fin = fin;   // 退休時本(年功)俸（今日幣值）
     if (p.sys === 'gov') {
       if (svc < 15) { out.notes.push(`年資 ${svcT}，未滿 15 年不能領月退`); }
       else {
@@ -84,7 +88,7 @@ function plPension(p, ra) {
   out.lump += num(p.lump) || 0;
   return out;
 }
-const plPenAt = (P, a) => P.items.reduce((s, x) => s + (a >= x.from ? x.v : 0), 0);
+const plPenAt = (P, a) => P.items.reduce((s, x) => s + (a >= x.from ? x.v * (P.adj ?? 1) * (1 - (P.erode ?? 0)) ** (a - x.from) : 0), 0);
 
 /* ---------- 退休後花費（今日幣值，每月） ---------- */
 function plExpense(p) {
@@ -112,10 +116,11 @@ function plCalc(p, o = {}) {
   if (!(n > 0)) return { err: '退休年齡要大於目前年齡' };
   if (!(T > 0)) return { err: '用到幾歲要大於退休年齡' };
   const E = plExpense(q), P = plPension(q, ra), i = num(q.infl) / 100;
+  P.adj = num(q.penAdj) || 1; P.erode = (num(q.penErode) || 0) / 100;
   const sp = num(q.stock) || plGlide(n), rN = (sp * num(q.rS) + (100 - sp) * num(q.rB)) / 100 / 100;
   const r2N = (40 * num(q.rS) + 60 * num(q.rB)) / 100 / 100;
   const rr1 = (1 + rN) / (1 + i) - 1, rr2 = (1 + r2N) / (1 + i) - 1;
-  const gap = a => Math.max(0, E.v - plPenAt(P, a)) * 12;
+  const needAt = a => E.v + plExtraM(q, a), gap = a => Math.max(0, needAt(a) - plPenAt(P, a)) * 12;
   let need = 0; for (let y = 0; y < T; y++) need += gap(ra + y) / (1 + rr2) ** y;
   need = Math.max(0, need - P.lump);
   const eNeed = (plLedgerExp()?.v || E.v) * 6, N = o._now || plNow(eNeed);
@@ -131,7 +136,10 @@ function plCalc(p, o = {}) {
     return { pts, out };
   };
   const prog = need ? Math.min(1, (fvHave + cur * factor(12)) / need) : 1;
-  return { age, ra, life, n, T, E, P, sp, rN, need, N, eNeed, fvHave, short, per, cur, sim, prog, ok: short <= 0 };
+  const ann = rr2 ? rr2 / (1 - (1 + rr2) ** -T) : 1 / T;                 // 資產分 T 年提領完的每年比例
+  const draw = m => (fvHave + m * factor(12) + P.lump) * ann / 12;        // 照每月投入 m，退休後每月可提領
+  const pen0 = plPenAt(P, Math.max(ra, 65)), need0 = needAt(ra);
+  return { q, age, ra, life, n, T, E, P, sp, rN, need, N, eNeed, fvHave, short, per, cur, sim, prog, ok: short <= 0, draw, pen0, need0, needAt, per1k: 1000 * factor(12) * ann / 12 };
 }
 
 /* ---------- 畫面 ---------- */
@@ -160,7 +168,7 @@ PAGES.plan = () => {
   const p = plP(), slip = plSlip(), L = plLedgerExp();
   setTimeout(plFill, 0);
   const sysBody = p.sys === 'gov' || p.sys === 'govdc'
-    ? `${plIn('pay', '目前本(年功)俸', slip.pay ? `薪資單推算約 ${fmt(slip.pay)}，不準可以改` : '看薪資明細的「本俸」或「年功俸」', slip.pay ? String(slip.pay) : '')}<label class="f"><span>初任公職起始日</span><input type="date" data-pl="startDate" value="${esc(p.startDate || '')}"><em class="help">看派令或公務人員履歷上的初任日期</em></label>
+    ? `${plIn('pay', '目前本(年功)俸', slip.pay ? `薪資單推算約 ${fmt(slip.pay)}，不準可以改` : '看薪資明細的「本俸」或「年功俸」', slip.pay ? String(slip.pay) : '')}<label class="f"><span>初任公職起始日</span><input type="date" data-pl="startDate" value="${esc(p.startDate || '')}"><em class="help">看派令或公務人員履歷上的初任日期</em></label>${plIn('finPay', '預估退休時本俸（選填）', '空白＝依目前本俸估算；預期會升官等可填高一點（今日幣值）')}
       <div class="help" style="grid-column:1/-1">要更準確（含舊制年資、危勞職務）可到 <a href="https://iocs.mocs.gov.tw/medmvc/cal1010000" target="_blank" rel="noopener">銓敘部退休試算 ↗</a>，需要出生日期與初任公職起始日。</div>`
     : p.sys === 'labor' ? `${plIn('gross', '目前月薪', slip.gross ? `薪資單應發 ${fmt(slip.gross)}` : '', slip.gross ? String(slip.gross) : '')}${plIn('start', '開始工作年（西元）', '', num(p.birth) ? String(num(p.birth) + 23) : '')}${plIn('lpBal', '勞退帳戶目前累積（選填）', '勞保局 e 化服務可查')}`
     : plIn('manualPen', '退休後每月固定收入', '今日幣值');
@@ -171,12 +179,15 @@ PAGES.plan = () => {
     ${plRow('me', '👤', '我', `<div class="inline">${plIn('birth', '出生年（西元）')}</div>
       <div class="pl-lbl">退休年齡 <b id="plRaV">${p.retAge}</b> 歲</div><input type="range" min="50" max="70" step="1" data-pl="retAge" value="${esc(p.retAge)}" class="pl-range">
       <div class="pl-lbl">錢要用到幾歲</div><div class="pl-chips">${[85, 90, 95, 100].map(v => plChip('life', v, v + ' 歲', p.life)).join('')}</div>`)}
-    ${plRow('pen', '🏛️', '退休金（每月）', `<div class="pl-chips">${PL_SYS.map(([v, l]) => plChip('sys', v, l, p.sys)).join('')}</div><div class="inline" style="margin-top:10px">${sysBody}${plIn('lump', '其他一次入帳（選填）', '到期儲蓄險、繼承等，今日幣值')}</div><div class="help" id="plPenD"></div>`)}
-    ${plRow('exp', '🏠', '退休後花費（每月）', `<div class="pl-chips">${[['ledger', '用我的記帳'], ['city', '用縣市平均'], ['manual', '自己填']].map(([v, l]) => plChip('expSrc', v, l, expSrc)).join('')}</div>
-      ${expSrc === 'manual' ? `<div class="inline" style="margin-top:10px">${plIn('expManual', '每月花費（今日幣值）')}</div>` : `
+    ${plRow('pen', '🏛️', '退休金（每月）', `<div class="pl-chips">${PL_SYS.map(([v, l]) => plChip('sys', v, l, p.sys)).join('')}</div>
+      <div class="pl-lbl">保守估計（制度可能再改）</div><div class="pl-chips">${[[1, '照現行法規'], [0.9, '打九折'], [0.8, '打八折']].map(([v, l]) => plChip('penAdj', v, l, p.penAdj)).join('')}</div><div class="inline" style="margin-top:10px">${sysBody}${plIn('lump', '其他一次入帳（選填）', '到期儲蓄險、繼承等，今日幣值')}</div><div class="help" id="plPenD"></div>`)}
+    ${plRow('exp', '🏠', '退休後花費（每月）', `<div class="pl-chips">${[['ledger', '用我的記帳'], ['city', '用縣市平均'], ['manual', '我自己定']].map(([v, l]) => plChip('expSrc', v, l, expSrc)).join('')}</div>
+      ${expSrc === 'manual' ? `<div class="inline" style="margin-top:10px">${plIn('expManual', '基本生活費每月（今日幣值）', '吃住交通日用等；特殊花費在下面另外加')}</div>` : `
       ${expSrc === 'city' ? `<div class="inline" style="margin-top:10px"><label class="f"><span>住在哪裡</span><select data-pl="city">${Object.keys(PL_CITY).map(c => `<option ${c === p.city ? 'selected' : ''}>${c}</option>`).join('')}</select></label></div>
         <div class="pl-lbl">幾個人一起生活</div><div class="pl-chips">${[1, 2, 3].map(v => plChip('people', v, v + ' 人', p.people)).join('')}</div>` : (L ? '' : '<div class="help" style="margin-top:6px">收支頁還沒有完整月份的記帳，先用縣市平均。</div>')}
-      <div class="pl-lbl">生活水準</div><div class="pl-chips">${PL_LV.map(([v, l]) => plChip('level', v, l, p.level)).join('')}</div>`}`)}
+      <div class="pl-lbl">生活水準</div><div class="pl-chips">${PL_LV.map(([v, l]) => plChip('level', v, l, p.level)).join('')}</div>`}
+      <div class="pl-lbl" style="margin-top:16px"><b style="font-size:14px">特殊花費</b>　平常記帳看不到、退休後一定會有的錢（今日幣值，不需要就填 0）</div>
+      <div class="inline">${plIn('xTrav', '旅遊（每年）')}${plIn('xMed', '醫療、保險（每月）', '自費醫療、保費、健保')}${plIn('xFam', '孝親、家人（每月）')}${plIn('xHome', '換車、房屋修繕（每年平均）', '例如 10 年換車 60 萬＝每年 6 萬')}${plIn('xLtc', '長期照顧（每月）', '居家照顧約 2～3 萬、機構約 3～5 萬')}${plIn('ltcAge', '長照從幾歲開始')}</div>`)}
     ${plRow('have', '💼', '現有資產（可用於退休）', `<div class="help" id="plHaveD"></div><div class="btn-row" style="margin-top:8px"><button type="button" class="btn-small ghost" data-go="home">到資產頁更新 →</button></div>`)}
   </div>
   <div class="card"><h3 class="gold-bar">每一期要投入</h3><div class="pl-freq" id="plFreq"></div><div class="help" id="plCur"></div></div>
@@ -184,7 +195,7 @@ PAGES.plan = () => {
   <div class="card"><h3 class="gold-bar">資產走勢</h3><div id="plChart"></div></div>
   <details class="card pl-adv" ${S.planAdv ? 'open' : ''}><summary><h3 class="gold-bar" style="display:inline">進階</h3></summary>
     <div class="pl-lbl">報酬與通膨假設</div>
-    <div class="inline">${plIn('rS', '股票年報酬 %', '全球股市長期約 6～8%')}${plIn('rB', '債券年報酬 %', '投資等級債約 3～4%')}${plIn('infl', '通膨 %', '台灣長期約 2%')}${plIn('stock', '股票比例 %（選填）', '空白＝依退休年限自動')}</div>
+    <div class="inline">${plIn('rS', '股票年報酬 %', '全球股市長期約 6～8%')}${plIn('rB', '債券年報酬 %', '投資等級債約 3～4%')}${plIn('infl', '通膨 %', '台灣長期約 2%')}${plIn('stock', '股票比例 %（選填）', '空白＝依退休年限自動')}${plIn('penErode', '退休金每年購買力縮水 %', '月退休金不會完全隨物價調整，預設 1%')}</div>
     <div class="pl-lbl" style="margin-top:14px">部位計算器（單筆買多少）</div>
     <div class="inline">${['cap|總資金', 'risk|最多虧總資金 %', 'entry|進場價', 'stop|停損價'].map(s => { const [k, l] = s.split('|'); return `<label class="f"><span>${l}</span><input type="number" inputmode="decimal" data-ps="${k}" value="${esc(S.ps?.[k] ?? (k === 'risk' ? '1' : ''))}"></label>`; }).join('')}</div>
     <div class="help" id="plPs"></div>
@@ -210,21 +221,30 @@ function plFill() {
   // 摘要列
   set('pl_me_v', `${R.age} 歲 → ${R.ra} 歲退休`); set('pl_me_d', `還有 ${R.n} 年・錢要用到 ${R.life} 歲`);
   set('pl_pen_v', R.P.items.length ? `約 ${fmt(penM)} 元` : R.P.notes[0] || '—');
+  if (R.P.fin) R.P.notes.push(`退休時本俸以 ${fmt(R.P.fin)} 計算（${num(p.finPay) ? '自己填' : `自動估算：目前本俸 × ${fmt(R.P.fin / R.P.bp, 2)}`}）`);
+  if (R.P.items.length) R.P.notes.push(`退休後購買力每年縮水 ${num(p.penErode) || 0}%：${R.ra + 20} 歲時約剩 ${fmt(plPenAt(R.P, Math.max(R.ra, 65) + 20))}`);
   set('pl_pen_d', `${PL_SYS.find(x => x[0] === p.sys)?.[1] || ''}${R.P.svcT ? `・退休時年資 ${R.P.svcT}` : ''}${R.P.lump ? `・一次 ${fmt(R.P.lump / 1e4)} 萬` : ''}`);
   set('plPenD', [...R.P.items.map(x => `<b>${x.n}</b> ${fmt(x.v)}／月：${esc(x.d)}`), R.P.lumpD ? `<b>一次入帳</b> ${fmt(R.P.lump)}：${esc(R.P.lumpD)}` : '', ...R.P.notes, R.P.bpSrc ? `本俸／月薪來源：${R.P.bpSrc}` : ''].filter(Boolean).join('<br>'));
-  set('pl_exp_v', `約 ${fmt(R.E.v)} 元`); set('pl_exp_d', R.E.d);
+  const xNow = plExtraM(p, R.ra), xLtcV = num(p.xLtc) || 0;
+  set('pl_exp_v', `約 ${fmt(R.need0)} 元`);
+  set('pl_exp_d', `基本 ${fmt(R.E.v)}（${R.E.d}）＋ 特殊 ${fmt(xNow)}${xLtcV && num(p.ltcAge) > R.ra ? `；${num(p.ltcAge)} 歲起長照再加 ${fmt(xLtcV)}` : ''}`);
   set('pl_have_v', `${fmt(R.N.have)} 元`); set('pl_have_d', `已先扣下緊急預備金 ${fmt(R.N.ef)}`);
   set('plHaveD', `股票與投資型保單 ${fmt(R.N.stock)}・債券／儲蓄險／多餘現金 ${fmt(R.N.bond)}${R.N.metal ? `・貴金屬 ${fmt(R.N.metal)}` : ''}<br>緊急預備金目標 6 個月 ${fmt(R.eNeed)}，現在存款${R.N.W.cash >= R.eNeed ? '已足夠，多出來的算進投資' : `只有 ${fmt(R.N.W.cash)}，<b class="down">建議先補足 ${fmt(R.eNeed - R.N.W.cash)}</b>`}。`);
   // 主結果
   const pct = Math.round(R.prog * 100), B = R.cur && !R.ok ? R.sim(R.cur) : null;
-  set('plHero', `<div class="h-lbl">${R.ra} 歲退休・每月花 ${fmt(R.E.v)}・用到 ${R.life} 歲</div>
-    <div class="h-num">${R.ok ? '已經夠了 🎉' : `每月存 ${fmt(R.per[12])}`}</div>
-    <div class="pl-bar"><i style="width:${pct}%"></i></div>
-    <div class="h-sub">準備度 <b>${pct}%</b>　${R.ok ? `現有資產就夠用到 ${R.life} 歲` : R.cur ? (R.cur >= R.per[12] ? `目前每月投 ${fmt(R.cur)}，進度 OK` : `目前每月投 ${fmt(R.cur)}，還差 ${fmt(R.per[12] - R.cur)}${B?.out ? `（照現在的速度 ${fmt(B.out, 0)} 歲會用完）` : ''}`) : '還沒有設定定期定額'}</div>
-    <div class="h-chips">${!p.sys ? '<span>⚠ 還沒選身分，退休金先以 0 計算</span>' : ''}${R.need ? `<span>退休時要有 ${fmt(R.need / 1e4)} 萬（今日幣值）</span>` : ''}${penM ? `<span>退休金每月 ${fmt(penM)}</span>` : ''}</div>`);
+  const mPlan = R.ok ? R.cur : R.per[12], dCur = R.draw(R.cur), inc = R.pen0 + dCur, incPlan = R.pen0 + R.draw(mPlan);
+  const bar = (pen, dr, need) => { const mx = Math.max(pen + dr, need) * 1.05 || 1; return `<div class="pl-inc"><i class="p" style="width:${pen / mx * 100}%"></i><i class="d" style="width:${dr / mx * 100}%"></i><b style="left:${need / mx * 100}%"></b></div>
+    <div class="pl-inc-l"><span><i class="p"></i>退休金 ${fmt(pen)}</span><span><i class="d"></i>投資提領 ${fmt(dr)}</span><span><i class="n"></i>需要 ${fmt(need)}</span></div>`; };
+  set('plHero', `<div class="h-lbl">${R.ra} 歲退休後，每月需要 <b>${fmt(R.need0)}</b>（含特殊花費）</div>
+    ${R.ok
+      ? `<div class="h-num">每月可用 ${fmt(inc)}</div><div class="h-sub">照現在每月投 ${fmt(R.cur)}，退休後每月比需要多 ${fmt(inc - R.need0)}</div>`
+      : `<div class="h-num">每月要存 ${fmt(R.per[12])}</div><div class="h-sub">${R.cur ? `目前每月投 ${fmt(R.cur)}，退休後每月只能用 ${fmt(inc)}，${R.cur >= R.per[12] ? '進度 OK' : `還差 ${fmt(R.per[12] - R.cur)}／月${B?.out ? `（照現在的速度 ${fmt(B.out, 0)} 歲錢會用完）` : ''}`}` : `還沒有設定定期定額；存到這個數字，退休後每月可用 ${fmt(incPlan)}`}</div>`}
+    ${bar(R.pen0, R.ok ? dCur : R.draw(mPlan), R.need0)}
+    <div class="h-chips">${!p.sys ? '<span>⚠ 還沒選身分，退休金先以 0 計算</span>' : ''}<span>準備度 ${pct}%</span>${R.need ? `<span>退休時要有 ${fmt(R.need / 1e4)} 萬（今日幣值）</span>` : ''}<span>每多存 1,000／月 → 退休每月多 ${fmt(R.per1k)}</span></div>
+    ${(() => { const W = plCalc(p, { rS: num(p.rS) - 2, rB: num(p.rB) - 2, penAdj: 0.8 }); if (W.err) return ''; const wi = W.pen0 + W.draw(R.ok ? R.cur : R.per[12]); return `<div class="pl-worst ${wi < W.need0 ? 'bad' : ''}">保守情境（報酬少 2%、退休金打八折）：每月可用 ${fmt(wi)}，${wi >= W.need0 ? '仍然夠用' : `<b>不夠 ${fmt(W.need0 - wi)}</b>`}</div>`; })()}`);
   set('plFreq', PL_FREQ.map(([k, l]) => `<div><em>${l}</em><b>${R.ok ? '0' : fmt(R.per[k])}</b></div>`).join(''));
   const late = R.ok ? null : plCalc(p, { birth: num(p.birth) - 1, _now: { ...R.N, have: R.N.have * (1 + R.rN) } });
-  set('plCur', R.ok ? '目前資產已足夠，可以考慮降低股票比例、減少波動。' : `一年投一次要放比較多，因為錢在市場裡的時間較短。${late && !late.err ? `晚一年開始，每月要 ${fmt(late.per[12])}（多 ${fmt(late.per[12] - R.per[12])}）。` : ''}${R.cur ? '' : ' <a href="#" data-go="ledger">到收支頁設定定期定額 →</a>'}`);
+  set('plCur', R.ok ? `照目前的投入已足夠。想退休後每月多花 1 萬，每月要再多存約 ${fmt(10000 / R.per1k * 1000)}。` : `一年投一次要放比較多，因為錢在市場裡的時間較短。${late && !late.err ? `晚一年開始，每月要 ${fmt(late.per[12])}（多 ${fmt(late.per[12] - R.per[12])}）。` : ''}${R.cur ? '' : ' <a href="#" data-go="ledger">到收支頁設定定期定額 →</a>'}`);
   // 配置
   const tot = R.N.stock + R.N.bond + R.N.metal, nowS = tot ? R.N.stock / tot * 100 : 0, sp = R.sp;
   const m = R.ok ? R.cur : Math.max(R.per[12], R.cur);
