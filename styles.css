@@ -1049,3 +1049,43 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .rt-sens td.rt-me { background: rgba(201,162,74,.18); font-weight: 700; }
 .rt-chart .rt-ax { font-size: 10px; }
 .rt-kv dd { white-space: nowrap; align-self: end; }
+/* 財務計畫 */
+.pl-hero .h-num { font-size: 32px; }
+.pl-bar { height: 8px; background: rgba(255,255,255,.15); border-radius: 99px; overflow: hidden; margin: 10px 0 6px; }
+.pl-bar i { display: block; height: 100%; background: var(--gold-2); border-radius: 99px; transition: width .3s; }
+.pl-card { padding: 4px 0; }
+.fp-row { display: block; border-top: 1px solid var(--line); }
+.fp-row:first-child { border-top: 0; }
+.fp-row summary { list-style: none; display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; padding: 12px 14px; cursor: pointer; }
+.fp-row summary::-webkit-details-marker { display: none; }
+.pl-ic { font-size: 22px; text-align: center; }
+.pl-t { display: flex; flex-direction: column; min-width: 0; }
+.pl-t em { font-style: normal; font-size: 12px; color: var(--muted); }
+.pl-t b { font-size: 17px; }
+.pl-t small { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.pl-edit { font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px; }
+.fp-row[open] .pl-edit { background: var(--navy-2); color: #fff; border-color: transparent; }
+.fp-row[open] .pl-edit { font-size: 0; } .fp-row[open] .pl-edit::before { font-size: 13px; content: '收合'; }
+.pl-body { padding: 0 14px 14px 58px; }
+@media (max-width: 480px) { .pl-body { padding-left: 14px; } }
+.pl-lbl { font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
+.pl-lbl b { color: var(--text); font-size: 16px; }
+.pl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pl-chip { border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 99px; padding: 7px 14px; font-size: 14px; cursor: pointer; }
+.pl-chip.on { background: var(--navy-2); color: #fff; border-color: var(--navy-2); font-weight: 600; }
+.pl-range { width: 100%; accent-color: var(--gold); }
+.pl-freq { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: center; margin-bottom: 8px; }
+.pl-freq div { background: var(--bg); border-radius: 10px; padding: 10px 2px; }
+.pl-freq div:first-child { background: rgba(201,162,74,.16); }
+.pl-freq em { display: block; font-style: normal; font-size: 12px; color: var(--muted); }
+.pl-freq b { font-size: 16px; }
+.pl-al { display: grid; grid-template-columns: 36px 1fr; gap: 8px; align-items: center; margin: 6px 0; font-size: 13px; color: var(--muted); }
+.pl-stack { display: flex; height: 26px; border-radius: 8px; overflow: hidden; background: var(--bg); }
+.pl-stack i { font-style: normal; font-size: 12px; color: #fff; display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; }
+.pl-stack .s { background: var(--navy-2); } .pl-stack .b { background: var(--gold); } .pl-stack .m { background: #a8a29e; } .pl-stack .e { color: var(--muted); }
+.pl-split { margin-top: 10px; font-size: 14px; background: var(--bg); border-radius: 10px; padding: 10px 12px; line-height: 1.6; }
+.pl-adv-t { margin-top: 8px; font-size: 14px; line-height: 1.6; }
+.pl-adv summary { cursor: pointer; list-style: none; }
+.pl-adv summary::-webkit-details-marker { display: none; }
+.pl-adv summary::after { content: ' ›'; color: var(--muted); }
+@media (prefers-color-scheme: dark) { .pl-stack .s { background: #4f7bc0; } }
