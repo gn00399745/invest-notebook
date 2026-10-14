@@ -1031,3 +1031,21 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .rc-tools input[type=search] { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line, #e3e6ec); font-size: 15px; background: var(--card, #fff); color: var(--text); }
 .rc-sel { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .rc-sel select { padding: 8px; border-radius: 10px; border: 1px solid var(--line, #e3e6ec); font-size: 13px; background: var(--card, #fff); color: var(--text); min-width: 0; }
 .rc-item[hidden] { display: none !important; }
+/* 退休目標試算 */
+.f[hidden] { display: none !important; }
+.rt-adv { margin-top: 12px; }
+.rt-adv summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+.rt-chart { width: 100%; height: auto; display: block; }
+.rt-chart .rt-grid { stroke: var(--line); stroke-width: 1; }
+.rt-chart .rt-ax { fill: var(--muted); font-size: 11px; }
+.rt-chart .rt-ret { stroke: var(--muted); stroke-dasharray: 3 4; }
+.rt-chart .rt-goal { stroke: var(--gold); stroke-dasharray: 6 4; stroke-width: 1.5; }
+.rt-chart .rt-l1 { fill: none; stroke: var(--navy-2); stroke-width: 2.5; stroke-linejoin: round; }
+.rt-chart .rt-l2 { fill: none; stroke: var(--red); stroke-width: 2; stroke-linejoin: round; opacity: .8; }
+@media (prefers-color-scheme: dark) { .rt-chart .rt-l1 { stroke: var(--gold-2); } .rt-chart .rt-goal { stroke: var(--muted); } .rt-leg .k1 { background: var(--gold-2) !important; } .rt-leg .k3 { border-color: var(--muted) !important; } }
+.rt-leg { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.rt-leg i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
+.rt-leg .k1 { background: var(--navy-2); } .rt-leg .k2 { background: var(--red); } .rt-leg .k3 { height: 0; border-top: 2px dashed var(--gold); }
+.rt-sens td.rt-me { background: rgba(201,162,74,.18); font-weight: 700; }
+.rt-chart .rt-ax { font-size: 10px; }
+.rt-kv dd { white-space: nowrap; align-self: end; }
