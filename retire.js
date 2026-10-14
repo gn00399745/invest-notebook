@@ -2,8 +2,8 @@
 'use strict';
 
 const PL_YEAR = new Date().getFullYear();
-const PL_DEF = { birth: PL_YEAR - 34, sys: 'gov', start: '', retAge: 65, life: 90, pay: '', gross: '', lpBal: '', manualPen: '', lump: '',
-  expSrc: '', city: '桃園市', people: 1, level: 1, expManual: '', rS: 7, rB: 3, infl: 2, stock: '' };
+const PL_DEF = { birth: '', sys: '', start: '', retAge: 65, life: 90, pay: '', gross: '', lpBal: '', manualPen: '', lump: '',
+  expSrc: '', city: '全國平均', people: 1, level: 1, expManual: '', rS: 7, rB: 3, infl: 2, stock: '' };
 // 主計總處 112 年家庭收支調查：平均每人月消費支出（元）
 const PL_CITY = { 全國平均: 25726, 臺北市: 34014, 新北市: 26226, 桃園市: 25235, 臺中市: 26957, 臺南市: 22661, 高雄市: 26399, 基隆市: 24234, 新竹市: 31211, 新竹縣: 29578, 嘉義市: 25599,
   宜蘭縣: 23808, 苗栗縣: 21017, 彰化縣: 19292, 南投縣: 18650, 雲林縣: 20356, 嘉義縣: 19410, 屏東縣: 21594, 臺東縣: 21412, 花蓮縣: 21484, 澎湖縣: 20971 };
@@ -11,7 +11,11 @@ const PL_CPI = 1.02 ** (PL_YEAR - 2023);          // 112 年 → 今年的物價
 const PL_SYS = [['gov', '公務人員'], ['govdc', '公務人員（112/7 後到職）'], ['labor', '勞工'], ['other', '其他／自己填']];
 const PL_LV = [[0.8, '精簡'], [1, '一般'], [1.3, '寬裕']];
 const PL_FREQ = [[12, '每月'], [4, '每季'], [2, '每半年'], [1, '每年']];
-const plP = () => { S.plan = Object.assign({}, PL_DEF, S.plan || {}); return S.plan; };
+// 只存使用者自己填的欄位；沒填的用預設值（出生年、身分留空，第一次使用要自己填）
+const plP = () => Object.assign({}, PL_DEF, S.plan || {});
+const plSet = (k, v) => { (S.plan = S.plan || {})[k] = v; save(); };
+// 舊版曾把預設值存進資料：清掉沒有實際填過的出生年、身分、縣市
+if (S.plan && !S.plan._v2) { const o = S.plan; if (o.birth == PL_YEAR - 34) delete o.birth; if (o.sys === 'gov') delete o.sys; if (o.city === '桃園市') delete o.city; o._v2 = 1; save(); }
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 /* ---------- 從薪資單、記帳自動推算 ---------- */
@@ -67,7 +71,7 @@ function plPension(p, ra) {
     let acc = num(p.lpBal) || 0; for (let y = 0; y < n; y++) acc = acc * 1.02 + g * 0.06 * 12;
     const from = Math.max(ra, 60), yrsPay = Math.max(1, num(p.life) - from), ar = 0.015;
     out.items.push({ n: '勞退個人帳戶', v: acc * ar / (1 - (1 + ar) ** -yrsPay) / 12, from, d: `雇主提撥 6%，累積約 ${fmt(acc)} 分 ${yrsPay} 年領` });
-  } else if (num(p.manualPen)) out.items.push({ n: '每月退休收入', v: num(p.manualPen), from: ra, d: '自己填' });
+  } else if (!p.sys) { out.notes.push('選擇你的身分，自動估算退休金'); } else if (num(p.manualPen)) out.items.push({ n: '每月退休收入', v: num(p.manualPen), from: ra, d: '自己填' });
   out.lump += num(p.lump) || 0;
   return out;
 }
@@ -140,15 +144,15 @@ function plChart(A, B, R) {
   <div class="rt-leg"><span><i class="k1"></i>照計畫投入</span>${B ? '<span><i class="k2"></i>維持現在的投入</span>' : ''}<span>以今天的錢計</span></div>`;
 }
 const plChip = (k, v, label, cur) => `<button type="button" class="pl-chip ${String(cur) === String(v) ? 'on' : ''}" data-plset="${k}" data-v="${esc(String(v))}">${label}</button>`;
-const plIn = (k, label, help = '', ph = '') => `<label class="f"><span>${label}</span><input type="number" inputmode="decimal" data-pl="${k}" value="${esc(S.plan[k] ?? '')}" placeholder="${esc(ph)}">${help ? `<em class="help">${help}</em>` : ''}</label>`;
-const plRow = (id, ic, t, body) => `<details class="fp-row" data-plrow="${id}" ${S.planOpen === id ? 'open' : ''}><summary><span class="pl-ic">${ic}</span><span class="pl-t"><em>${t}</em><b id="pl_${id}_v"></b><small id="pl_${id}_d"></small></span><span class="pl-edit">調整</span></summary><div class="pl-body">${body}</div></details>`;
+const plIn = (k, label, help = '', ph = '') => `<label class="f"><span>${label}</span><input type="number" inputmode="decimal" data-pl="${k}" value="${esc(plP()[k] ?? '')}" placeholder="${esc(ph)}">${help ? `<em class="help">${help}</em>` : ''}</label>`;
+const plRow = (id, ic, t, body) => `<details class="fp-row" data-plrow="${id}" ${(S.planOpen || (!num(plP().birth) ? 'me' : !plP().sys ? 'pen' : '')) === id ? 'open' : ''}><summary><span class="pl-ic">${ic}</span><span class="pl-t"><em>${t}</em><b id="pl_${id}_v"></b><small id="pl_${id}_d"></small></span><span class="pl-edit">調整</span></summary><div class="pl-body">${body}</div></details>`;
 
 PAGES.plan = () => {
   const p = plP(), slip = plSlip(), L = plLedgerExp();
   setTimeout(plFill, 0);
   const sysBody = p.sys === 'gov' || p.sys === 'govdc'
-    ? `${plIn('pay', '目前本(年功)俸', slip.pay ? `薪資單推算約 ${fmt(slip.pay)}，不準可以改` : '看薪資明細的「本俸」或「年功俸」', slip.pay ? String(slip.pay) : '')}${plIn('start', '到職年（西元）', '算年資用', String(num(p.birth) + 25))}`
-    : p.sys === 'labor' ? `${plIn('gross', '目前月薪', slip.gross ? `薪資單應發 ${fmt(slip.gross)}` : '', slip.gross ? String(slip.gross) : '')}${plIn('start', '開始工作年（西元）', '', String(num(p.birth) + 23))}${plIn('lpBal', '勞退帳戶目前累積（選填）', '勞保局 e 化服務可查')}`
+    ? `${plIn('pay', '目前本(年功)俸', slip.pay ? `薪資單推算約 ${fmt(slip.pay)}，不準可以改` : '看薪資明細的「本俸」或「年功俸」', slip.pay ? String(slip.pay) : '')}${plIn('start', '到職年（西元）', '算年資用', num(p.birth) ? String(num(p.birth) + 25) : '')}`
+    : p.sys === 'labor' ? `${plIn('gross', '目前月薪', slip.gross ? `薪資單應發 ${fmt(slip.gross)}` : '', slip.gross ? String(slip.gross) : '')}${plIn('start', '開始工作年（西元）', '', num(p.birth) ? String(num(p.birth) + 23) : '')}${plIn('lpBal', '勞退帳戶目前累積（選填）', '勞保局 e 化服務可查')}`
     : plIn('manualPen', '退休後每月固定收入', '今日幣值');
   const expSrc = p.expSrc || (L ? 'ledger' : 'city');
   return `<h2>財務計畫</h2>
@@ -184,7 +188,14 @@ function plFill() {
   if (!$('#plHero')) return;
   const p = plP(), R = plCalc(p), set = (id, h) => { const e = $('#' + id); if (e) e.innerHTML = h; };
   const rv = $('#plRaV'); if (rv) rv.textContent = p.retAge;
-  if (R.err) { set('plHero', `<div class="h-num" style="font-size:22px">${R.err}</div>`); return; }
+  if (R.err) {
+    const first = !num(p.birth);
+    set('plHero', first ? `<div class="h-lbl">財務計畫</div><div class="h-num" style="font-size:24px">先填 2 項就能開始</div><div class="h-sub">① 出生年　② 你的身分（公務人員、勞工…）<br>其他像生活費、現有資產、定期定額，會從記帳和資產頁自動帶入。</div>` : `<div class="h-num" style="font-size:22px">${R.err}</div>`);
+    set('pl_me_v', first ? '尚未填寫' : R.err); set('pl_me_d', first ? '填出生年' : '');
+    ['pen', 'exp', 'have'].forEach(k => { set(`pl_${k}_v`, '—'); set(`pl_${k}_d`, ''); });
+    ['plFreq', 'plCur', 'plAlloc', 'plChart'].forEach(id => set(id, '<div class="empty">填完上面的資料就會顯示</div>'));
+    return;
+  }
   const penM = plPenAt(R.P, Math.max(R.ra, 65));
   // 摘要列
   set('pl_me_v', `${R.age} 歲 → ${R.ra} 歲退休`); set('pl_me_d', `還有 ${R.n} 年・錢要用到 ${R.life} 歲`);
@@ -200,7 +211,7 @@ function plFill() {
     <div class="h-num">${R.ok ? '已經夠了 🎉' : `每月存 ${fmt(R.per[12])}`}</div>
     <div class="pl-bar"><i style="width:${pct}%"></i></div>
     <div class="h-sub">準備度 <b>${pct}%</b>　${R.ok ? `現有資產就夠用到 ${R.life} 歲` : R.cur ? (R.cur >= R.per[12] ? `目前每月投 ${fmt(R.cur)}，進度 OK` : `目前每月投 ${fmt(R.cur)}，還差 ${fmt(R.per[12] - R.cur)}${B?.out ? `（照現在的速度 ${fmt(B.out, 0)} 歲會用完）` : ''}`) : '還沒有設定定期定額'}</div>
-    <div class="h-chips">${R.need ? `<span>退休時要有 ${fmt(R.need / 1e4)} 萬（今日幣值）</span>` : ''}${penM ? `<span>退休金每月 ${fmt(penM)}</span>` : ''}</div>`);
+    <div class="h-chips">${!p.sys ? '<span>⚠ 還沒選身分，退休金先以 0 計算</span>' : ''}${R.need ? `<span>退休時要有 ${fmt(R.need / 1e4)} 萬（今日幣值）</span>` : ''}${penM ? `<span>退休金每月 ${fmt(penM)}</span>` : ''}</div>`);
   set('plFreq', PL_FREQ.map(([k, l]) => `<div><em>${l}</em><b>${R.ok ? '0' : fmt(R.per[k])}</b></div>`).join(''));
   const late = R.ok ? null : plCalc(p, { birth: num(p.birth) - 1, _now: { ...R.N, have: R.N.have * (1 + R.rN) } });
   set('plCur', R.ok ? '目前資產已足夠，可以考慮降低股票比例、減少波動。' : `一年投一次要放比較多，因為錢在市場裡的時間較短。${late && !late.err ? `晚一年開始，每月要 ${fmt(late.per[12])}（多 ${fmt(late.per[12] - R.per[12])}）。` : ''}${R.cur ? '' : ' <a href="#" data-go="ledger">到收支頁設定定期定額 →</a>'}`);
@@ -234,11 +245,11 @@ function plPs() {
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-plset]'); if (!b) return;
   e.preventDefault(); const y = scrollY;
-  plP()[b.dataset.plset] = isNaN(+b.dataset.v) ? b.dataset.v : +b.dataset.v; save(); render(); scrollTo(0, y);
+  plSet(b.dataset.plset, isNaN(+b.dataset.v) ? b.dataset.v : +b.dataset.v); render(); scrollTo(0, y);
 });
 document.addEventListener('input', e => {
   const t = e.target;
-  if (t.dataset?.pl) { plP()[t.dataset.pl] = t.value; save(); plFill(); return; }
+  if (t.dataset?.pl) { plSet(t.dataset.pl, t.value); plFill(); return; }
   if (t.dataset?.ps) { S.ps = S.ps || {}; S.ps[t.dataset.ps] = t.value; save(); plPs(); }
 });
 document.addEventListener('toggle', e => {
