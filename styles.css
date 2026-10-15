@@ -1033,3 +1033,20 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .rc-item[hidden] { display: none !important; }
 .g-band.all { opacity: .25; } .g-warn { font-size: 12px; color: #f2c38a; margin-top: 6px; line-height: 1.5; }
 .fv-rng { display: block; font-size: 11.5px; font-weight: 500; color: var(--muted, #7a8599); }
+/* 合理價三段式區間圖 */
+.zb { margin: 30px 0 4px; }
+.zb-bar { position: relative; display: grid; grid-template-columns: 30% 40% 30%; height: 26px; border-radius: 8px; overflow: visible; font-size: 11px; font-weight: 700; }
+.zb-bar > span { display: flex; align-items: center; justify-content: center; }
+.zb-bar .z1 { background: rgba(30,158,90,.22); color: #1e9e5a; border-radius: 8px 0 0 8px; }
+.zb-bar .z2 { background: rgba(201,162,74,.28); color: #a8802a; }
+.zb-bar .z3 { background: rgba(214,69,69,.2); color: #d64545; border-radius: 0 8px 8px 0; }
+.zb.dk .z1 { background: rgba(46,204,113,.25); color: #7ee0a8; } .zb.dk .z2 { background: rgba(201,162,74,.35); color: #f0d48a; } .zb.dk .z3 { background: rgba(214,69,69,.3); color: #ff9a9a; }
+.zb-pin { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--text, #1d2433); }
+.zb.dk .zb-pin { background: #fff; }
+.zb-pin b { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); font-size: 12px; white-space: nowrap; font-style: normal; }
+.zb-pin.l b { left: 0; transform: none; } .zb-pin.r b { left: auto; right: 0; transform: none; }
+.zb-pin.cheap b { color: #1e9e5a; } .zb-pin.dear b { color: #d64545; } .zb.dk .zb-pin.cheap b { color: #7ee0a8; } .zb.dk .zb-pin.dear b { color: #ff9a9a; } .zb.dk .zb-pin.fair b { color: #f0d48a; }
+.zb-ax { position: relative; height: 16px; font-size: 11px; color: var(--muted, #7a8599); } .zb.dk .zb-ax { color: #c7d2e4; }
+.zb-ax span { position: absolute; top: 2px; transform: translateX(-50%); } .zb-ax .m { opacity: .7; }
+.zb-txt { font-size: 12.5px; margin-top: 4px; } .zb.dk .zb-txt { color: #e3e9f3; }
+.zb-c { font-size: 12px; color: #c7d2e4; margin-top: 4px; }

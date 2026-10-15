@@ -1337,3 +1337,29 @@ fairCardHTML = function (c) {
     .replace('跟其他方法中位數差 2.5 倍以上的視為離群', '跟中位數差 2 倍以上的視為離群')
     .replace(/<b>③ 加權平均<\/b><div>[\s\S]*?<\/div><\/div>/, `<b>③ 加權中位數</b><div>把納入的方法照合理價由低到高排，累計權重到一半的那個值 ＝ <b>${fmt(F.avg, F.avg < 100 ? 2 : 1)}</b>；累計到 25%、75% 的值 ＝ 合理區間 ${fmt(F.min, 1)}～${fmt(F.max, 1)}。</div></div>`);
 };
+
+/* ================= 合理價區間圖：便宜｜合理｜偏貴 三段式 =================
+   三段寬度固定，現價依所在區段標示；超出圖外時貼邊並寫出差幾倍。 */
+function zoneBar(lo, hi, p, mid, dark) {
+  if (!(lo > 0) || !(hi > 0) || !(p > 0)) return '';
+  const d = v => fmt(v, v < 100 ? 1 : 0);
+  let x, edge = '';
+  if (p < lo) { const a = lo * 0.6; x = p <= a ? 2 : 2 + (p - a) / (lo - a) * 28; if (p <= a) edge = 'l'; }
+  else if (p <= hi) x = 30 + (p - lo) / (hi - lo || 1) * 40;
+  else { const b = hi * 1.6; x = p >= b ? 98 : 70 + (p - hi) / (b - hi) * 28; if (p >= b) edge = 'r'; }
+  const st = p < lo ? ['cheap', `比合理區間下限低 ${fmt((1 - p / lo) * 100, 0)}%`] : p > hi ? ['dear', p >= hi * 2 ? `是合理上限的 ${fmt(p / hi, 1)} 倍` : `比合理區間上限高 ${fmt((p / hi - 1) * 100, 0)}%`] : ['fair', '在合理區間內'];
+  return `<div class="zb ${dark ? 'dk' : ''}"><div class="zb-bar"><span class="z1">便宜</span><span class="z2">合理</span><span class="z3">偏貴</span>
+      <i class="zb-pin ${st[0]} ${edge}" style="left:${x}%"><b>現價 ${d(p)}${edge === 'r' ? ' →' : edge === 'l' ? ' ←' : ''}</b></i></div>
+    <div class="zb-ax"><span style="left:30%">${d(lo)}</span>${mid ? `<span class="m" style="left:${30 + (mid - lo) / (hi - lo || 1) * 40}%">${d(mid)}</span>` : ''}<span style="left:70%">${d(hi)}</span></div>
+    <div class="zb-txt ${st[0]}">合理價 <b>${d(lo)}～${d(hi)}</b>（中間值 ${d(mid)}）・現價 ${d(p)} ${st[1]}</div></div>`;
+}
+valGauge = function (c, vs) {
+  const p = num(c.price); if (vs.avg == null || !p) return '';
+  return `<div class="gauge">${zoneBar(vs.min, vs.max, p, vs.avg, true)}${vs.cons ? `<div class="zb-c">一致性：<b>${vs.cons}</b>${vs.cons === '低' ? '（各方法差距大，區間僅供參考）' : ''}</div>` : ''}
+    ${vs.far === 'above' ? '<div class="g-warn">股價遠高於所有估值方法：市場在為「未來成長」付費，現在的財報撐不住這個價格，估值只能當下限參考。</div>' : vs.far === 'below' ? '<div class="g-warn">股價遠低於所有估值方法：先確認是不是財報有一次性收入、或公司有市場擔心的風險。</div>' : ''}</div>`;
+};
+const _fvCard1 = fairCardHTML;
+fairCardHTML = function (c) {
+  const h = _fvCard1(c), F = fairComposite(c), p = num(c.price); if (!h || !F.avg) return h;
+  return h.replace(/<div class="fv-bar">[\s\S]*?<\/div>\s*<div class="fv-list">/, `${zoneBar(F.min, F.max, p, F.avg, false)}<div class="fv-list">`);
+};
