@@ -1297,3 +1297,43 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('click', e => { if (e.target.id === 'rcClear') { S.rcF = { sort: S.rcF?.sort }; save(); render(); } });
 if (current === 'cards') render();
+
+/* ================= 合理價：改用「多數方法落點」而不是最低～最高 =================
+   1. 離群值：跟加權中位數差 2 倍以上就剔除（方法 ≥4 個時；3 個以下維持 2.5 倍）
+   2. 綜合公允價值＝加權中位數（不被單一極端值拉走）
+   3. 合理區間＝加權 25%～75% 分位（一半權重的方法落在這裡）
+   4. 一致性：區間上下限相差 ≤30% 高、≤80% 中，其餘低 */
+function wq(pts, q) { const a = [...pts].sort((x, y) => x.v - y.v), tot = a.reduce((s, x) => s + x.w, 0); let acc = 0; for (const x of a) { acc += x.w; if (acc >= tot * q - 1e-9) return x.v; } return a[a.length - 1]?.v; }
+const _fairComp1 = fairComposite;
+fairComposite = function (c) {
+  const R = _fairComp1(c), cand = R.M.filter(m => m.w > 0 && m.fair > 0);
+  if (!cand.length) return R;
+  const med = wq(cand.map(m => ({ v: m.fair, w: m.w })), 0.5), k = cand.length >= 4 ? 2 : 2.5;
+  R.M.forEach(m => { m.out = m.w > 0 && cand.length > 2 && (m.fair > med * k || m.fair < med / k); m.used = m.w > 0 && m.fair > 0 && !m.out; });
+  R.U = R.M.filter(m => m.used); const P = R.U.map(m => ({ v: m.fair, w: m.w })), p = num(c.price);
+  if (!P.length) return R;
+  R.avg = wq(P, 0.5); R.min = wq(P, 0.25); R.max = wq(P, 0.75);
+  R.lo = Math.min(...P.map(x => x.v)); R.hi = Math.max(...P.map(x => x.v));
+  const sp = R.max / R.min - 1; R.cons = P.length < 2 ? '' : sp <= 0.3 ? '高' : sp <= 0.8 ? '中' : '低';
+  R.upside = R.avg && p ? (R.avg / p - 1) * 100 : null;
+  R.far = p && R.max && p > R.max * 1.8 ? 'above' : p && R.min && p < R.min / 1.8 ? 'below' : '';
+  return R;
+};
+valSummary = function (c) { const F = fairComposite(c); return { avg: F.avg, upside: F.upside, min: F.min, max: F.max, lo: F.lo, hi: F.hi, cons: F.cons, far: F.far }; };
+valGauge = function (c, vs) {
+  const p = num(c.price); if (vs.avg == null || !p) return '';
+  const lo = Math.min(vs.lo ?? vs.min, p) * 0.92, hi = Math.max(vs.hi ?? vs.max, p) * 1.08, X = v => ((v - lo) / (hi - lo) * 100).toFixed(1);
+  const d = v => fmt(v, v < 100 ? 1 : 0);
+  return `<div class="gauge"><div class="g-track">${vs.lo != null ? `<div class="g-band all" style="left:${X(vs.lo)}%;width:${X(vs.hi) - X(vs.lo)}%"></div>` : ''}<div class="g-band" style="left:${X(vs.min)}%;width:${Math.max(0.8, X(vs.max) - X(vs.min))}%"></div><div class="g-avg" style="left:${X(vs.avg)}%"></div><div class="g-px" style="left:${X(p)}%"><span>現價 ${fmt(p, p < 100 ? 2 : 0)}</span></div></div>
+    <div class="g-lbl"><span>合理價 <b>${d(vs.avg)}</b>・多數方法落在 ${d(vs.min)}～${d(vs.max)}${vs.cons ? `・一致性${vs.cons}` : ''}</span><b class="${vs.upside >= 0 ? 'up' : 'down'}">${vs.upside >= 0 ? '低估' : '高估'} ${pct(Math.abs(vs.upside)).replace('+', '')}</b></div>
+    ${vs.far === 'above' ? '<div class="g-warn">股價遠高於所有估值方法：市場在為「未來成長」付費，現在的財報撐不住這個價格，估值只能當下限參考。</div>' : vs.far === 'below' ? '<div class="g-warn">股價遠低於所有估值方法：先確認是不是財報有一次性收入、或公司有市場擔心的風險。</div>' : vs.cons === '低' ? '<div class="g-warn">各方法差距大，合理價參考性有限；打開「計算過程」看哪個假設差最多。</div>' : ''}</div>`;
+};
+// 綜合公允價值卡：標題與刻度改用區間
+const _fvCard0 = fairCardHTML;
+fairCardHTML = function (c) {
+  const h = _fvCard0(c), F = fairComposite(c); if (!h || F.cons == null) return h;
+  return h.replace(/<b>⚖️ 綜合公允價值 [^<]*<\/b>/, `<b>⚖️ 綜合公允價值 ${F.avg ? fmt(F.avg, F.avg < 100 ? 2 : 1) : '—'}<small class="fv-rng">多數方法 ${fmt(F.min, 1)}～${fmt(F.max, 1)}${F.cons ? `・一致性${F.cons}` : ''}</small></b>`)
+    .replace('把多種估值法依公司類型加權平均', '把多種估值法依公司類型加權，取<b>加權中位數</b>（不會被單一極端值拉走）')
+    .replace('跟其他方法中位數差 2.5 倍以上的視為離群', '跟中位數差 2 倍以上的視為離群')
+    .replace(/<b>③ 加權平均<\/b><div>[\s\S]*?<\/div><\/div>/, `<b>③ 加權中位數</b><div>把納入的方法照合理價由低到高排，累計權重到一半的那個值 ＝ <b>${fmt(F.avg, F.avg < 100 ? 2 : 1)}</b>；累計到 25%、75% 的值 ＝ 合理區間 ${fmt(F.min, 1)}～${fmt(F.max, 1)}。</div></div>`);
+};
