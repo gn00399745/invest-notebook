@@ -305,3 +305,88 @@ PAGES.more = () => {
   return _morePl().replace(/<button class="mrow" data-go="strategy">[\s\S]*?<\/button>/, row);
 };
 if (['retire', 'more', 'strategy', 'plan'].includes(window.__startPage)) go(window.__startPage);
+
+/* ---------- 目標金額模式：最快存到 X 萬 ---------- */
+const GL_T = [1000, 3000, 5000, 10000];   // 萬
+const plCurDca = () => (S.recurring || []).filter(r => r.kind === '定期定額' || r.kind === '員工認股').reduce((s, r) => s + (num(r.amount) || 0) / (r.freq === '年' ? 12 : 1), 0);
+// 從 P 開始、每月投 m（每年增加 g）、年報酬 r，幾年後到 T；100 年內到不了回傳 null
+function glYears(T, P, m, r, g = 0) {
+  if (P >= T) return 0;
+  const rp = (1 + r) ** (1 / 12) - 1; let B = P;
+  for (let k = 0; k < 1200; k++) { B = B * (1 + rp) + m * (1 + g) ** Math.floor(k / 12); if (B >= T) return (k + 1) / 12; }
+  return null;
+}
+// 想在 y 年內到 T，第一年每月要投多少
+function glPmt(T, P, y, r, g = 0) {
+  const n = Math.round(y * 12), rp = (1 + r) ** (1 / 12) - 1, gap = T - P * (1 + rp) ** n;
+  if (gap <= 0) return 0;
+  let f = 0; for (let k = 0; k < n; k++) f += (1 + g) ** Math.floor(k / 12) * (1 + rp) ** (n - k - 1);
+  return gap / f;
+}
+function glCalc(p) {
+  const T = (num(p.gTarget) || 0) * 1e4, E = plExpense(p), N = plNow((plLedgerExp()?.v || E.v) * 6);
+  const cur = plCurDca(), m = p.gMonthly !== undefined && p.gMonthly !== '' ? num(p.gMonthly) || 0 : cur;
+  const sp = num(p.gStock) || 80, i = num(p.infl) / 100, real = num(p.gReal) === 1;
+  const rN = (sp * num(p.rS) + (100 - sp) * num(p.rB)) / 1e4, r = real ? (1 + rN) / (1 + i) - 1 : rN;
+  const g = (num(p.gStep) || 0) / 100, age = num(p.birth) ? PL_YEAR - num(p.birth) : null;
+  return { T, N, P: N.have, cur, m, sp, rN, r, i, real, g, age, yrs: T ? glYears(T, N.have, m, r, g) : null };
+}
+function glPage(p) {
+  const G = glCalc(p);
+  return `<div class="hero pl-hero" id="glHero"></div>
+  <div class="card"><h3 class="gold-bar">目標</h3>
+    <div class="pl-chips">${GL_T.map(v => plChip('gTarget', v, v >= 10000 ? v / 10000 + ' 億' : fmt(v) + ' 萬', p.gTarget)).join('')}</div>
+    <div class="inline" style="margin-top:10px">${plIn('gTarget', '目標金額（萬）', '', '例如 5000')}${plIn('gMonthly', '每月能投入', G.cur ? `目前定期定額 ${fmt(G.cur)}，空白就用這個` : '空白＝0', G.cur ? String(G.cur) : '')}${plIn('gStep', '每年投入增加 %', '加薪的部分也拿去投，可填 0')}</div>
+    <div class="pl-lbl">股票比例（越高報酬越高、波動也越大）</div><div class="pl-chips">${[60, 80, 100].map(v => plChip('gStock', v, '股 ' + v + '%', G.sp)).join('')}</div>
+    <div class="pl-lbl">目標是哪一種金額</div><div class="pl-chips">${plChip('gReal', 0, '未來帳面上的金額', G.real ? 1 : 0)}${plChip('gReal', 1, '今天購買力的金額（扣通膨）', G.real ? 1 : 0)}</div>
+    <div class="pl-lbl">想幾年內達成 <b id="glYV">${num(p.gYears) || 20}</b> 年</div><input type="range" min="3" max="40" step="1" data-pl="gYears" value="${num(p.gYears) || 20}" class="pl-range">
+    <div class="pl-split" id="glYOut"></div>
+    <div class="help" style="margin-top:8px">現有可投資資產 <b id="glHave"></b>（從資產頁帶入，已先扣 6 個月緊急預備金）</div>
+  </div>
+  <div class="card"><h3 class="gold-bar">怎麼更快</h3><div id="glFast"></div></div>
+  <div class="card"><h3 class="gold-bar">對照表：要幾年</h3><div id="glTbl"></div></div>
+  <div class="note">以固定年報酬估算，實際市場會大幅波動：股票比例越高，中途遇到 3～5 成跌幅的機會越大，能不能撐住不賣比報酬率更重要。報酬與通膨假設可在「退休計畫 → 進階」調整。這是試算，不構成投資建議。</div>`;
+}
+function glFill() {
+  if (!$('#glHero')) return;
+  const p = plP(), G = glCalc(p), set = (id, h) => { const e = $('#' + id); if (e) e.innerHTML = h; };
+  const yv = $('#glYV'); if (yv) yv.textContent = num(p.gYears) || 20;
+  const wan = v => v >= 1e8 ? fmt(v / 1e8, 2) + ' 億' : fmt(v / 1e4) + ' 萬';
+  const yrsT = y => y == null ? '100 年以上' : y === 0 ? '已達成' : `${fmt(y, 1)} 年`;
+  set('glHave', fmt(G.P));
+  if (!G.T) { set('glHero', `<div class="h-lbl">存到目標金額</div><div class="h-num" style="font-size:24px">先選一個目標</div><div class="h-sub">例如 5,000 萬。會算出照現在的速度要幾年，以及想更快要怎麼做。</div>`); ['glYOut', 'glFast', 'glTbl'].forEach(id => set(id, '')); return; }
+  const realNote = G.real ? `今天購買力的 ${wan(G.T)}` : wan(G.T);
+  set('glHero', `<div class="h-lbl">每月投 ${fmt(G.m)}${G.g ? `（每年多 ${fmt(G.g * 100, 0)}%）` : ''}，存到 ${realNote}</div>
+    <div class="h-num">${yrsT(G.yrs)}</div>
+    <div class="h-sub">${G.yrs == null ? '照這個速度很難達成，往下看怎麼加快。' : G.yrs === 0 ? '現有資產已超過目標。' : `大約在 ${PL_YEAR + Math.ceil(G.yrs)} 年${G.age ? `、${G.age + Math.ceil(G.yrs)} 歲` : ''}達成`}</div>
+    <div class="h-chips"><span>現有 ${wan(G.P)}</span><span>預期年報酬 ${fmt(G.rN * 100, 1)}%${G.real ? `（扣通膨後 ${fmt(G.r * 100, 1)}%）` : ''}</span>${!G.real && G.yrs ? `<span>到時約等於今天的 ${wan(G.T / (1 + G.i) ** G.yrs)}</span>` : ''}</div>`);
+  const y = num(p.gYears) || 20, need = glPmt(G.T, G.P, y, G.r, G.g);
+  set('glYOut', need ? `想 <b>${y} 年</b>內達成：每月要投 <b>${fmt(need)}</b>${G.g ? `（第一年，之後每年增加 ${fmt(G.g * 100, 0)}%）` : ''}${G.m ? `，${need > G.m ? `比現在多 ${fmt(need - G.m)}` : `現在的 ${fmt(G.m)} 已經夠`}` : ''}` : `現有資產放著不動，${y} 年內就會達成。`);
+  // 各種加速方法各能提早幾年
+  const base = G.yrs, d = v => base == null ? (v == null ? '仍然很難' : `變成 ${fmt(v, 1)} 年`) : v == null ? '—' : `提早 <b>${fmt(base - v, 1)} 年</b>`;
+  const rows = [
+    ['💰', '每月多投 1 萬', glYears(G.T, G.P, G.m + 1e4, G.r, G.g), '最有效、最確定：提高收入或砍掉固定大支出'],
+    ['📈', '加薪的部分全拿去投（每年多投 3%）', glYears(G.T, G.P, G.m, G.r, G.g + 0.03), '生活水準不跟著加薪升級'],
+    ['🏦', '現有資產多 100 萬（例如閒置存款拿去投）', glYears(G.T, G.P + 1e6, G.m, G.r, G.g), '先確定緊急預備金留夠'],
+    ['🎢', '年報酬多 1%', glYears(G.T, G.P, G.m, G.r + 0.01, G.g), '要提高股票比例或承擔更大風險，不保證拿得到'],
+  ];
+  set('glFast', rows.map(([ic, t, v, h]) => `<div class="gl-row"><span class="gl-ic">${ic}</span><span class="gl-t"><b>${t}</b><em>${h}</em></span><span class="gl-v">${d(v)}</span></div>`).join(''));
+  // 對照表
+  const ms = [...new Set([1e4, 2e4, 4e4, 6e4, 1e5, Math.round(G.m)].filter(x => x > 0))].sort((a, b) => a - b), rs = [0.04, 0.06, 0.08, 0.1];
+  const near = rs.reduce((a, b) => Math.abs(b - G.rN) < Math.abs(a - G.rN) ? b : a);
+  set('glTbl', `<div class="tbl-wrap"><table class="gl-tbl"><thead><tr><th>每月投入</th>${rs.map(r => `<th class="num">年報酬 ${r * 100}%</th>`).join('')}</tr></thead><tbody>
+    ${ms.map(m => `<tr class="${m === Math.round(G.m) ? 'gl-me' : ''}"><td>${fmt(m)}${m === Math.round(G.m) ? '（你）' : ''}</td>${rs.map(r => { const rr = G.real ? (1 + r) / (1 + G.i) - 1 : r, v = glYears(G.T, G.P, m, rr, G.g); return `<td class="num ${r === near && m === Math.round(G.m) ? 'gl-hit' : ''}">${v == null ? '>100' : fmt(v, 1)}</td>`; }).join('')}</tr>`).join('')}
+  </tbody></table></div><div class="help">單位：年。以你現有的 ${wan(G.P)} 起算${G.real ? '，扣除通膨' : ''}。全球股市長期大約 6～8%，10% 很難長期維持。</div>`);
+}
+document.addEventListener('input', e => { if (e.target.dataset?.pl) glFill(); });
+
+/* 模式切換：退休計畫｜存到目標金額 */
+const _planRet = PAGES.plan;
+PAGES.plan = () => {
+  const p = plP(), mode = p.mode || 'retire';
+  const tabs = `<div class="pl-mode">${plChip('mode', 'retire', '🏖️ 退休計畫', mode)}${plChip('mode', 'goal', '🎯 存到目標金額', mode)}</div>`;
+  if (mode === 'goal') { setTimeout(glFill, 0); return `<h2>財務計畫</h2>${tabs}${glPage(p)}`; }
+  return _planRet().replace('<h2>財務計畫</h2>', `<h2>財務計畫</h2>${tabs}`);
+};
+PAGES.retire = PAGES.strategy = PAGES.plan;
+if (window.__startPage === 'plan') render();
