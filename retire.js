@@ -12,6 +12,21 @@ const plNeedM = (R, a) => R.E.v + plExtraM(R.q, a);
 const PL_CITY = { 全國平均: 25726, 臺北市: 34014, 新北市: 26226, 桃園市: 25235, 臺中市: 26957, 臺南市: 22661, 高雄市: 26399, 基隆市: 24234, 新竹市: 31211, 新竹縣: 29578, 嘉義市: 25599,
   宜蘭縣: 23808, 苗栗縣: 21017, 彰化縣: 19292, 南投縣: 18650, 雲林縣: 20356, 嘉義縣: 19410, 屏東縣: 21594, 臺東縣: 21412, 花蓮縣: 21484, 澎湖縣: 20971 };
 const PL_CPI = 1.02 ** (PL_YEAR - 2023);          // 112 年 → 今年的物價調整
+// 公務人員俸額表（114 年 1 月 1 日生效）：俸點 → 本俸
+const PL_PT = { 800: 63570, 790: 60290, 780: 59520, 750: 57220, 730: 55690, 710: 54160, 690: 52630, 670: 51100, 650: 49560, 630: 48030, 610: 46500, 590: 44970,
+  550: 41900, 535: 40760, 520: 39610, 505: 38460, 490: 37310, 475: 36160, 460: 35010, 445: 33860, 430: 32710, 415: 31560, 400: 30410, 385: 29270, 370: 28120,
+  360: 27350, 350: 26580, 340: 25820, 330: 25050, 320: 24290, 310: 23520, 300: 22750, 290: 21990, 280: 21220, 270: 20460, 260: 19690, 250: 18920, 240: 18160,
+  230: 17390, 220: 16630, 210: 16090, 200: 15540, 190: 15000, 180: 14460, 170: 13920, 160: 13380 };
+// 專業加給月支數額（111.1.1 表）：[職等, 官等, 官階, 表一 一般公務人員, 表十八 關務人員]；112、114 年兩次調薪，乘 1.0714 推估現行數額
+const PL_GRADE = [[14, '簡任', '', 43530, 0], [13, '簡任', '一階', 40540, 51700], [12, '簡任', '二階', 39320, 48880], [11, '簡任', '三階', 34980, 45460], [10, '簡任', '四階', 32100, 43290],
+  [9, '薦任', '一階', 27620, 40320], [8, '薦任', '二階', 26470, 38750], [7, '薦任', '三階', 23270, 36080], [6, '薦任', '四階', 22280, 34190],
+  [5, '委任', '一階', 20260, 30200], [4, '委任', '二階', 19360, 27950], [3, '委任', '三階', 19110, 26310], [2, '委任', '四階', 19050, 24550], [1, '委任', '', 18980, 22900]];
+const PL_ADJ = 1.0714;
+function plSalary(p) {
+  const g = PL_GRADE.find(x => x[0] === num(p.grade)), base = PL_PT[num(p.pt)] || 0, tbl = p.payTbl || 'customs';
+  const prof = g ? Math.round((tbl === 'customs' ? g[4] : tbl === 'general' ? g[3] : 0) * PL_ADJ / 10) * 10 : 0, mgr = num(p.mgr) || 0;
+  return { g, base, prof, mgr, gross: base + prof + mgr };
+}
 const PL_SYS = [['gov', '公務人員'], ['govdc', '公務人員（112/7 後到職）'], ['labor', '勞工'], ['other', '其他／自己填']];
 const PL_LV = [[0.8, '精簡'], [1, '一般'], [1.3, '寬裕']];
 const PL_FREQ = [[12, '每月'], [4, '每季'], [2, '每半年'], [1, '每年']];
@@ -52,7 +67,7 @@ function plPension(p, ra) {
   const slip = plSlip(), out = { items: [], lump: 0, svc: svc || 0, svcT, notes: [] };
   if (gov && svc == null) { out.notes.push('填初任公職起始日才能算年資'); return out; }
   if (p.sys === 'gov' || p.sys === 'govdc') {
-    const bp = num(p.pay) || slip.pay || 0; out.bp = bp; out.bpSrc = num(p.pay) ? '自己填' : slip.pay ? '依薪資單退撫扣款推算' : '';
+    const ptPay = PL_PT[num(p.pt)] || 0, bp = num(p.pay) || ptPay || slip.pay || 0; out.bp = bp; out.bpSrc = num(p.pay) ? '自己填' : ptPay ? `俸點 ${p.pt}（114 年俸額表）` : slip.pay ? '依薪資單退撫扣款推算' : '';
     if (!bp) { out.notes.push('填入本俸才能估算'); return out; }
     const finAuto = bp * Math.min(1.25, 1.01 ** n), fin = num(p.finPay) || finAuto; out.finAuto = finAuto; out.fin = fin;   // 退休時本(年功)俸（今日幣值）
     if (p.sys === 'gov') {
@@ -168,7 +183,12 @@ PAGES.plan = () => {
   const p = plP(), slip = plSlip(), L = plLedgerExp();
   setTimeout(plFill, 0);
   const sysBody = p.sys === 'gov' || p.sys === 'govdc'
-    ? `${plIn('pay', '目前本(年功)俸', slip.pay ? `薪資單推算約 ${fmt(slip.pay)}，不準可以改` : '看薪資明細的「本俸」或「年功俸」', slip.pay ? String(slip.pay) : '')}<label class="f"><span>初任公職起始日</span><input type="date" data-pl="startDate" value="${esc(p.startDate || '')}"><em class="help">看派令或公務人員履歷上的初任日期</em></label>${plIn('finPay', '預估退休時本俸（選填）', '空白＝依目前本俸估算；預期會升官等可填高一點（今日幣值）')}
+    ? `<div class="pl-lbl" style="grid-column:1/-1;margin-top:0">專業加給</div><div class="pl-chips" style="grid-column:1/-1">${[['customs', '關務人員（表十八）'], ['general', '一般公務人員（表一）'], ['none', '不列入']].map(([v, l]) => plChip('payTbl', v, l, p.payTbl || 'customs')).join('')}</div>
+      <label class="f"><span>職等（官階）</span><select data-pl="grade"><option value="">（選擇）</option>${PL_GRADE.map(([n, t, a]) => `<option value="${n}" ${num(p.grade) === n ? 'selected' : ''}>${t}第 ${n} 職等${a ? `（${a}）` : ''}</option>`).join('')}</select><em class="help">看派令或薪資明細</em></label>
+      <label class="f"><span>俸點</span><select data-pl="pt"><option value="">（選擇）</option>${Object.keys(PL_PT).map(Number).sort((a, b) => b - a).map(k => `<option value="${k}" ${num(p.pt) === k ? 'selected' : ''}>${k} 點｜${fmt(PL_PT[k])}</option>`).join('')}</select><em class="help">薪資明細上的「俸點」或「俸額」</em></label>
+      ${plIn('mgr', '主管加給（選填）')}${plIn('pay', '本俸自己填（選填）', slip.pay ? `薪資單退撫扣款推算約 ${fmt(slip.pay)}` : '有選俸點就不用填')}
+      <div class="pl-split" id="plPayD" style="grid-column:1/-1"></div>
+      <label class="f"><span>初任公職起始日</span><input type="date" data-pl="startDate" value="${esc(p.startDate || '')}"><em class="help">看派令或公務人員履歷上的初任日期</em></label>${plIn('finPay', '預估退休時本俸（選填）', '空白＝依目前本俸估算；預期會升官等可填高一點（今日幣值）')}
       <div class="help" style="grid-column:1/-1">要更準確（含舊制年資、危勞職務）可到 <a href="https://iocs.mocs.gov.tw/medmvc/cal1010000" target="_blank" rel="noopener">銓敘部退休試算 ↗</a>，需要出生日期與初任公職起始日。</div>`
     : p.sys === 'labor' ? `${plIn('gross', '目前月薪', slip.gross ? `薪資單應發 ${fmt(slip.gross)}` : '', slip.gross ? String(slip.gross) : '')}${plIn('start', '開始工作年（西元）', '', num(p.birth) ? String(num(p.birth) + 23) : '')}${plIn('lpBal', '勞退帳戶目前累積（選填）', '勞保局 e 化服務可查')}`
     : plIn('manualPen', '退休後每月固定收入', '今日幣值');
@@ -224,6 +244,7 @@ function plFill() {
   if (R.P.fin) R.P.notes.push(`退休時本俸以 ${fmt(R.P.fin)} 計算（${num(p.finPay) ? '自己填' : `自動估算：目前本俸 × ${fmt(R.P.fin / R.P.bp, 2)}`}）`);
   if (R.P.items.length) R.P.notes.push(`退休後購買力每年縮水 ${num(p.penErode) || 0}%：${R.ra + 20} 歲時約剩 ${fmt(plPenAt(R.P, Math.max(R.ra, 65) + 20))}`);
   set('pl_pen_d', `${PL_SYS.find(x => x[0] === p.sys)?.[1] || ''}${R.P.svcT ? `・退休時年資 ${R.P.svcT}` : ''}${R.P.lump ? `・一次 ${fmt(R.P.lump / 1e4)} 萬` : ''}`);
+  { const Y = plSalary(p); set('plPayD', Y.base || Y.prof ? `本俸 <b>${fmt(Y.base)}</b>${Y.prof ? ` ＋ 專業加給 <b>${fmt(Y.prof)}</b>` : ''}${Y.mgr ? ` ＋ 主管加給 ${fmt(Y.mgr)}` : ''} ＝ 月薪約 <b>${fmt(Y.gross)}</b><div class="help">退休金只用本俸計算，專業加給、主管加給不列入。專業加給依 111 年表乘上 112、114 年調薪推估，請以薪資明細為準。</div>` : '選職等與俸點，自動帶出本俸與專業加給。'); }
   set('plPenD', [...R.P.items.map(x => `<b>${x.n}</b> ${fmt(x.v)}／月：${esc(x.d)}`), R.P.lumpD ? `<b>一次入帳</b> ${fmt(R.P.lump)}：${esc(R.P.lumpD)}` : '', ...R.P.notes, R.P.bpSrc ? `本俸／月薪來源：${R.P.bpSrc}` : ''].filter(Boolean).join('<br>'));
   const xNow = plExtraM(p, R.ra), xLtcV = num(p.xLtc) || 0;
   set('pl_exp_v', `約 ${fmt(R.need0)} 元`);
@@ -336,7 +357,7 @@ function glPage(p) {
   return `<div class="hero pl-hero" id="glHero"></div>
   <div class="card"><h3 class="gold-bar">目標</h3>
     <div class="pl-chips">${GL_T.map(v => plChip('gTarget', v, v >= 10000 ? v / 10000 + ' 億' : fmt(v) + ' 萬', p.gTarget)).join('')}</div>
-    <div class="inline" style="margin-top:10px">${plIn('gTarget', '目標金額（萬）', '', '例如 5000')}${plIn('gMonthly', '每月能投入', G.cur ? `目前定期定額 ${fmt(G.cur)}，空白就用這個` : '空白＝0', G.cur ? String(G.cur) : '')}${plIn('gStep', '每年投入增加 %', '加薪的部分也拿去投，可填 0')}</div>
+    <div class="inline" style="margin-top:10px">${plIn('gTarget', '目標金額（萬）', '', '例如 5000')}${plIn('gMonthly', '每月能投入', `${G.cur ? `目前定期定額 ${fmt(G.cur)}，空白就用這個` : '空白＝0'}${plSalary(p).gross ? `｜月薪約 ${fmt(plSalary(p).gross)}，存 30%＝${fmt(Math.round(plSalary(p).gross * 0.3 / 100) * 100)}` : ''}`, G.cur ? String(G.cur) : '')}${plIn('gStep', '每年投入增加 %', '加薪的部分也拿去投，可填 0')}</div>
     <div class="pl-lbl">股票比例（越高報酬越高、波動也越大）</div><div class="pl-chips">${[60, 80, 100].map(v => plChip('gStock', v, '股 ' + v + '%', G.sp)).join('')}</div>
     <div class="pl-lbl">目標是哪一種金額</div><div class="pl-chips">${plChip('gReal', 0, '未來帳面上的金額', G.real ? 1 : 0)}${plChip('gReal', 1, '今天購買力的金額（扣通膨）', G.real ? 1 : 0)}</div>
     <div class="pl-lbl">想幾年內達成 <b id="glYV">${num(p.gYears) || 20}</b> 年</div><input type="range" min="3" max="40" step="1" data-pl="gYears" value="${num(p.gYears) || 20}" class="pl-range">
