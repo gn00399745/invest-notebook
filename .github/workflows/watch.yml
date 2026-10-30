@@ -1,0 +1,15 @@
+# 雲端盯盤：盤中定時呼叫網站的 /api/watch?run=1，觸發的到價條件會傳 Telegram 通知
+# （GitHub 排程可能延遲幾分鐘；時間是 UTC）
+name: price-watch
+on:
+  schedule:
+    - cron: '*/10 1-5 * * 1-5'    # 台股 09:00–13:59（台灣時間）每 10 分鐘
+    - cron: '45 5 * * 1-5'        # 台股收盤後再檢查一次
+    - cron: '*/20 13-20 * * 1-5'  # 美股盤中（台灣晚上 21:00–04:59）每 20 分鐘
+  workflow_dispatch: {}
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - run: curl -fsS --max-time 60 "https://invest-notebook-nine.vercel.app/api/watch?run=1"
