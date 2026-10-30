@@ -283,10 +283,72 @@ if (current === 'radar') render();
   radarBusy = false; if (current === 'radar') { const y = scrollY; render(); scrollTo(0, y); }
 }
 const bar5 = (v, lo, hi, good) => { if (v == null) return '<i class="rb-n">—</i>'; const w = Math.max(3, Math.min(100, (v - lo) / (hi - lo) * 100)); return `<span class="rb"><i class="${good ? 'g' : v < 0 ? 'r' : ''}" style="width:${w}%"></i></span>`; };
+/* ---------- 選股雷達：每檔的交易計畫（買進區、停損、停利、股數） ----------
+   用近 60 日收盤（spark）算月線、季線與每日平均波動；再依大盤溫度、景氣與你的研究卡判斷調整 */
+const RD_TIERS = [['低價', '百元內', x => x.close < 100], ['高價', '百元以上', x => x.close >= 100], ['全部', '全部價位', () => true]];
+const rdTick = (p, up) => typeof rnd === 'function' ? rnd(p, true, up) : Math.round(p * 100) / 100;
+const rdP = p => p == null ? '—' : fmt(p, p < 100 ? 2 : 1);
+function radarMarket() {
+  try { const v = typeof verdict === 'function' ? verdict('tw') : null; return v ? { z: v.z, n: EXT_Z[v.z].n, ic: EXT_Z[v.z].ic, ph: v.P } : null; } catch (e) { return null; }
+}
+function radarPlan(x, mkt) {
+  const s = x.spark || []; if (s.length < 40 || !x.close) return null;
+  const px = x.close, avg = a => a.reduce((t, v) => t + v, 0) / a.length;
+  const m20 = avg(s.slice(-20)), m60 = avg(s.slice(-60));
+  const d = s.slice(-21).map((v, i, a) => i ? Math.abs(v - a[i - 1]) : null).slice(1), vol = avg(d); // 每日平均波動
+  const P = { m20, m60, vol, why: [] };
+  // 研究卡判斷（你自己的估值與條件）
+  const card = S.cards.find(c => String(c.code) === String(x.code));
+  if (card && typeof assetCheck === 'function') { try { const r = assetCheck(card); if (r.st[0] !== '資料不足') P.card = r.st; } catch (e) { /* 研究卡資料不全 */ } }
+  if (px < m60 || x.trend === '季線之下') {
+    P.act = 'skip'; P.lbl = '不買'; P.msg = `趨勢還沒轉強：收盤站回季線 ${rdP(rdTick(m60, true))} 以上再重新評估`; return P;
+  }
+  // 買進區：月線（或季線）到「月線＋1.5 天波動」，不高於現價
+  const base = px >= m20 ? m20 : m60, lo = rdTick(base), hi = rdTick(Math.max(base, Math.min(px, base + 1.5 * vol)), true);
+  const entry = (lo + hi) / 2;
+  let stop = Math.min(lo * 0.97, Math.max(m60 * 0.98, entry * 0.92)); if (stop < entry * 0.9) stop = entry * 0.9;
+  stop = rdTick(stop); const risk = entry - stop, t1 = rdTick(entry + 2 * risk, true);
+  Object.assign(P, { lo, hi, entry, stop, t1, riskP: risk / entry * 100, gainP: (t1 / entry - 1) * 100 });
+  P.act = px <= hi * 1.005 ? 'buy' : 'wait';
+  P.lbl = P.act === 'buy' ? '現價在買進區' : '等回檔';
+  P.msg = P.act === 'buy' ? '可分 2 批：第一批現在、第二批回測月線不破時' : `現價 ${rdP(px)} 高於買進區 ${fmt((px / hi - 1) * 100, 1)}%：不追高，設提醒等回到區間`;
+  if (mkt && (mkt.z === 'boil' || mkt.z === 'hot')) { P.half = true; P.why.push(`大盤${mkt.n}：只買半批`); }
+  if (mkt && mkt.z === 'ice') P.why.push('大盤冰水區：可照計畫分批');
+  if (mkt?.ph === '收縮') { P.half = true; P.why.push('景氣收縮：部位減半'); }
+  if (P.card && (P.card[1] === 'neg' || /偏貴|觀望/.test(P.card[0]))) { if (P.act === 'buy') { P.act = 'wait'; P.lbl = '研究卡不建議'; } P.why.push(`你的研究卡：${P.card[0]}`); }
+  else if (P.card) P.why.push(`你的研究卡：${P.card[0]}`);
+  if ((x.warn || []).some(w => /虧損/.test(w))) { P.half = true; P.why.push('近四季虧損：獲利還沒跟上營收，部位減半'); }
+  if (x.bias20 > 15) P.why.push('離月線太遠，追高容易套');
+  // 股數：每筆最多虧總資金 1%，單一個股不超過總資產 10%
+  try {
+    const W = typeof wealth === 'function' ? wealth() : null, cap = W?.invest || 0;
+    if (cap && risk > 0) { let sh = Math.min(cap * 0.01 / risk, cap * 0.1 / entry); if (P.half) sh /= 2; P.sh = Math.floor(sh); }
+  } catch (e) { /* 沒有資產資料時不算股數 */ }
+  return P;
+}
+// 鎖定的計畫：設了提醒後價位就固定，避免事後移動停損
+const rdLock = code => (S.radarPlans || {})[code];
+function radarPlanHTML(x, P) {
+  if (!P) return '';
+  const L = rdLock(x.code); if (L) Object.assign(P, { lo: L.lo, hi: L.hi, stop: L.stop, t1: L.t1, entry: (L.lo + L.hi) / 2 });
+  if (P.act === 'skip') return `<div class="rp skip"><div class="rp-h"><b>📋 交易計畫</b><span class="pill red">不買</span></div><div class="rp-msg">${esc(P.msg)}</div></div>`;
+  const sz = P.sh ? (P.sh >= 1000 ? `${fmt(Math.floor(P.sh / 1000))} 張${P.sh % 1000 >= 1 ? ` ＋ ${fmt(P.sh % 1000)} 股零股` : ''}` : `${fmt(P.sh)} 股（零股）`) : '';
+  return `<div class="rp ${P.act}"><div class="rp-h"><b>📋 交易計畫</b><span class="pill ${P.act === 'buy' ? 'green' : 'gold'}">${esc(P.lbl)}</span>${L ? `<span class="pill">🔒 ${esc(L.date.slice(5).replace('-', '/'))} 鎖定</span>` : ''}</div>
+    <div class="rp-g">
+      <div><em>買進區</em><b>${rdP(P.lo)}～${rdP(P.hi)}</b><small>只在這個區間買，不追高</small></div>
+      <div><em>停損</em><b class="down">${rdP(P.stop)}</b><small>收盤跌破就全賣（−${fmt((1 - P.stop / P.entry) * 100, 1)}%）</small></div>
+      <div><em>停利</em><b class="up">${rdP(P.t1)}</b><small>到價先賣一半（+${fmt((P.t1 / P.entry - 1) * 100, 1)}%）</small></div>
+      <div><em>剩下一半</em><b>跌破月線</b><small>收盤跌破月線（約 ${rdP(P.m20)}）全賣</small></div>
+    </div>
+    <div class="rp-msg">${esc(P.msg)}${P.why.length ? `<br>${P.why.map(esc).join('・')}` : ''}</div>
+    ${sz ? `<div class="rp-sz">建議最多 <b>${sz}</b>${P.half ? '（已減半）' : ''}・約 ${fmt(P.sh * P.entry)} 元：跌到停損最多虧總資金 ${P.half ? '0.5' : '1'}%</div>` : ''}
+    <div class="btn-row"><button class="btn-small" data-rpmon="${esc(x.code)}">${L ? '🔒 已設提醒・解除鎖定' : '🔔 鎖定計畫並設到價提醒'}</button></div></div>`;
+}
 PAGES.radar = () => {
   setTimeout(() => loadRadar(false), 30);
   const R = S.radar, p = RADAR_P.find(x => x[0] === (S.radarP || '綜合')) || RADAR_P[0], mk = S.radarMkt || '全部';
-  const list = (R?.list || []).filter(p[2]).filter(x => mk === '全部' || x.mkt === mk);
+  const tier = RD_TIERS.find(t => t[0] === (S.radarTier || '低價')) || RD_TIERS[0], mkt = radarMarket();
+  const list = (R?.list || []).filter(p[2]).filter(x => mk === '全部' || x.mkt === mk).filter(tier[2]);
   const ym = R?.revYM ? `${+R.revYM.slice(0, 3) + 1911} 年 ${+R.revYM.slice(3)} 月` : '';
   const mine = code => S.cards.find(c => String(c.code) === code);
   const RD_N = 30, shown = S.radarAll ? list : list.slice(0, RD_N);
@@ -294,6 +356,7 @@ PAGES.radar = () => {
     <div class="rd-h"><span class="rd-rank">${i + 1}</span><div class="rd-id"><b>${esc(x.code)} ${esc(x.name)}</b><em>${esc(x.mkt)}・${esc(x.ind || '—')}${x.pe ? `・本益比 ${x.pe}` : ''}</em></div>
       <div class="rd-px"><b>${fmt(x.close, x.close < 100 ? 2 : 1)}</b>${x.r1m != null ? `<em class="${x.r1m >= 0 ? 'up' : 'down'}">近 1 月 ${pct(x.r1m)}</em>` : ''}</div>
       <div class="rd-sc ${x.score >= 70 ? 'hi' : x.score >= 50 ? 'mid' : ''}"><b>${x.score}</b><em>分</em></div></div>
+    <div class="rd-tier"><span class="pill ${x.close < 100 ? 'green' : ''}">${x.close < 100 ? '低價股' : '高價股'}</span><span>一張約 ${fmt(x.close * 1000)} 元</span></div>
     ${x.spark?.length > 2 ? `<svg class="rd-spark" viewBox="0 0 300 34" preserveAspectRatio="none"><path d="${sparkPath(x.spark.map((v, k) => [k, v]), 300, 34)}"/></svg>` : ''}
     <div class="rd-m">
       <div><em>月營收年增</em>${bar5(x.revYoY, 0, 100, x.revYoY >= 30)}<b class="${x.revYoY >= 0 ? 'up' : 'down'}">${x.revYoY == null ? '—' : pct(x.revYoY, 0)}</b></div>
@@ -303,6 +366,7 @@ PAGES.radar = () => {
       <div><em>量比（5 日 / 60 日）</em>${bar5(x.vr, 0, 2.5, x.vr >= 1.5)}<b>${x.vr == null ? '—' : x.vr + ' 倍'}</b></div>
     </div>
     <div class="rd-tags">${(x.tags || []).map(t => `<span class="pill green">${esc(t)}</span>`).join('')}${x.trend && !x.tags?.includes(x.trend) ? `<span class="pill">${esc(x.trend)}</span>` : ''}${(x.warn || []).map(t => `<span class="pill red">${esc(t)}</span>`).join('')}</div>
+    ${radarPlanHTML(x, radarPlan(x, mkt))}
     <div class="btn-row">${mine(x.code) ? `<button class="btn-small ghost" data-card="${mine(x.code).id}" data-go-card="1">看研究卡 ›</button>` : `<button class="btn-small" data-radarcard="${esc(x.code)}" data-n="${esc(x.name)}">建研究卡驗證</button>`}
       <a class="btn-small ghost" href="https://tw.stock.yahoo.com/quote/${esc(x.code)}.${x.mkt === '上櫃' ? 'TWO' : 'TW'}/revenue" target="_blank" rel="noopener">營收明細</a></div>
   </div>`).join('');
@@ -310,16 +374,30 @@ PAGES.radar = () => {
   <details class="card rd-how"><summary>怎麼篩的？（營收動能 → 趨勢 → 相對強勢 → 量能 → 研究卡驗證）</summary>
     <p class="lead" style="margin-top:10px">「飆股」通常同時具備兩件事：<b>基本面有新變化</b>（營收突然大幅成長）＋ <b>股價已經開始反映</b>（多頭排列、創新高、強於大盤、量增）。雷達每天從上市櫃全部股票篩一遍，給你值得研究的名單。</p>
     <div class="rd-steps">${[['1', '營收動能', '月營收年增、累計年增'], ['2', '趨勢轉強', '站上均線、多頭排列'], ['3', '相對強勢', '逼近新高、強於大盤'], ['4', '量能確認', '近 5 日量放大'], ['5', '研究卡驗證', '產業、財報、估值、籌碼']].map(([n, t, s]) => `<div><b>${n}</b><span>${t}</span><em>${s}</em></div>`).join('')}</div>
-    <div class="help">分數滿分 100：營收 30、趨勢 20、新高 15、相對強度 15、量能 10；離月線太遠（短線漲多）會扣分。</div></details>
+    <div class="help">分數滿分 100：營收 30、趨勢 20、新高 15、相對強度 15、量能 10；離月線太遠（短線漲多）會扣分。</div>
+    <div class="help" style="margin-top:6px"><b>交易計畫怎麼算：</b>買進區＝月線到「月線＋1.5 天平均波動」；停損＝跌破季線或虧 8% 先到者（最多 10%）；停利＝風險的 2 倍（賠 1 賺 2）；股數＝跌到停損最多虧可投資資產 1%、單檔不超過 10%。
+    同時參考你的市場研究：大盤溫度偏熱／滾水區或景氣收縮時只買半批；有研究卡的，研究卡判斷偏貴或觀望就不建議買。</div></details>
   <div class="chips">${RADAR_P.map(([k, l]) => `<button class="chip ${k === p[0] ? 'on' : ''}" data-radarp="${k}">${l}</button>`).join('')}</div>
+  <div class="card rd-rule"><div class="card-head"><h3 class="gold-bar">⚠️ 交易紀律：買之前先讀，買了就照做</h3>${mkt ? `<span class="pill">台股大盤 ${mkt.ic} ${esc(mkt.n)}${mkt.ph ? `・景氣${esc(mkt.ph)}` : ''}</span>` : ''}</div>
+    <ol>
+      <li><b>只在買進區買。</b>價格沒到就不買，寧可錯過，不要追高。</li>
+      <li><b>停損價收盤跌破就賣，</b>不攤平、不往下移停損、不「再等等看」。</li>
+      <li><b>到停利價先賣一半，</b>剩下一半收盤跌破月線就全部賣出。</li>
+      <li><b>股數照建議，</b>每筆最多虧總資金 1%；大盤偏熱、滾水區或景氣收縮時只買半批。</li>
+      <li><b>買進理由消失就出場：</b>下個月營收年增掉到 15% 以下、或研究卡「證明我錯」的條件成立。</li>
+      <li><b>按「鎖定計畫」後價位就固定，</b>之後不因股價漲跌改計畫；要改先寫進覆盤，說清楚為什麼。</li>
+    </ol></div>
+  <div class="chips">${RD_TIERS.map(([k, l]) => `<button class="chip ${k === tier[0] ? 'on' : ''}" data-radartier="${k}">${k === '低價' ? '💰 ' : ''}${l}</button>`).join('')}</div>
   <div class="chips sm">${['全部', '上市', '上櫃'].map(k => `<button class="chip ${k === mk ? 'on' : ''}" data-radarmkt="${k}">${k}</button>`).join('')}<span class="spacer"></span><button class="btn-small ghost" id="radarRefresh">${radarBusy ? '篩選中…' : '↻ 重新篩選'}</button></div>
   <div class="help" style="margin:-4px 0 10px">${esc(p[3])}${R ? `｜${list.length} 檔` : ''}</div>
   ${R ? (rows ? rows + (list.length > RD_N ? `<button class="btn-ghost rd-more" data-radarall="1">${S.radarAll ? `只看前 ${RD_N} 名` : `顯示全部 ${list.length} 檔`}</button>` : '') : '<div class="card empty">這個條件目前沒有符合的股票，換一個條件看看。</div>') : `<div class="card empty">${radarBusy ? '正在篩選上市櫃全部股票…（約 20～40 秒）' : '按「重新篩選」開始。'}</div>`}
   ${R ? `<div class="help" style="margin-top:10px">營收資料：${ym}（每月 10 日前公布上月營收）｜全市場 ${R.universe} 檔、成交值 2,000 萬以上 ${R.liquid} 檔｜加權指數近 3 個月 ${R.idx3m == null ? '—' : pct(R.idx3m)}｜更新 ${new Date(R.updated).toLocaleString('zh-TW', { hour12: false })}${R.errors?.length ? `<br><span class="down">${R.errors.map(esc).join('；')}</span>` : ''}<br>來源：證交所、櫃買中心 OpenAPI，Yahoo Finance。篩選結果是研究的起點，不是買進建議；強勢股波動大，建卡時先寫好「證明我錯」的條件與停損。</div>` : ''}`;
 };
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-radarp],[data-radarmkt],#radarRefresh,[data-radarcard],[data-radarall]'); if (!t) return;
+  const t = e.target.closest('[data-radarp],[data-radarmkt],#radarRefresh,[data-radarcard],[data-radarall],[data-radartier],[data-rpmon]'); if (!t) return;
   if (t.dataset.radarall) { S.radarAll = !S.radarAll; save(); return render(); }
+  if (t.dataset.radartier) { S.radarTier = t.dataset.radartier; save(); return render(); }
+  if (t.dataset.rpmon) return radarLock(t.dataset.rpmon);
   if (t.dataset.radarp) { S.radarP = t.dataset.radarp; save(); return render(); }
   if (t.dataset.radarmkt) { S.radarMkt = t.dataset.radarmkt; save(); return render(); }
   if (t.id === 'radarRefresh') return loadRadar(true);
@@ -329,6 +407,23 @@ document.addEventListener('click', e => {
     S.cards.push(c); openCardId = c.id; save(); go('cards'); setTimeout(() => autoFillCard(c), 50);
   }
 });
+
+// 鎖定計畫：記下價位，並建立三個到價提醒（進入買進區、停損、停利）；再按一次解除
+function radarLock(code) {
+  S.radarPlans = S.radarPlans || {};
+  const tag = `雷達計畫 ${code}`;
+  if (S.radarPlans[code]) {
+    delete S.radarPlans[code]; S.monitors = S.monitors.filter(m => m.src !== tag); save(); toast('已解除鎖定並移除提醒'); const y = scrollY; render(); return scrollTo(0, y);
+  }
+  const x = S.radar?.list?.find(y => y.code === code), P = x && radarPlan(x, radarMarket()); if (!P || P.act === 'skip') return toast('這檔目前不買，沒有計畫可鎖定');
+  S.radarPlans[code] = { date: today(), lo: P.lo, hi: P.hi, stop: P.stop, t1: P.t1 };
+  const base = { target: `${code} ${x.name}`.trim(), code, metric: '收盤價', notify: '網站內提醒', status: '啟用', src: tag };
+  S.monitors.push(
+    { id: uid(), ...base, op: '低於', value: String(P.hi), cond: `進入買進區：跌到 ${rdP(P.hi)}`, action: `買第一批（買進區 ${rdP(P.lo)}～${rdP(P.hi)}，停損 ${rdP(P.stop)}）` },
+    { id: uid(), ...base, op: '低於', value: String(P.stop), cond: `停損：跌到 ${rdP(P.stop)}`, action: '有持股就收盤全部賣出，不攤平、不移動停損' },
+    { id: uid(), ...base, op: '高於', value: String(P.t1), cond: `停利：漲到 ${rdP(P.t1)}`, action: '先賣一半；剩下一半收盤跌破月線全部賣出' });
+  save(); toast('已鎖定計畫，並建立買進、停損、停利三個提醒'); const y = scrollY; render(); scrollTo(0, y);
+}
 
 /* ---------- 技術指標視覺化（像通膨比較圖：一眼看出位置） ---------- */
 const tn = (s, re) => { const m = String(s || '').match(re); return m ? num(m[1].replace(/,/g, '')) : null; };
