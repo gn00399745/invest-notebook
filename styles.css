@@ -1155,3 +1155,17 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .ms-m { border: 1px solid #e6e8ee; border-radius: 12px; padding: 8px 12px; } .ms-m > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; cursor: pointer; list-style: none; }
 .ms-m > summary::-webkit-details-marker { display: none; } .ms-m > summary em { font-style: normal; font-size: 12px; color: #6b7385; flex: 1 1 140px; } .ms-m > summary i { font-style: normal; }
 .ms-c { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px dashed #e6e8ee; font-size: 13px; } .ms-c small { color: #6b7385; white-space: nowrap; } .ms-c.na { color: #9aa1b0; }
+
+/* ===== 電腦版排版：標題列、分頁列與內容對齊同一個寬度 ===== */
+@media (min-width: 1000px) {
+  :root { --wrap: 1180px; }
+  .topbar, .tabs { padding-left: max(16px, calc((100% - var(--wrap)) / 2 + 16px)); padding-right: max(16px, calc((100% - var(--wrap)) / 2 + 16px)); }
+  .tabs { gap: 6px; padding-top: 8px; padding-bottom: 8px; }
+  .tabs button { font-size: 15px; padding: 8px 16px; }
+  main, .foot { max-width: var(--wrap); }
+  main { padding: 20px 16px 40px; }
+  .ind-grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; }
+  .fab { right: max(20px, calc((100% - var(--wrap)) / 2 - 76px)); }
+  dialog#modal { max-width: 640px; }
+}
+@media (min-width: 1500px) { :root { --wrap: 1320px; } }
