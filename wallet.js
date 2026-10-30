@@ -629,6 +629,8 @@ PAGES.home = () => {
     <button data-act="exp"><i>➖</i>記支出</button><button data-act="inc"><i>➕</i>記收入</button>
     <button data-act="buy"><i>📈</i>買股票</button><button data-act="sheet"><i>🗂️</i>更多</button>
   </div>
+  ${(() => { const L = S.monitors.filter(m => m.status === '啟用' && m.code && num(m.value)).map(m => ({ m, d: num(m.lastVal) ? (num(m.lastVal) / num(m.value) - 1) * 100 : null })).sort((a, b) => (a.d == null) - (b.d == null) || Math.abs(a.d) - Math.abs(b.d)).slice(0, 6);
+    return `<div class="card d-watch"><div class="card-head"><h3 class="gold-bar">🔔 到價監控</h3><button class="btn-small ghost" data-go="monitor">全部 →</button></div>${L.length ? L.map(({ m, d }) => `<div class="dw-r" data-go="monitor"><span><b>${esc(m.target || m.code)}</b></span><b class="${d != null && Math.abs(d) <= 3 ? 'near' : ''}">${d == null ? '—' : `差 ${fmt(Math.abs(d), 1)}%`}</b><em>${esc((m.cond || `${m.op} ${m.value}`).split('（')[0])}</em></div>`).join('') : '<div class="empty">還沒有到價條件。持有股票後會自動設好停利、停損價位。</div>'}</div>`; })()}
   ${onboard ? `<div class="d-full">${onboard}</div>` : ''}
   <div class="card d-month">
     <div class="card-head"><h3 class="gold-bar">${+m.slice(5)} 月收支</h3><button class="btn-small ghost" data-go="ledger">看明細 →</button></div>

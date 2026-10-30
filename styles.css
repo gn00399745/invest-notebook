@@ -1158,22 +1158,22 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 
 /* ===== 電腦版排版：標題列、分頁列與內容對齊同一個寬度 ===== */
 @media (min-width: 1000px) {
-  :root { --wrap: 1180px; }
+  :root { --wrap: 100%; }
   .topbar, .tabs { padding-left: max(16px, calc((100% - var(--wrap)) / 2 + 16px)); padding-right: max(16px, calc((100% - var(--wrap)) / 2 + 16px)); }
   .tabs { gap: 6px; padding-top: 8px; padding-bottom: 8px; }
   .tabs button { font-size: 15px; padding: 8px 16px; }
   main, .foot { max-width: var(--wrap); }
-  main { padding: 20px 16px 40px; }
+  main { padding: 20px 28px 40px; } .topbar, .tabs { padding-left: 28px; padding-right: 28px; }
   .ind-grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; }
-  .fab { right: max(20px, calc((100% - var(--wrap)) / 2 - 76px)); }
+  .fab { right: 28px; }
   dialog#modal { max-width: 640px; }
 }
-@media (min-width: 1500px) { :root { --wrap: 1320px; } }
+
 
 /* ===== 電腦版首頁：儀表板排版 ===== */
 .home-grid > * { min-width: 0; }
 @media (min-width: 1000px) {
-  .home-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; align-items: start; }
+  .home-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; align-items: start; grid-auto-flow: row dense; }
   .home-grid > .card, .home-grid > .hero, .home-grid > .quick { margin: 0; }
   .d-hero { grid-column: span 8; min-height: 190px; display: flex; flex-direction: column; justify-content: center; padding: 26px 30px; }
   .d-hero .h-num { font-size: 46px; } .d-hero .h-sub { font-size: 15px; margin-top: 6px; } .d-hero .h-chips span { font-size: 13px; padding: 4px 12px; }
@@ -1193,3 +1193,18 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
   .card.alert { padding: 14px 18px; } .card.alert .card-head { margin-bottom: 6px; } .card.alert > div:not(.card-head) { font-size: 14px; line-height: 1.6; }
 }
 .donut-wrap .legend { display: grid; gap: 2px; }
+
+/* 寬螢幕：多欄卡片 */
+.dgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; margin-bottom: 16px; }
+.dgrid.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dgrid > .card { margin: 0; } .dgrid > .dg-wide { grid-column: 1 / -1; }
+@media (min-width: 1400px) {
+  .d-hero { grid-column: span 6; } .d-quick { grid-column: span 3; } .d-watch { display: block !important; grid-column: span 3; height: 100%; }
+  .d-month, .d-alloc { grid-column: span 4; } .d-other { grid-column: span 4; }
+  .d-hold { grid-column: 1 / -1; } .hgrid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  .d-alloc .donut-wrap { gap: 16px; } .d-alloc .donut { width: 130px; height: 130px; }
+}
+.d-watch { display: none; margin: 0; }
+.d-watch .dw-r { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 7px 0; border-top: 1px dashed var(--line); font-size: 13px; cursor: pointer; }
+.d-watch .dw-r:first-of-type { border-top: 0; } .d-watch .dw-r em { font-style: normal; color: var(--muted); font-size: 12px; grid-column: 1 / -1; }
+.d-watch .dw-r b.near { color: #b9770e; }
