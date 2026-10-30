@@ -79,6 +79,29 @@ PAGES.home = () => {
   return html.includes('<div class="hg-side">') ? html.replace('<div class="hg-side">', '<div class="hg-side">' + snap) : html + snap;
 };
 
+/* ---------- 日間／夜間：跟隨系統 → 日間 → 夜間 ----------
+   樣式表的夜間規則都寫在 @media (prefers-color-scheme: dark) 裡，手動切換時直接改這些規則的條件 */
+const THEMES = { auto: ['🌓', '跟隨系統'], light: ['☀️', '日間'], dark: ['🌙', '夜間'] };
+function applyTheme(t) {
+  if (!THEMES[t]) t = 'auto';
+  for (const sh of document.styleSheets) {
+    let rules; try { rules = sh.cssRules; } catch (e) { continue; }
+    for (const r of rules) if (r instanceof CSSMediaRule && (r._q || r.media.mediaText).includes('prefers-color-scheme')) {
+      r._q = r._q || r.media.mediaText;
+      r.media.mediaText = t === 'auto' ? r._q : t === 'dark' ? 'all' : 'not all';
+    }
+  }
+  document.documentElement.style.colorScheme = t === 'auto' ? 'light dark' : t;
+  const b = $('#themeBtn'); if (b) { b.textContent = THEMES[t][0]; b.title = `目前：${THEMES[t][1]}（點一下切換）`; }
+}
+const themeNow = () => { try { return localStorage.getItem('theme') || 'auto'; } catch (e) { return 'auto'; } };
+$('#themeBtn').addEventListener('click', () => {
+  const ks = Object.keys(THEMES), t = ks[(ks.indexOf(themeNow()) + 1) % ks.length];
+  try { localStorage.setItem('theme', t); } catch (e) { /* 無法儲存時只切換這次 */ }
+  applyTheme(t); toast(`已切換：${THEMES[t][1]}`);
+});
+applyTheme(themeNow());
+
 // 匯出備份時記下日期（選單上的「該備份」提醒用）
 document.addEventListener('click', e => { if (e.target.closest('#exportBtn')) { S.lastExport = Date.now(); save(); } }, true);
 
