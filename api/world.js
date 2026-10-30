@@ -94,6 +94,15 @@ const yoy = pts => { const m = monthly(pts); return m.slice(0, Math.max(0, m.len
 // 日資料：取每次變動（政策利率）
 const changes = pts => { const out = []; pts.forEach(p => { if (!out.length || out[out.length - 1].v !== p.v) out.push(p); }); return out; };
 
+/* ---------- 櫃買指數（Yahoo 沒有，改用櫃買中心 OpenAPI：本月每日收盤） ---------- */
+async function twOTC() {
+  const j = await getJSON('https://www.tpex.org.tw/openapi/v1/tpex_index', 15000);
+  const n = x => +String(x ?? '').replace(/,/g, '');
+  const rows = (Array.isArray(j) ? j : []).filter(x => n(x.Close) > 0).sort((a, b) => a.Date.localeCompare(b.Date)); if (rows.length < 2) throw new Error('櫃買指數資料不足');
+  const L = rows[rows.length - 1], P = rows[rows.length - 2], base = n(rows[0].Close) - n(rows[0].Change), last = n(L.Close);
+  return { sym: 'TPEX', name: '櫃買指數', price: r2(last), chg1d: r2((last / n(P.Close) - 1) * 100), chg1w: rows.length > 5 ? r2((last / n(rows[rows.length - 6].Close) - 1) * 100) : null, chg1m: base > 0 ? r2((last / base - 1) * 100) : null, spark: rows.map(x => n(x.Close)), date: `${L.Date.slice(0, 4)}-${L.Date.slice(4, 6)}-${L.Date.slice(6, 8)}` };
+}
+
 /* ---------- 大盤融資維持率（上市）＝ Σ(各股融資餘額 × 收盤價) ÷ 融資餘額金額 ---------- */
 async function twMargin() {
   const n = x => +String(x ?? '').replace(/,/g, '') || 0;
@@ -117,7 +126,7 @@ async function yq(sym) {
   return { sym, price: r2(last, last < 10 ? 4 : 2), chg1d: prev ? r2((last / prev - 1) * 100) : null, chg1m: m1 ? r2((last / m1 - 1) * 100) : null, spark: c.slice(-60).map(x => r2(x[1], 4)), date: new Date(c[c.length - 1][0] * 1000).toISOString().slice(0, 10) };
 }
 const MARKETS = {
-  tw: [['^TWII', '加權指數'], ['TWD=X', '美元兌台幣'], ['^TWOII', '櫃買指數']], us: [['^GSPC', '標普 500'], ['^IXIC', '那斯達克綜合'], ['^SOX', '費城半導體'], ['DX-Y.NYB', '美元指數'], ['^VIX', 'VIX 恐慌指數']],
+  tw: [['^TWII', '加權指數'], ['TWD=X', '美元兌台幣']], us: [['^GSPC', '標普 500'], ['^IXIC', '那斯達克綜合'], ['^SOX', '費城半導體'], ['DX-Y.NYB', '美元指數'], ['^VIX', 'VIX 恐慌指數']],
   cn: [['000300.SS', '滬深 300'], ['CNY=X', '美元兌人民幣'], ['000001.SS', '上證指數']], jp: [['^N225', '日經 225'], ['JPY=X', '美元兌日圓']],
   eu: [['^STOXX50E', '歐洲斯托克 50'], ['EURUSD=X', '歐元兌美元']], hk: [['^HSI', '恒生指數'], ['HKD=X', '美元兌港幣']], kr: [['^KS11', '韓國綜合'], ['KRW=X', '美元兌韓元']], in: [['BSE-100.BO', '印度 BSE 100'], ['^BSESN', '印度 Sensex']],
   assets: [['GC=F', '黃金'], ['SI=F', '白銀'], ['PL=F', '鉑金'], ['PA=F', '鈀金'], ['HG=F', '銅'], ['CL=F', 'WTI 原油'], ['BZ=F', '布蘭特原油'], ['NG=F', '天然氣'], ['ZS=F', '黃豆'], ['ZW=F', '小麥'],
@@ -241,7 +250,8 @@ module.exports = async (req, res) => {
   const mk = {};
   const spark = await safe('市場行情', () => yspark(Object.values(MARKETS).flat().map(m => m[0])));
   Object.entries(MARKETS).forEach(([e, list]) => { mk[e] = list.map(([sym, name]) => spark?.[sym] && { ...spark[sym], name }).filter(Boolean); });
-  const margin = await safe('融資維持率', twMargin);
+  const [margin, otc] = await Promise.all([safe('融資維持率', twMargin), safe('櫃買指數', twOTC)]);
+  if (otc) (mk.tw = mk.tw || []).push(otc);
   const L = arr => arr.filter(Boolean);
   const O = 'OECD', OCLI = 'OECD 綜合領先指標（100 為長期趨勢）';
   const eco = {

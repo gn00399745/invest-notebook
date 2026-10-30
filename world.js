@@ -327,7 +327,7 @@ function globalView() {
   const us = k => { const r = S.macro.rows.find(x => x.key === k); return r?.latest ? num(r.latest) : null; };
   // 1. 股市報酬表
   const idx = Object.entries(w?.economies || {}).filter(([id]) => id !== 'assets').flatMap(([id, e]) => (e.markets || []).filter(m => !/=X$|DX-Y|VIX/.test(m.sym)).map(m => ({ ...m, id })));
-  const order = ['^GSPC', '^IXIC', '^SOX', '^N225', '^HSI', '000300.SS', '000001.SS', 'BSE-100.BO', '^BSESN', '^TWII', '^TWOII', '^KS11', '^STOXX50E'];
+  const order = ['^GSPC', '^IXIC', '^SOX', '^N225', '^HSI', '000300.SS', '000001.SS', 'BSE-100.BO', '^BSESN', '^TWII', 'TPEX', '^KS11', '^STOXX50E'];
   idx.sort((a, b) => order.indexOf(a.sym) - order.indexOf(b.sym));
   const mkt = idx.length ? `<div class="card"><h3 class="gold-bar">📊 全球股市報酬（本地貨幣計價，%）</h3>${gtable(['指數', '水平', '1 天', '7 天', '1 個月', '年初至今'], idx.map(m => `<div class="gt-r ${m.sym === '^TWII' ? 'hl' : ''}"><span>${esc(m.name)}</span><span>${fmt(m.price, m.price < 100 ? 2 : 0)}</span><span style="${heat(m.chg1d, 2)}">${pc(m.chg1d)}</span><span style="${heat(m.chg1w, 4)}">${pc(m.chg1w)}</span><span style="${heat(m.chg1m, 8)}">${pc(m.chg1m)}</span><span style="${heat(m.ytd, 40)}">${pc(m.ytd)}</span></div>`), 'mk')}</div>` : '';
   // 2. 經濟體總覽表
