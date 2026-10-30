@@ -1140,3 +1140,18 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .bk-card .bk-r { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 10px; border: 1px solid #e6e8ee; border-radius: 10px; font-size: 13px; }
 .bk-card .bk-r span { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 180px; } .bk-card .bk-r i { font-style: normal; padding: 2px 8px; border-radius: 999px; background: #f1f3f7; }
 .bk-card .bk-r i.gold { background: #fbf1dc; color: #9a6b12; } .bk-card .bk-r i.neg { background: #fbeaea; color: #b03a3a; } .bk-card .bk-r i.pos { background: #e3f5ec; color: #17784a; }
+.oa { display: grid; gap: 12px; } .oa-sec { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; }
+.oa-sec.hit { background: #fdf1e2; } .oa-sec.near { background: #eef3fb; }
+.oa-i { display: grid; gap: 2px; font-size: 14px; padding: 6px 0; border-top: 1px dashed rgba(0,0,0,.08); } .oa-i:first-of-type { border-top: 0; }
+.oa-i em { font-style: normal; color: #5b6478; font-size: 13px; } .oa-i small { color: #8a6a1e; }
+
+/* ===== 交易成績單 ===== */
+.tr-card .tr-v { padding: 10px 12px; border-radius: 12px; font-size: 14px; margin: 4px 0 12px; background: #f1f3f7; }
+.tr-card .tr-v.pos { background: #e3f5ec; color: #17784a; } .tr-card .tr-v.gold { background: #fbf1dc; color: #8a5e0b; } .tr-card .tr-v.neg { background: #fbeaea; color: #a33232; }
+.tr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.tr-t { display: grid; gap: 2px; padding: 10px; border: 1px solid #e6e8ee; border-radius: 12px; } .tr-t span { font-size: 12px; color: #6b7385; } .tr-t b { font-size: 20px; } .tr-t small { font-size: 11px; color: #8a91a2; }
+/* ===== 大師檢查表 ===== */
+.ms-list { display: grid; gap: 8px; margin: 8px 0; }
+.ms-m { border: 1px solid #e6e8ee; border-radius: 12px; padding: 8px 12px; } .ms-m > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; cursor: pointer; list-style: none; }
+.ms-m > summary::-webkit-details-marker { display: none; } .ms-m > summary em { font-style: normal; font-size: 12px; color: #6b7385; flex: 1 1 140px; } .ms-m > summary i { font-style: normal; }
+.ms-c { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px dashed #e6e8ee; font-size: 13px; } .ms-c small { color: #6b7385; white-space: nowrap; } .ms-c.na { color: #9aa1b0; }

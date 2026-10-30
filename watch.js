@@ -85,3 +85,31 @@ document.addEventListener('change', e => {
   S.autoLvl = t.checked; if (t.checked) { const n = autoLevels(); toast(n ? `已為持有股設 ${n} 個價位` : '持有股的價位都已設好'); } save(); render();
 });
 if (current === 'monitor') render();
+
+/* ---------- 打開 App 時的到價提示 ----------
+   打開（或切回）App 時：更新股價 → 檢查所有條件 → 跳出視窗列出「已到價」和「接近中（3% 內）」。 */
+let monP = Promise.resolve();
+const _cmW = checkMonitors;
+checkMonitors = function () { monP = Promise.resolve(_cmW.apply(this, arguments)).catch(() => {}); return monP; };
+let oaBusy = false, oaLast = 0;
+if (S.alertSeenN == null) S.alertSeenN = (S.monAlerts || []).length; // 第一次只提示之後的新提醒
+async function openAlert(force) {
+  if (oaBusy || !location.protocol.startsWith('http')) return;
+  if (!force && Date.now() - oaLast < 10 * 60e3) return;
+  oaBusy = true; oaLast = Date.now();
+  try { await refreshCardQuotes(false); await checkMonitors(false); await monP; } catch (e) { /* ignore */ }
+  oaBusy = false;
+  const all = S.monAlerts || [], from = Math.min(S.alertSeenN || 0, all.length), fresh = all.slice(from);
+  const near = S.monitors.filter(m => m.status === '啟用' && m.metric === '收盤價' && num(m.lastVal) && num(m.value))
+    .map(m => ({ m, d: (num(m.lastVal) / num(m.value) - 1) * 100 }))
+    .filter(o => (o.m.op === '低於' ? o.d > 0 : o.d < 0) && Math.abs(o.d) <= 3).sort((a, b) => Math.abs(a.d) - Math.abs(b.d));
+  S.alertSeenN = all.length; save();
+  if (!fresh.length && !near.length) return;
+  const body = `<div class="oa">
+    ${fresh.length ? `<div class="oa-sec hit"><b>🔔 已到價／有變化</b>${fresh.map(a => `<div class="oa-i">${esc(a)}</div>`).join('')}</div>` : ''}
+    ${near.length ? `<div class="oa-sec near"><b>⏳ 接近中（差 3% 以內）</b>${near.map(({ m, d }) => `<div class="oa-i"><span>${esc(m.target || m.code)}</span><em>${esc((m.cond || '').split('（')[0])}</em><small>現價 ${fmtP(num(m.lastVal))}・還差 ${fmt(Math.abs(d), 1)}%</small></div>`).join('')}</div>` : ''}
+    <div class="help">價格約延遲 20 分鐘；用當天最高／最低價判斷。要到價自動成交，請到研究卡按「📋 複製給券商」設條件單。</div></div>`;
+  openModal({ title: fresh.length ? '🔔 到價提示' : '⏳ 快到價了', body, noSave: true });
+}
+setTimeout(() => openAlert(true), 2500);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') openAlert(false); });

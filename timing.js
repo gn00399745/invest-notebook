@@ -899,14 +899,15 @@ document.addEventListener('click', e => {
 checkMonitors = async function (manual) {
   const list = S.monitors.filter(m => m.status === '啟用' && m.code && m.metric && num(m.value) != null);
   if (!list.length) { if (manual) toast('沒有可自動檢查的條件（需填代號、指標與數值）'); return; }
-  if (!manual && S.monCheckedAt && Date.now() - S.monCheckedAt < 30 * 60e3) return;
+  if (!manual && S.monCheckedAt && Date.now() - S.monCheckedAt < 10 * 60e3) return;
   S.monCheckedAt = Date.now(); const hits = [];
   for (const m of list) {
     try {
       const d = await quote(m.code), n = d.num;
       if (m.dyn && n[m.dyn]) { const tw = /^\d/.test(m.code), p = rnd(n[m.dyn] * (m.lvl?.startsWith('stop') ? 0.97 : 1), tw, m.op === '高於'); m.value = String(p); m.cond = m.cond.replace(/(跌破|站上|跌到|漲到) [\d,.]+/, `$1 ${fmtP(p)}`); }
       const v = metricVal(m.metric, n); m.lastVal = v; m.lastCheck = d.priceDate;
-      if (v != null && (m.op === '低於' ? v < num(m.value) : v > num(m.value))) { m.status = '已觸發'; m.triggeredAt = today(); hits.push(`${m.target || m.code}：${m.cond || `${m.metric} ${v}（${m.op} ${m.value}）`}，現價 ${v}`); }
+      const px = m.metric === '收盤價' && n.hi != null ? (m.op === '低於' ? n.lo : n.hi) : v; // 價格用當天最高／最低價判斷：盤中碰到也算
+      if (px != null && (m.op === '低於' ? px <= num(m.value) : px >= num(m.value))) { m.status = '已觸發'; m.triggeredAt = today(); hits.push(`${m.target || m.code}：${m.cond || `${m.metric} ${v}（${m.op} ${m.value}）`}，現價 ${v}${px !== v ? `（盤中${m.op === '低於' ? '最低' : '最高'} ${px}）` : ''}`); }
     } catch (e) { m.lastVal = null; m.lastCheck = '檢查失敗'; }
   }
   save();
@@ -1088,12 +1089,15 @@ const TGT_M = { ai: 30, ev: 15, fin: 30, cons: 22, ship: 15, sat: 35, champ: 18,
 const MAT = { evRev: 3, evEbitda: 10 }; // 10 年後的成熟倍數上限
 const peersOf = c => { const tw = /^\d/.test(c.code); return Object.entries(CODE_LAYER).filter(([k, v]) => v === c.layer && k !== c.code && (tw ? /^\d{4}$/.test(k) : /^[A-Z.]+$/.test(k))).map(([k]) => k).slice(0, 10); };
 let peerBusy = {};
+const peerFail = {};
 async function loadPeers(c, force) {
   if (!c.code || peerBusy[c.id] || !location.protocol.startsWith('http')) return;
   if (!force && c.peers && Date.now() - (c.peers.at || 0) < 24 * 3600e3 && c.peers.layer === c.layer) return;
-  peerBusy[c.id] = 1;
-  try { const j = await (await fetch(`api/peers?code=${encodeURIComponent(c.code)}&peers=${peersOf(c).join(',')}`, { signal: AbortSignal.timeout(40000) })).json(); if (!j.error) { j.at = Date.now(); j.layer = c.layer; c.peers = j; save(); } } catch (e) { /* 略過 */ }
-  delete peerBusy[c.id]; if (openCardId === c.id) { const y = scrollY; render(); scrollTo(0, y); }
+  if (!force && peerFail[c.id] && Date.now() - peerFail[c.id] < 30 * 60e3) return; // 失敗後 30 分鐘內不重試（避免一直重抓、畫面一直重畫）
+  peerBusy[c.id] = 1; let ok = false;
+  try { const j = await (await fetch(`api/peers?code=${encodeURIComponent(c.code)}&peers=${peersOf(c).join(',')}`, { signal: AbortSignal.timeout(40000) })).json(); if (!j.error) { j.at = Date.now(); j.layer = c.layer; c.peers = j; save(); ok = true; } } catch (e) { /* 略過 */ }
+  if (!ok) peerFail[c.id] = Date.now();
+  delete peerBusy[c.id]; if (ok && openCardId === c.id) { const y = scrollY; render(); scrollTo(0, y); }
 }
 function dcfProject(c, N, mode) {
   const F = c.fm, D = discountRate(c), mo = c.mo || {}; if (!F?.rev || !F.shares) return null;
