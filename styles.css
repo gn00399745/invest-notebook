@@ -1277,3 +1277,16 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .rp-sz { font-size: 12.5px; padding: 6px 8px; border-radius: 8px; background: rgba(127,140,160,.12); margin-bottom: 6px; }
 .rd-rule { border-left: 4px solid var(--red); }
 .rd-rule ol { margin: 0; padding-left: 22px; font-size: 14px; line-height: 1.7; }
+
+/* 九大市場指標 */
+.sig-lv { font-style: normal; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: rgba(127,140,160,.14); }
+.sig-lv.g { background: rgba(30,158,90,.15); color: var(--green); } .sig-lv.r { background: rgba(214,69,69,.14); color: var(--red); }
+.sig-lv.y { background: rgba(212,154,0,.15); color: var(--gold-t); } .sig-lv.o { background: rgba(124,77,255,.15); color: #7c4dff; }
+.sig-sum { font-size: 13px; margin-bottom: 8px; }
+.sig-list { display: grid; gap: 6px; }
+@media (min-width: 900px) { .sig-list { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); } }
+.sig-r { display: grid; grid-template-columns: 22px 1fr; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 10px; }
+.sig-r.g { border-left-color: var(--green); } .sig-r.y { border-left-color: var(--yellow); } .sig-r.r { border-left-color: var(--red); } .sig-r.o { border-left-color: #7c4dff; }
+.sig-t { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; } .sig-t em { font-style: normal; font-size: 11.5px; color: var(--muted); flex: 1 1 120px; }
+.sig-t span { font-size: 12px; font-variant-numeric: tabular-nums; }
+.sig-x { font-size: 13.5px; font-weight: 600; margin-top: 2px; } .sig-m { font-size: 11.5px; color: var(--muted); margin-top: 2px; }

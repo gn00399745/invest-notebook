@@ -126,7 +126,7 @@ async function yq(sym) {
   return { sym, price: r2(last, last < 10 ? 4 : 2), chg1d: prev ? r2((last / prev - 1) * 100) : null, chg1m: m1 ? r2((last / m1 - 1) * 100) : null, spark: c.slice(-60).map(x => r2(x[1], 4)), date: new Date(c[c.length - 1][0] * 1000).toISOString().slice(0, 10) };
 }
 const MARKETS = {
-  tw: [['^TWII', '加權指數'], ['TWD=X', '美元兌台幣']], us: [['^GSPC', '標普 500'], ['^IXIC', '那斯達克綜合'], ['^SOX', '費城半導體'], ['DX-Y.NYB', '美元指數'], ['^VIX', 'VIX 恐慌指數']],
+  tw: [['^TWII', '加權指數'], ['TWD=X', '美元兌台幣']], us: [['^GSPC', '標普 500'], ['^IXIC', '那斯達克綜合'], ['^SOX', '費城半導體'], ['DX-Y.NYB', '美元指數'], ['^VIX', 'VIX 恐慌指數'], ['^DJI', '道瓊工業']],
   cn: [['000300.SS', '滬深 300'], ['CNY=X', '美元兌人民幣'], ['000001.SS', '上證指數']], jp: [['^N225', '日經 225'], ['JPY=X', '美元兌日圓']],
   eu: [['^STOXX50E', '歐洲斯托克 50'], ['EURUSD=X', '歐元兌美元']], hk: [['^HSI', '恒生指數'], ['HKD=X', '美元兌港幣']], kr: [['^KS11', '韓國綜合'], ['KRW=X', '美元兌韓元']], in: [['BSE-100.BO', '印度 BSE 100'], ['^BSESN', '印度 Sensex']],
   assets: [['GC=F', '黃金'], ['SI=F', '白銀'], ['PL=F', '鉑金'], ['PA=F', '鈀金'], ['HG=F', '銅'], ['CL=F', 'WTI 原油'], ['BZ=F', '布蘭特原油'], ['NG=F', '天然氣'], ['ZS=F', '黃豆'], ['ZW=F', '小麥'],

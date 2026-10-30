@@ -3,7 +3,7 @@
    含寬表格或圖表的卡片佔滿整列。手機版不受影響。 */
 const DESK = () => innerWidth >= 1280;
 // 欄位多的表格、大圖表放整列
-const isWide = c => c.classList.contains('wide') || !!c.querySelector('.w-hero, .tm-clock, .tm-a, .ind-grid, .tr-grid, .rc-list, .chart') ||
+const isWide = c => c.classList.contains('wide') || !!c.querySelector('.w-hero, .tm-clock, .tm-a, .sig-list, .ind-grid, .tr-grid, .rc-list, .chart') ||
   [...c.querySelectorAll('.gt')].some(g => +(g.style.getPropertyValue('--n') || 0) >= 5) || [...c.querySelectorAll('table')].some(t => (t.rows[0]?.cells.length || 0) >= 5);
 function deskLayout() {
   const v = $('#view'); if (!v) return;

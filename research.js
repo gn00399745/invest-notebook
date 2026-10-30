@@ -289,7 +289,8 @@ const RD_TIERS = [['低價', '百元內', x => x.close < 100], ['高價', '百�
 const rdTick = (p, up) => typeof rnd === 'function' ? rnd(p, true, up) : Math.round(p * 100) / 100;
 const rdP = p => p == null ? '—' : fmt(p, p < 100 ? 2 : 1);
 function radarMarket() {
-  try { const v = typeof verdict === 'function' ? verdict('tw') : null; return v ? { z: v.z, n: EXT_Z[v.z].n, ic: EXT_Z[v.z].ic, ph: v.P } : null; } catch (e) { return null; }
+  try { const v = typeof verdict === 'function' ? verdict('tw') : null; const M = typeof mktSignals === 'function' ? mktSignals() : null;
+    return v ? { z: v.z, n: EXT_Z[v.z].n, ic: EXT_Z[v.z].ic, ph: v.P, sig: M?.rows.length ? M.lv[0] : null, sigN: M?.lv[1] } : null; } catch (e) { return null; }
 }
 function radarPlan(x, mkt) {
   const s = x.spark || []; if (s.length < 40 || !x.close) return null;
@@ -315,6 +316,8 @@ function radarPlan(x, mkt) {
   if (mkt && (mkt.z === 'boil' || mkt.z === 'hot')) { P.half = true; P.why.push(`大盤${mkt.n}：只買半批`); }
   if (mkt && mkt.z === 'ice') P.why.push('大盤冰水區：可照計畫分批');
   if (mkt?.ph === '收縮') { P.half = true; P.why.push('景氣收縮：部位減半'); }
+  if (mkt?.sig === 'r') { P.half = true; P.why.push('九大指標逆風：只買半批'); }
+  if (mkt?.sig === 'o') P.why.push('VIX ≥ 40 罕見機會：照計畫分批承接');
   if (P.card && (P.card[1] === 'neg' || /偏貴|觀望/.test(P.card[0]))) { if (P.act === 'buy') { P.act = 'wait'; P.lbl = '研究卡不建議'; } P.why.push(`你的研究卡：${P.card[0]}`); }
   else if (P.card) P.why.push(`你的研究卡：${P.card[0]}`);
   if ((x.warn || []).some(w => /虧損/.test(w))) { P.half = true; P.why.push('近四季虧損：獲利還沒跟上營收，部位減半'); }
@@ -376,14 +379,14 @@ PAGES.radar = () => {
     <div class="rd-steps">${[['1', '營收動能', '月營收年增、累計年增'], ['2', '趨勢轉強', '站上均線、多頭排列'], ['3', '相對強勢', '逼近新高、強於大盤'], ['4', '量能確認', '近 5 日量放大'], ['5', '研究卡驗證', '產業、財報、估值、籌碼']].map(([n, t, s]) => `<div><b>${n}</b><span>${t}</span><em>${s}</em></div>`).join('')}</div>
     <div class="help">分數滿分 100：營收 30、趨勢 20、新高 15、相對強度 15、量能 10；離月線太遠（短線漲多）會扣分。</div>
     <div class="help" style="margin-top:6px"><b>交易計畫怎麼算：</b>買進區＝月線到「月線＋1.5 天平均波動」；停損＝跌破季線或虧 8% 先到者（最多 10%）；停利＝風險的 2 倍（賠 1 賺 2）；股數＝跌到停損最多虧可投資資產 1%、單檔不超過 10%。
-    同時參考你的市場研究：大盤溫度偏熱／滾水區或景氣收縮時只買半批；有研究卡的，研究卡判斷偏貴或觀望就不建議買。</div></details>
+    同時參考你的市場研究：大盤溫度偏熱／滾水區、景氣收縮或九大指標逆風時只買半批；有研究卡的，研究卡判斷偏貴或觀望就不建議買。</div></details>
   <div class="chips">${RADAR_P.map(([k, l]) => `<button class="chip ${k === p[0] ? 'on' : ''}" data-radarp="${k}">${l}</button>`).join('')}</div>
-  <div class="card rd-rule"><div class="card-head"><h3 class="gold-bar">⚠️ 交易紀律：買之前先讀，買了就照做</h3>${mkt ? `<span class="pill">台股大盤 ${mkt.ic} ${esc(mkt.n)}${mkt.ph ? `・景氣${esc(mkt.ph)}` : ''}</span>` : ''}</div>
+  <div class="card rd-rule"><div class="card-head"><h3 class="gold-bar">⚠️ 交易紀律：買之前先讀，買了就照做</h3>${mkt ? `<span class="pill">台股大盤 ${mkt.ic} ${esc(mkt.n)}${mkt.ph ? `・景氣${esc(mkt.ph)}` : ''}${mkt.sigN ? `・九大指標${esc(mkt.sigN)}` : ''}</span>` : ''}</div>
     <ol>
       <li><b>只在買進區買。</b>價格沒到就不買，寧可錯過，不要追高。</li>
       <li><b>停損價收盤跌破就賣，</b>不攤平、不往下移停損、不「再等等看」。</li>
       <li><b>到停利價先賣一半，</b>剩下一半收盤跌破月線就全部賣出。</li>
-      <li><b>股數照建議，</b>每筆最多虧總資金 1%；大盤偏熱、滾水區或景氣收縮時只買半批。</li>
+      <li><b>股數照建議，</b>每筆最多虧總資金 1%；大盤偏熱、滾水區、景氣收縮或九大指標逆風時只買半批。</li>
       <li><b>買進理由消失就出場：</b>下個月營收年增掉到 15% 以下、或研究卡「證明我錯」的條件成立。</li>
       <li><b>按「鎖定計畫」後價位就固定，</b>之後不因股價漲跌改計畫；要改先寫進覆盤，說清楚為什麼。</li>
     </ol></div>

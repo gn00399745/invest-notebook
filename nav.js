@@ -71,7 +71,9 @@ PAGES.home = () => {
         const v = verdict(id), P = typeof phaseOf === 'function' ? phaseOf(id) : null;
         return `<div class="mk-r"><b>${l}</b>${P ? `<i class="sigp ${PHASE[P.ph].c}">景氣${P.ph}</i>` : ''}${v ? `<i class="dc-z ${v.z}">${EXT_Z[v.z].ic} ${EXT_Z[v.z].n}</i><span>${v.M.ic} ${esc(v.M.n)}：${esc(v.M.short)}</span>` : '<span class="help">讀取中…</span>'}</div>`;
       }).join('');
-      snap = `<div class="card mk"><div class="card-head"><h3 class="gold-bar">今天的市場</h3><button class="btn-small ghost" data-go="timing">進出場時機 →</button></div>${rows}</div>`;
+      const M = typeof mktSignals === 'function' ? mktSignals() : null;
+      const sig = M?.rows.length ? `<div class="mk-r"><b>九大指標</b><i class="sig-lv ${M.lv[0]}">${SIG_IC[M.lv[0]]} ${M.lv[1]}</i><span>🟢 ${M.g}　🟡 ${M.y}　🔴 ${M.red}${M.rows.filter(r => r.c === 'r' || r.c === 'o').map(r => `｜${esc(r.n)}`).join('')}</span></div>` : '';
+      snap = `<div class="card mk"><div class="card-head"><h3 class="gold-bar">今天的市場</h3><button class="btn-small ghost" data-go="timing">進出場時機 →</button></div>${rows}${sig}</div>`;
     }
   } catch (e) { /* 市場資料未載入 */ }
   // 放在右側欄最上面（手機版排在持股之後）

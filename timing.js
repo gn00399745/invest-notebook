@@ -767,7 +767,7 @@ PAGES.timing = () => {
     ${hit.length ? `<div class="help">最近觸發：${hit.map(m => esc(`${m.target}：${m.cond || m.metric}`)).join('；')}</div>` : ''}
     <div class="btn-row" style="margin-top:8px">${need.length ? `<button class="btn-small" data-mkmon="__all">🔔 一次幫 ${need.length} 檔設好建議監控</button>` : ''}<button class="btn-small ghost" id="monCheck">立即檢查</button><button class="btn-small ghost" data-go="monitor">管理監控 ›</button></div></div>`;
   return `<h2>進出場時機</h2><p class="lead">把週期、極端訊號、個股判斷、監控串成同一套流程：<b>週期決定放多少</b>、<b>溫度決定用哪種模式</b>、<b>個股決定買賣哪檔</b>、<b>監控在條件到了時提醒你</b>。</p>
-    ${top}${cyc}${tmp}${lst}${mon}
+    ${top}${typeof sigCardHTML === 'function' ? sigCardHTML() : ''}${cyc}${tmp}${lst}${mon}
     <details class="card rc-sub" ${S.tmGuide ? 'open' : ''} id="tmGuide"><summary>📋 進場與退場時機清單</summary>${TIMING_GUIDE}</details>`;
 };
 document.addEventListener('click', e => {
