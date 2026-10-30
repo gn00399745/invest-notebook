@@ -618,7 +618,7 @@ PAGES.home = () => {
   ].map(o => `<div class="arow" data-edit="${o.k}" data-id="${o.id}"><span class="a-ic">${o.ic}</span><span class="a-t"><b>${esc(o.t)}</b><em>${esc(o.s)}</em></span><span class="a-v">${o.v}</span></div>`).join('');
   const fxNote = S.accounts.concat(S.insurance).some(a => a.ccy && a.ccy !== 'TWD') || W.us ? `<div class="help">外幣以 1 USD = ${fmt(rate('USD'), 2)} 元等即時匯率換算成台幣。</div>` : '';
   return `${alerts}${pend}${missingCard()}
-  <div class="home-grid">
+  <div class="home-grid"><div class="hg-main">
   <div class="hero d-hero">
     <div class="h-lbl">淨資產（新台幣）</div>
     <div class="h-num">${fmt(W.net)}</div>
@@ -629,10 +629,9 @@ PAGES.home = () => {
     <button data-act="exp"><i>➖</i>記支出</button><button data-act="inc"><i>➕</i>記收入</button>
     <button data-act="buy"><i>📈</i>買股票</button><button data-act="sheet"><i>🗂️</i>更多</button>
   </div>
-  ${(() => { const L = S.monitors.filter(m => m.status === '啟用' && m.code && num(m.value)).map(m => ({ m, d: num(m.lastVal) ? (num(m.lastVal) / num(m.value) - 1) * 100 : null })).sort((a, b) => (a.d == null) - (b.d == null) || Math.abs(a.d) - Math.abs(b.d)).slice(0, 6);
-    return `<div class="card d-watch"><div class="card-head"><h3 class="gold-bar">🔔 到價監控</h3><button class="btn-small ghost" data-go="monitor">全部 →</button></div>${L.length ? L.map(({ m, d }) => `<div class="dw-r" data-go="monitor"><span><b>${esc(m.target || m.code)}</b></span><b class="${d != null && Math.abs(d) <= 3 ? 'near' : ''}">${d == null ? '—' : `差 ${fmt(Math.abs(d), 1)}%`}</b><em>${esc((m.cond || `${m.op} ${m.value}`).split('（')[0])}</em></div>`).join('') : '<div class="empty">還沒有到價條件。持有股票後會自動設好停利、停損價位。</div>'}</div>`; })()}
+
   ${onboard ? `<div class="d-full">${onboard}</div>` : ''}
-  <div class="card d-month">
+  <div class="hg-pair"><div class="card d-month">
     <div class="card-head"><h3 class="gold-bar">${+m.slice(5)} 月收支</h3><button class="btn-small ghost" data-go="ledger">看明細 →</button></div>
     <div class="mstats"><div><em>收入</em><b class="up">${fmt(M.inc)}</b></div><div><em>支出</em><b class="down">${fmt(M.exp)}</b></div><div><em>結餘</em><b>${fmt(M.net)}</b></div><div><em>儲蓄率</em><b>${M.rate == null ? '—' : fmt(M.rate, 0) + '%'}</b></div></div>
     ${M.cats.length ? `<div style="margin-top:10px">${M.cats.slice(0, 4).map(([c, v]) => bar(c, v, M.cats[0][1], catIcon('支出', c))).join('')}</div>` : '<div class="empty">這個月還沒記帳。設定薪水、房租等固定收支後會自動記入。</div>'}
@@ -643,18 +642,22 @@ PAGES.home = () => {
     <div class="btn-row" style="margin-top:8px"><button class="btn-small ghost" id="walletToAlloc">同步到策略頁的目標配置</button></div>
     ${fxNote}
   </div>
+  </div>
   <div class="card d-hold">
     <div class="card-head"><h3 class="gold-bar">我的持股</h3><div class="btn-row"><button class="btn-small ghost" id="qRefresh">更新現價</button><button class="btn-small ghost" data-act="import">匯入庫存</button></div></div>
     ${hold ? `<div class="hgrid">${hold}</div>` : '<div class="empty">還沒有持股。按「匯入庫存」照抄券商 App 的庫存，或按「買股票」記一筆。</div>'}
     ${W.realized ? `<div class="help" style="margin-top:6px">已實現損益累計 ${signed(W.realized)} 元</div>` : ''}
   </div>
+  <div class="card d-full"><div class="card-head"><h3 class="gold-bar">投資研究</h3><button class="btn-small ghost" data-go="overview">研究總覽 →</button></div>
+    <div class="help" style="font-size:14px">總經燈號、研究卡、ETF 健檢、技術分析教學都在「研究」「市場」分頁。</div></div>
+  </div><div class="hg-side">
+  ${(() => { const L = S.monitors.filter(m => m.status === '啟用' && m.code && num(m.value)).map(m => ({ m, d: num(m.lastVal) ? (num(m.lastVal) / num(m.value) - 1) * 100 : null })).sort((a, b) => (a.d == null) - (b.d == null) || Math.abs(a.d) - Math.abs(b.d)).slice(0, 6);
+    return `<div class="card d-watch"><div class="card-head"><h3 class="gold-bar">🔔 到價監控</h3><button class="btn-small ghost" data-go="monitor">全部 →</button></div>${L.length ? L.map(({ m, d }) => `<div class="dw-r" data-go="monitor"><span><b>${esc(m.target || m.code)}</b></span><b class="${d != null && Math.abs(d) <= 3 ? 'near' : ''}">${d == null ? '—' : `差 ${fmt(Math.abs(d), 1)}%`}</b><em>${esc((m.cond || `${m.op} ${m.value}`).split('（')[0])}</em></div>`).join('') : '<div class="empty">還沒有到價條件。持有股票後會自動設好停利、停損價位。</div>'}</div>`; })()}
   <div class="card d-other">
     <div class="card-head"><h3 class="gold-bar">存款、貴金屬、保單、房產</h3><button class="btn-small" data-act="sheetAsset">＋ 新增</button></div>
     ${other || '<div class="empty">還沒有資料。</div>'}
   </div>
-  <div class="card d-full"><div class="card-head"><h3 class="gold-bar">投資研究</h3><button class="btn-small ghost" data-go="overview">研究總覽 →</button></div>
-    <div class="help" style="font-size:14px">總經燈號、研究卡、ETF 健檢、技術分析教學都在「研究」「市場」分頁。</div></div>
-  </div>`;
+  </div></div>`;
 };
 
 /* ---------- 收支頁 ---------- */

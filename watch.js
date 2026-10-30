@@ -125,3 +125,8 @@ document.addEventListener('click', e => {
   Notification.requestPermission().then(p => { toast(p === 'granted' ? '已開啟通知：網頁開著時到價會跳出' : '沒有取得通知權限'); e.target.closest('[data-notify-on]')?.remove(); });
 });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') openAlert(false); });
+
+// 舊版提醒裡的長小數（例如 141.02999877929688）整理成兩位小數
+if (S.monAlerts?.length) S.monAlerts = S.monAlerts.map(a => String(a).replace(/\d+\.\d{5,}/g, m => (+m).toFixed(2)));
+// 市場資料是舊版（還沒有櫃買指數、融資維持率）時，自動重抓一次
+if (S.world && !S.world.economies?.tw?.margin && typeof loadWorld === 'function') setTimeout(() => loadWorld(true), 4000);

@@ -10,13 +10,20 @@ function deskLayout() {
   v.classList.toggle('desk', DESK());
   if (!DESK() || current === 'home') return;
   const kids = [...v.children]; let run = [];
+  // 一段連續的卡片：寬卡片佔整列；其餘依序放進比較矮的那一欄（兩欄各自往下排，不會留空）
   const flush = () => {
     if (run.length >= 2) {
-      const g = document.createElement('div'); g.className = 'dgrid';
-      run[0].before(g); run.forEach(c => { if (isWide(c)) c.classList.add('dg-wide'); g.appendChild(c); });
-      // 落單的半寬卡片（左右沒有可配對的）改成整列，避免旁邊空一塊
-      let grp = []; const end = () => { if (grp.length % 2) grp[grp.length - 1].classList.add('dg-wide'); grp = []; };
-      run.forEach(c => { if (c.classList.contains('dg-wide')) end(); else grp.push(c); }); end();
+      let seg = [];
+      const put = () => {
+        if (seg.length === 1) seg[0].classList.add('dg-wide');
+        if (seg.length >= 2) {
+          const g = document.createElement('div'); g.className = 'dgrid'; const cols = [document.createElement('div'), document.createElement('div')];
+          cols.forEach(c => { c.className = 'dcol'; g.appendChild(c); }); seg[0].before(g);
+          seg.forEach(c => { const k = cols[0].offsetHeight <= cols[1].offsetHeight ? 0 : 1; cols[k].appendChild(c); });
+        }
+        seg = [];
+      };
+      run.forEach(c => { if (isWide(c)) { put(); c.classList.add('dg-wide'); } else seg.push(c); }); put();
     }
     run = [];
   };
