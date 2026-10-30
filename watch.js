@@ -130,3 +130,54 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 if (S.monAlerts?.length) S.monAlerts = S.monAlerts.map(a => String(a).replace(/\d+\.\d{5,}/g, m => (+m).toFixed(2)));
 // 市場資料是舊版（還沒有櫃買指數、融資維持率）時，自動重抓一次
 if (S.world && !S.world.economies?.tw?.margin && typeof loadWorld === 'function') setTimeout(() => loadWorld(true), 4000);
+
+/* ---------- ETF：只提醒「跌到低點加碼」，不提醒賣出 ----------
+   ETF 是一籃子股票、適合長期分批持有，不用停利停損；價位改成季線、半年線、從高點回落 10%／20% 的加碼點。 */
+const ETF_US = /^(VOO|VTI|VT|SPY|IVV|QQQ|QQQM|DIA|IWM|VXUS|VEA|VWO|SCHD|SCHG|SCHB|VIG|VYM|VGT|XLK|SMH|SOXX|ARKK|BND|AGG|TLT|IEF|SHY|LQD|HYG|EMB|GLD|IAU|SLV|VNQ|VUG|VTV|RSP|JEPI|JEPQ|SPLG|ITOT|IXUS|EFA|EEM|IEFA|IEMG|BIL|SGOV|TQQQ|SOXL|UPRO|SSO|QLD)$/;
+function isEtfCard(c, code) {
+  const k = String(code || c?.code || '').toUpperCase();
+  return /^00\d{2,}/.test(k) || ETF_US.test(k) || /ETF|指數股票型/i.test(c?.name || '') || /ETF/.test(c?.layerWhy || '');
+}
+function etfLevels(x) {
+  const q = cqOf(x.code), n = q?.n; if (!n?.last) return [];
+  const tw = /^\d/.test(x.code), px = n.last, out = [];
+  const add = (label, p, dyn, why) => { if (!p || !isFinite(p)) return; p = rnd(p, tw, false); if (p >= px) return; if (out.some(o => Math.abs(o.p / p - 1) < 0.015)) return; out.push({ kind: 'buy', label, p, op: '低於', dyn, why, etf: 1 }); };
+  if (n.ma60 && px > n.ma60) add('回檔加碼', n.ma60, 'ma60', '回到季線');
+  if (n.ma120 && px > n.ma120) add('回檔加碼', n.ma120, 'ma120', '回到半年線');
+  if (n.hi52) { add('修正加碼', n.hi52 * 0.9, '', '從一年高點回落 10%'); add('大跌加碼', n.hi52 * 0.8, '', '從一年高點回落 20%'); }
+  if (!out.length && n.support < px) add('回檔加碼', n.support, '', '近 60 日低點');
+  return out.sort((a, b) => b.p - a.p).slice(0, 3).map((l, i) => ({ ...l, label: ['第一批加碼', '第二批加碼', '第三批加碼'][i] }));
+}
+const _plEtf = priceLevels;
+priceLevels = function (x) { return isEtfCard(x.c, x.code) ? etfLevels(x) : _plEtf.apply(this, arguments); };
+// ETF 舊的停利／停損提醒（系統算的價位）拿掉
+function etfCleanup() {
+  const before = S.monitors.length;
+  S.monitors = S.monitors.filter(m => !(m.lvl && /^(tp|trail|stop)/.test(m.lvl) && isEtfCard(S.cards.find(c => String(c.code).toUpperCase() === String(m.code).toUpperCase()), m.code)));
+  return before - S.monitors.length;
+}
+// ETF（持有或觀察中）都自動設加碼價位
+const _autoLvEtf = autoLevels;
+autoLevels = function () {
+  let n = _autoLvEtf(); etfCleanup();
+  if (!S.autoLvl) return n;
+  S.cards.filter(c => c.code && !c.example && isEtfCard(c)).forEach(c => {
+    const x = assetCheck(c); if (x.h) return; // 持有中的已在上面處理
+    priceLevels(x).forEach(l => {
+      const key = l.kind + l.label, code = x.code;
+      if (S.monitors.some(m => m.code === code && m.lvl === key && (m.status === '啟用' || (m.triggeredAt && Date.now() - new Date(m.triggeredAt) < 5 * 864e5)))) return;
+      S.monitors.push({ id: uid(), target: `${code} ${c.name || ''}`.trim(), code, metric: '收盤價', op: l.op, value: String(l.p), dyn: l.dyn, lvl: key, auto: 1, cond: `${l.label}：跌到 ${fmtP(l.p)}（${l.why}${l.dyn ? '，價位每日跟著均線更新' : ''}）`, action: '照計畫加碼一份（固定金額分批買）', notify: '券商到價通知', status: '啟用' });
+      n++;
+    });
+  });
+  // 持有中的 ETF：動作文字改成加碼
+  S.monitors.forEach(m => { if (m.auto && m.lvl?.startsWith('buy') && isEtfCard(null, m.code)) m.action = '照計畫加碼一份（固定金額分批買）'; });
+  return n;
+};
+// ETF 的「動作改變」只在變成買進／加碼時提醒，不提醒賣出
+const _vwEtf = verdictWatch;
+verdictWatch = function () {
+  const keep = {}; S.cards.filter(c => c.code && !c.example && isEtfCard(c)).forEach(c => { const k = String(c.code).toUpperCase(), x = cqOf(k)?.n ? assetCheck(c) : null; if (x?.st?.[0] && TG_SELL.test(x.st[0])) { keep[k] = 1; S.stPrev[k] = x.st[0]; } });
+  return _vwEtf();
+};
+if (etfCleanup()) save();
