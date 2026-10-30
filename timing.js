@@ -907,7 +907,7 @@ checkMonitors = async function (manual) {
       if (m.dyn && n[m.dyn]) { const tw = /^\d/.test(m.code), p = rnd(n[m.dyn] * (m.lvl?.startsWith('stop') ? 0.97 : 1), tw, m.op === '高於'); m.value = String(p); m.cond = m.cond.replace(/(跌破|站上|跌到|漲到) [\d,.]+/, `$1 ${fmtP(p)}`); }
       const v = metricVal(m.metric, n); m.lastVal = v; m.lastCheck = d.priceDate;
       const px = m.metric === '收盤價' && n.hi != null ? (m.op === '低於' ? n.lo : n.hi) : v; // 價格用當天最高／最低價判斷：盤中碰到也算
-      if (px != null && (m.op === '低於' ? px <= num(m.value) : px >= num(m.value))) { m.status = '已觸發'; m.triggeredAt = today(); hits.push(`${m.target || m.code}：${m.cond || `${m.metric} ${v}（${m.op} ${m.value}）`}，現價 ${v}${px !== v ? `（盤中${m.op === '低於' ? '最低' : '最高'} ${px}）` : ''}`); }
+      if (px != null && (m.op === '低於' ? px <= num(m.value) : px >= num(m.value))) { m.status = '已觸發'; m.triggeredAt = today(); hits.push(`${m.target || m.code}：${m.cond || `${m.metric} ${v}（${m.op} ${m.value}）`}，現價 ${m.metric === '收盤價' ? fmtP(v) : v}${px !== v ? `（盤中${m.op === '低於' ? '最低' : '最高'} ${fmtP(px)}）` : ''}`); }
     } catch (e) { m.lastVal = null; m.lastCheck = '檢查失敗'; }
   }
   save();
