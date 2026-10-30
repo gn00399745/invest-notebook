@@ -61,7 +61,7 @@ render = function () {
   renderSide();
 };
 
-/* ---------- 首頁：把「去別的分頁看」換成真正的市場摘要 ---------- */
+/* ---------- 首頁：今天的市場摘要（取代原本「去別的分頁看」的說明卡） ---------- */
 const _homeNav = PAGES.home;
 PAGES.home = () => {
   let snap = '';
@@ -69,33 +69,14 @@ PAGES.home = () => {
     if (typeof verdict === 'function') {
       const rows = [['tw', '🇹🇼 台股'], ['us', '🇺🇸 美股']].map(([id, l]) => {
         const v = verdict(id), P = typeof phaseOf === 'function' ? phaseOf(id) : null;
-        return `<div class="ms-r"><b>${l}</b>${P ? `<i class="sigp ${PHASE[P.ph].c}">景氣${P.ph}</i>` : ''}${v ? `<i class="dc-z ${v.z}">${EXT_Z[v.z].ic} ${EXT_Z[v.z].n}</i><span>${v.M.ic} ${esc(v.M.n)}：${esc(v.M.short)}</span>` : '<span class="help">讀取中…</span>'}</div>`;
+        return `<div class="mk-r"><b>${l}</b>${P ? `<i class="sigp ${PHASE[P.ph].c}">景氣${P.ph}</i>` : ''}${v ? `<i class="dc-z ${v.z}">${EXT_Z[v.z].ic} ${EXT_Z[v.z].n}</i><span>${v.M.ic} ${esc(v.M.n)}：${esc(v.M.short)}</span>` : '<span class="help">讀取中…</span>'}</div>`;
       }).join('');
-      snap = `<div class="card ms"><div class="card-head"><h3 class="gold-bar">今天的市場</h3><button class="btn-small ghost" data-go="timing">進出場時機 →</button></div>${rows}</div>`;
+      snap = `<div class="card mk"><div class="card-head"><h3 class="gold-bar">今天的市場</h3><button class="btn-small ghost" data-go="timing">進出場時機 →</button></div>${rows}</div>`;
     }
   } catch (e) { /* 市場資料未載入 */ }
-  return _homeNav().replace(/<div class="card"><div class="card-head"><h3 class="gold-bar">投資研究<\/h3>[\s\S]*?<\/div><\/div>\s*$/, snap);
-};
-
-/* ---------- 電腦版：首頁、收支、進出場時機分成左右兩欄 ---------- */
-const WIDE = matchMedia('(min-width: 1100px)');
-WIDE.addEventListener('change', () => { if (DASH[current]) { const y = scrollY; render(); scrollTo(0, y); } });
-const DASH = { home: { left: ['我的持股', '存款、貴金屬、保單、房產'], right: ['今天的市場', '月收支', '資產配置'] },
-  timing: { left: ['① 週期'], right: ['② 溫度'] },
-  ledger: { left: ['明細'], right: ['固定收支', '信用卡'] } };
-const _renderDash = render;
-render = function () {
-  _renderDash();
-  const d = DASH[current]; if (!d || !WIDE.matches) return;
-  const v = $('#view'), cards = [...v.children].filter(e => e.classList.contains('card') && !e.classList.contains('alert') && !e.classList.contains('onboard'));
-  const pick = names => names.map(n => cards.find(c => (c.querySelector('h3')?.textContent || '').includes(n))).filter(Boolean);
-  const L = pick(d.left), R = pick(d.right); if (!L.length || !R.length) return;
-  const at = [...L, ...R].sort((a, b) => a.compareDocumentPosition(b) & 4 ? -1 : 1)[0];
-  const wrap = document.createElement('div'); wrap.className = 'dash dash-' + current;
-  at.before(wrap);
-  const cl = document.createElement('div'), cr = document.createElement('div');
-  L.forEach(c => cl.appendChild(c)); R.forEach(c => cr.appendChild(c));
-  wrap.append(cl, cr);
+  // 放在右側欄最上面（手機版排在持股之後）
+  const html = _homeNav();
+  return html.includes('<div class="hg-side">') ? html.replace('<div class="hg-side">', '<div class="hg-side">' + snap) : html + snap;
 };
 
 // 匯出備份時記下日期（選單上的「該備份」提醒用）

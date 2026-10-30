@@ -447,6 +447,11 @@ async function us(code, errors) {
   return out;
 }
 
+async function liveTW(sym) {
+  const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=1d&interval=1d`, { signal: T(5000), headers: UA });
+  if (!r.ok) return null; const M = (await r.json()).chart?.result?.[0]?.meta; if (!M?.regularMarketPrice || !M.regularMarketTime) return null;
+  return { d: iso(M.regularMarketTime * 1000 + 8 * 3600e3), c: M.regularMarketPrice, h: M.regularMarketDayHigh ?? M.regularMarketPrice, l: M.regularMarketDayLow ?? M.regularMarketPrice, v: (M.regularMarketVolume || 0) / 1000 };
+}
 module.exports = async (req, res) => {
   const code = String(req.query.code || '').trim().toUpperCase().replace(/\.TW$/, '');
   if (!code) { res.status(400).json({ error: '請提供 code' }); return; }
@@ -458,11 +463,15 @@ module.exports = async (req, res) => {
         const [px, info] = await Promise.all([fm('TaiwanStockPrice', code, daysAgo(400)), fm('TaiwanStockInfo', code, '2000-01-01').catch(() => [])]);
         bars = px.filter(b => b.close > 0).map(b => ({ d: b.date, c: b.close, h: b.max, l: b.min, v: b.Trading_Volume / 1000 }));
         name = (info.find(x => x.stock_id === code) || info[0])?.stock_name;
+        // 盤中：FinMind 收盤後才更新，改用 Yahoo 的即時（延遲）價補上今天這一根
+        let live = null;
+        for (const sx of ['.TW', '.TWO']) { try { live = await liveTW(code + sx); if (live) break; } catch (e) { /* 換下一個 */ } }
+        if (live && bars.length) { const L = bars[bars.length - 1]; if (live.d > L.d) bars.push(live); else if (live.d === L.d) Object.assign(L, { c: live.c, h: Math.max(L.h || 0, live.h), l: Math.min(L.l || 1e12, live.l) }); }
       } else { const y = await yahooBars(code); bars = y.bars; name = y.name; }
       if (bars.length < 30) throw new Error('股價資料不足');
-      const t = technicals(bars);
-      res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=7200');
-      res.status(200).json({ code, name, price: t.num.last, prev: bars.length > 1 ? bars[bars.length - 2].c : null, priceDate: bars[bars.length - 1].d, market: /^\d/.test(code) ? '台股' : '美股', num: t.num });
+      const t = technicals(bars), B = bars[bars.length - 1];
+      res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=1800');
+      res.status(200).json({ code, name, price: t.num.last, prev: bars.length > 1 ? bars[bars.length - 2].c : null, priceDate: B.d, market: /^\d/.test(code) ? '台股' : '美股', num: Object.assign(t.num, { hi: B.h ?? B.c, lo: B.l ?? B.c }) });
     } catch (e) { res.status(502).json({ code, error: e.message }); }
     return;
   }

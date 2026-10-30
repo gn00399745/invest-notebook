@@ -85,10 +85,16 @@ function imfBars(e) {
   const ys = ['2025', '2026', '2027'], max = Math.max(...ys.map(y => Math.abs(g[y] || 0)), 1);
   return `<div class="w-imf"><div class="w-imf-h">IMF 預測　<small>經濟成長｜通膨${S.world?.imf?.snapshot ? `（${S.world.imf.snapshot} 版本）` : ''}</small></div>${ys.map(y => `<div class="w-bar"><span>${y}</span><div><i style="width:${Math.max(3, Math.abs(g[y] || 0) / max * 100)}%"></i></div><b>${g[y] ?? '—'}%</b><em>${c?.[y] != null ? c[y] + '%' : ''}</em></div>`).join('')}</div>`;
 }
+// 大盤融資維持率：越低代表散戶槓桿越緊（接近斷頭），越高代表融資戶賺錢、市場偏熱
+function marginTile(g) {
+  if (!g?.ratio) return '';
+  const z = g.ratio < 130 ? ['down', '斷頭壓力', '低於 130% 會出現大量追繳斷頭，常是恐慌低點附近'] : g.ratio < 150 ? ['down', '偏低', '融資戶普遍虧損，賣壓接近尾聲時常見'] : g.ratio < 170 ? ['', '正常', '散戶槓桿在正常範圍'] : ['up', '偏高', '融資戶普遍獲利、槓桿偏熱，留意追高風險'];
+  return `<div class="w-mkt w-mg" title="${esc(z[2])}"><em>${esc(g.name)}</em><b>${fmt(g.ratio, 1)}%</b><span><span class="${z[0]}">${z[1]}</span><small>${esc(g.date.slice(5))}</small></span><span>${g.balChg >= 0 ? '+' : ''}${fmt(g.balChg, 1)} 億<small>融資餘額 ${fmt(g.bal, 0)} 億</small></span></div>`;
+}
 function hero(e, extra = '') {
   const eco = S.world?.economies?.[e.id];
   return `<section class="w-hero"><div class="w-hero-t"><span class="w-flag">${e.flag}</span><div><div class="w-name">${e.name}</div><div class="w-rel">${esc(e.rel || '')}</div></div></div>
-    ${mktRow(eco?.markets)}${imfBars(e)}${extra}</section>`;
+    ${eco?.margin ? (mktRow(eco?.markets) || '<div class="w-mkts"></div>').replace(/<\/div>$/, marginTile(eco.margin) + '</div>') : mktRow(eco?.markets)}${imfBars(e)}${extra}</section>`;
 }
 function usCPI() { const r = S.macro.rows.find(x => x.key === 'cpi'); return r?.latest ? num(r.latest) : null; }
 function headline(id) {
@@ -320,8 +326,8 @@ function globalView() {
   const f = (id, k) => eco(id)?.indicators?.find(x => x.k === k);
   const us = k => { const r = S.macro.rows.find(x => x.key === k); return r?.latest ? num(r.latest) : null; };
   // 1. 股市報酬表
-  const idx = Object.entries(w?.economies || {}).filter(([id]) => id !== 'assets').flatMap(([id, e]) => (e.markets || []).filter(m => !/=X$|DX-Y/.test(m.sym)).map(m => ({ ...m, id })));
-  const order = ['^GSPC', '^IXIC', '^SOX', '^N225', '^HSI', '000300.SS', '000001.SS', 'BSE-100.BO', '^BSESN', '^TWII', '^KS11', '^STOXX50E'];
+  const idx = Object.entries(w?.economies || {}).filter(([id]) => id !== 'assets').flatMap(([id, e]) => (e.markets || []).filter(m => !/=X$|DX-Y|VIX/.test(m.sym)).map(m => ({ ...m, id })));
+  const order = ['^GSPC', '^IXIC', '^SOX', '^N225', '^HSI', '000300.SS', '000001.SS', 'BSE-100.BO', '^BSESN', '^TWII', 'TPEX', '^KS11', '^STOXX50E'];
   idx.sort((a, b) => order.indexOf(a.sym) - order.indexOf(b.sym));
   const mkt = idx.length ? `<div class="card"><h3 class="gold-bar">📊 全球股市報酬（本地貨幣計價，%）</h3>${gtable(['指數', '水平', '1 天', '7 天', '1 個月', '年初至今'], idx.map(m => `<div class="gt-r ${m.sym === '^TWII' ? 'hl' : ''}"><span>${esc(m.name)}</span><span>${fmt(m.price, m.price < 100 ? 2 : 0)}</span><span style="${heat(m.chg1d, 2)}">${pc(m.chg1d)}</span><span style="${heat(m.chg1w, 4)}">${pc(m.chg1w)}</span><span style="${heat(m.chg1m, 8)}">${pc(m.chg1m)}</span><span style="${heat(m.ytd, 40)}">${pc(m.ytd)}</span></div>`), 'mk')}</div>` : '';
   // 2. 經濟體總覽表
