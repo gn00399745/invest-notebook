@@ -1135,3 +1135,8 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .tg-card .tg-steps { margin: 10px 0 8px; padding-left: 20px; font-size: 13px; line-height: 1.7; } .tg-card code { background: #f2f2f2; padding: 1px 5px; border-radius: 4px; font-size: 12px; word-break: break-all; }
 .tg-card .tg-info { margin: 10px 0 8px; font-size: 13px; } .tg-card .pl-note { margin: 6px 0 10px; }
 .tg-card .tg-auto { display: flex; gap: 8px; align-items: center; margin-top: 12px; font-size: 13px; }
+.bk-card .bk-steps { margin: 10px 0; padding-left: 20px; font-size: 13px; line-height: 1.7; }
+.bk-card .bk-list { display: grid; gap: 8px; margin: 8px 0; }
+.bk-card .bk-r { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 10px; border: 1px solid #e6e8ee; border-radius: 10px; font-size: 13px; }
+.bk-card .bk-r span { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 180px; } .bk-card .bk-r i { font-style: normal; padding: 2px 8px; border-radius: 999px; background: #f1f3f7; }
+.bk-card .bk-r i.gold { background: #fbf1dc; color: #9a6b12; } .bk-card .bk-r i.neg { background: #fbeaea; color: #b03a3a; } .bk-card .bk-r i.pos { background: #e3f5ec; color: #17784a; }
