@@ -1,50 +1,5 @@
-/* 研究區改版：研究流程導覽、研究卡新版面、更多頁 */
+/* 研究區改版：產業頁、研究卡新版面、選股雷達 */
 'use strict';
-
-/* ---------- 研究流程導覽（取代研究分頁的平鋪按鈕） ---------- */
-const FLOWS = [
-  { k: '基本面', ic: '🏭', steps: [['industry', '產業地位'], ['cards', '個股研究'], ['etf', 'ETF 健檢']] },
-  { k: '技術面', ic: '📈', steps: [['learn', '技術教學'], ['claims', '待驗主張・回測']] },
-];
-const MORE_PAGES = ['strategy', 'trades', 'review', 'settings'];
-const _subNavW = window.subNav;
-window.subNav = p => {
-  if (FLOWS.some(f => f.steps.some(s => s[0] === p))) {
-    return `<div class="flow">${FLOWS.map(f => {
-      const on = f.steps.some(s => s[0] === p);
-      return `<div class="flow-row ${on ? 'on' : ''}"><span class="flow-k">${f.ic} ${f.k}</span><div class="flow-steps">${f.steps.map(([k, l], i) => `${i ? '<span class="flow-arr">›</span>' : ''}<button data-go="${k}" class="${k === p ? 'cur' : ''}"><b>${i + 1}</b>${l}</button>`).join('')}</div></div>`;
-    }).join('')}</div>`;
-  }
-  if (MORE_PAGES.includes(p)) return `<div class="backbar"><button data-go="more">‹ 更多</button></div>`;
-  if (p === 'more') return '';
-  return _subNavW(p);
-};
-
-/* ---------- 更多：有內容的清單，不重複導覽 ---------- */
-PAGES.more = () => {
-  const hs = holdings(), live = hs.filter(h => h.shares > 0);
-  const lastT = [...S.trades].sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
-  const pendRev = S.reviews.filter(r => !r.result).length;
-  const tot = S.alloc.reduce((s, a) => s + (num(a.value) || 0), 0);
-  const worst = tot ? S.alloc.map(a => ({ n: a.name, d: (num(a.value) || 0) / tot * 100 - (num(a.target) || 0) })).sort((a, b) => Math.abs(b.d) - Math.abs(a.d))[0] : null;
-  const ef = S.emergency || {}, efM = num(ef.monthly) ? (num(ef.have) || 0) / num(ef.monthly) : null;
-  const bk = S.lastExport ? Math.floor((Date.now() - S.lastExport) / 864e5) : null;
-  const size = (() => { try { return (localStorage.getItem(STORE_KEY) || '').length; } catch (e) { return 0; } })();
-  const row = (p, ic, t, s, badge) => `<button class="mrow" data-go="${p}"><span class="m-ic">${ic}</span><span class="m-t"><b>${t}</b><em>${s}</em></span>${badge ? `<span class="pill ${badge[1]}">${badge[0]}</span>` : ''}<span class="m-go">›</span></button>`;
-  return `<h2>更多</h2>
-  <div class="mgroup"><div class="mg-h">投資紀錄</div>
-    ${row('trades', '🧾', '交易紀錄', S.trades.length ? `${S.trades.length} 筆・持有 ${live.length} 檔${lastT ? `・最近 ${esc(lastT.date)} ${esc(lastT.side)} ${esc(lastT.code)}` : ''}` : '每筆買賣與當時的分析報告')}
-    ${row('review', '🔁', '覆盤', S.reviews.length ? `${S.reviews.length} 筆紀錄` : '檢討每筆決策做對、做錯什麼', pendRev ? [`${pendRev} 筆待填結果`, 'gold'] : null)}
-  </div>
-  <div class="mgroup"><div class="mg-h">規劃</div>
-    ${row('strategy', '🎯', '策略與資產配置', [worst ? `偏離最大：${esc(worst.n)} ${worst.d >= 0 ? '+' : ''}${fmt(worst.d, 1)}%` : '設定目標配置', efM != null ? `緊急預備金 ${fmt(efM, 1)} 個月` : '', '部位計算器'].filter(Boolean).join('・'), worst && Math.abs(worst.d) > 5 ? ['該再平衡', 'red'] : null)}
-  </div>
-  <div class="mgroup"><div class="mg-h">資料</div>
-    ${row('settings', '💾', '備份與設定', `${bk == null ? '還沒備份過' : bk === 0 ? '今天已備份' : `上次備份 ${bk} 天前`}・資料約 ${fmt(size / 1024, 0)} KB・只存在這台裝置`, bk == null || bk > 30 ? ['建議備份', 'red'] : null)}
-  </div>
-  <div class="help" style="text-align:center;margin-top:14px">研究工具在下方「研究」，總經與監控在「市場」。</div>`;
-};
-document.addEventListener('click', e => { if (e.target.closest('#exportBtn')) { S.lastExport = Date.now(); save(); } }, true);
 
 /* ---------- 產業頁：列出這條鏈上研究過的公司（產業 → 個股） ---------- */
 const _indPageR = PAGES.industry;
@@ -302,7 +257,6 @@ go(current);
 setTimeout(() => { if (holdings().some(h => h.shares > 0 && !S.cards.some(c => String(c.code).toUpperCase() === h.code))) syncHoldCards(); }, 2500);
 
 /* ---------- 選股雷達：營收動能 × 技術強勢 ---------- */
-FLOWS[0].steps.unshift(['radar', '選股雷達']);
 const RADAR_P = [
   ['綜合', '綜合分數', () => true, '營收、趨勢、新高、相對強度、量能加總'],
   ['營收', '營收爆發', x => x.revYoY >= 30 && x.cumYoY >= 10, '月營收年增 ≥30%、累計年增 ≥10%'],
@@ -335,7 +289,8 @@ PAGES.radar = () => {
   const list = (R?.list || []).filter(p[2]).filter(x => mk === '全部' || x.mkt === mk);
   const ym = R?.revYM ? `${+R.revYM.slice(0, 3) + 1911} 年 ${+R.revYM.slice(3)} 月` : '';
   const mine = code => S.cards.find(c => String(c.code) === code);
-  const rows = list.map((x, i) => `<div class="rd">
+  const RD_N = 30, shown = S.radarAll ? list : list.slice(0, RD_N);
+  const rows = shown.map((x, i) => `<div class="rd">
     <div class="rd-h"><span class="rd-rank">${i + 1}</span><div class="rd-id"><b>${esc(x.code)} ${esc(x.name)}</b><em>${esc(x.mkt)}・${esc(x.ind || '—')}${x.pe ? `・本益比 ${x.pe}` : ''}</em></div>
       <div class="rd-px"><b>${fmt(x.close, x.close < 100 ? 2 : 1)}</b>${x.r1m != null ? `<em class="${x.r1m >= 0 ? 'up' : 'down'}">近 1 月 ${pct(x.r1m)}</em>` : ''}</div>
       <div class="rd-sc ${x.score >= 70 ? 'hi' : x.score >= 50 ? 'mid' : ''}"><b>${x.score}</b><em>分</em></div></div>
@@ -352,17 +307,19 @@ PAGES.radar = () => {
       <a class="btn-small ghost" href="https://tw.stock.yahoo.com/quote/${esc(x.code)}.${x.mkt === '上櫃' ? 'TWO' : 'TW'}/revenue" target="_blank" rel="noopener">營收明細</a></div>
   </div>`).join('');
   return `<h2>選股雷達</h2>
-  <p class="lead">「飆股」通常同時具備兩件事：<b>基本面有新變化</b>（營收突然大幅成長）＋ <b>股價已經開始反映</b>（多頭排列、創新高、強於大盤、量增）。雷達每天從上市櫃全部股票篩一遍，給你值得研究的名單。</p>
-  <div class="card"><div class="rd-steps">${[['1', '營收動能', '月營收年增、累計年增'], ['2', '趨勢轉強', '站上均線、多頭排列'], ['3', '相對強勢', '逼近新高、強於大盤'], ['4', '量能確認', '近 5 日量放大'], ['5', '研究卡驗證', '產業、財報、估值、籌碼']].map(([n, t, s]) => `<div><b>${n}</b><span>${t}</span><em>${s}</em></div>`).join('')}</div>
-    <div class="help">分數滿分 100：營收 30、趨勢 20、新高 15、相對強度 15、量能 10；離月線太遠（短線漲多）會扣分。</div></div>
+  <details class="card rd-how"><summary>怎麼篩的？（營收動能 → 趨勢 → 相對強勢 → 量能 → 研究卡驗證）</summary>
+    <p class="lead" style="margin-top:10px">「飆股」通常同時具備兩件事：<b>基本面有新變化</b>（營收突然大幅成長）＋ <b>股價已經開始反映</b>（多頭排列、創新高、強於大盤、量增）。雷達每天從上市櫃全部股票篩一遍，給你值得研究的名單。</p>
+    <div class="rd-steps">${[['1', '營收動能', '月營收年增、累計年增'], ['2', '趨勢轉強', '站上均線、多頭排列'], ['3', '相對強勢', '逼近新高、強於大盤'], ['4', '量能確認', '近 5 日量放大'], ['5', '研究卡驗證', '產業、財報、估值、籌碼']].map(([n, t, s]) => `<div><b>${n}</b><span>${t}</span><em>${s}</em></div>`).join('')}</div>
+    <div class="help">分數滿分 100：營收 30、趨勢 20、新高 15、相對強度 15、量能 10；離月線太遠（短線漲多）會扣分。</div></details>
   <div class="chips">${RADAR_P.map(([k, l]) => `<button class="chip ${k === p[0] ? 'on' : ''}" data-radarp="${k}">${l}</button>`).join('')}</div>
   <div class="chips sm">${['全部', '上市', '上櫃'].map(k => `<button class="chip ${k === mk ? 'on' : ''}" data-radarmkt="${k}">${k}</button>`).join('')}<span class="spacer"></span><button class="btn-small ghost" id="radarRefresh">${radarBusy ? '篩選中…' : '↻ 重新篩選'}</button></div>
   <div class="help" style="margin:-4px 0 10px">${esc(p[3])}${R ? `｜${list.length} 檔` : ''}</div>
-  ${R ? rows || '<div class="card empty">這個條件目前沒有符合的股票，換一個條件看看。</div>' : `<div class="card empty">${radarBusy ? '正在篩選上市櫃全部股票…（約 20～40 秒）' : '按「重新篩選」開始。'}</div>`}
+  ${R ? (rows ? rows + (list.length > RD_N ? `<button class="btn-ghost rd-more" data-radarall="1">${S.radarAll ? `只看前 ${RD_N} 名` : `顯示全部 ${list.length} 檔`}</button>` : '') : '<div class="card empty">這個條件目前沒有符合的股票，換一個條件看看。</div>') : `<div class="card empty">${radarBusy ? '正在篩選上市櫃全部股票…（約 20～40 秒）' : '按「重新篩選」開始。'}</div>`}
   ${R ? `<div class="help" style="margin-top:10px">營收資料：${ym}（每月 10 日前公布上月營收）｜全市場 ${R.universe} 檔、成交值 2,000 萬以上 ${R.liquid} 檔｜加權指數近 3 個月 ${R.idx3m == null ? '—' : pct(R.idx3m)}｜更新 ${new Date(R.updated).toLocaleString('zh-TW', { hour12: false })}${R.errors?.length ? `<br><span class="down">${R.errors.map(esc).join('；')}</span>` : ''}<br>來源：證交所、櫃買中心 OpenAPI，Yahoo Finance。篩選結果是研究的起點，不是買進建議；強勢股波動大，建卡時先寫好「證明我錯」的條件與停損。</div>` : ''}`;
 };
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-radarp],[data-radarmkt],#radarRefresh,[data-radarcard]'); if (!t) return;
+  const t = e.target.closest('[data-radarp],[data-radarmkt],#radarRefresh,[data-radarcard],[data-radarall]'); if (!t) return;
+  if (t.dataset.radarall) { S.radarAll = !S.radarAll; save(); return render(); }
   if (t.dataset.radarp) { S.radarP = t.dataset.radarp; save(); return render(); }
   if (t.dataset.radarmkt) { S.radarMkt = t.dataset.radarmkt; save(); return render(); }
   if (t.id === 'radarRefresh') return loadRadar(true);

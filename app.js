@@ -958,7 +958,7 @@ PAGES.settings = () => `
   <div class="card"><h3 class="gold-bar">重設</h3>
     <p class="lead">清除這台裝置上的所有筆記（無法復原）。</p>
     <button class="btn-danger" id="resetBtn">清除全部資料</button></div>
-  <p class="lead" style="text-align:center">版本 1.0</p>`;
+  <p class="lead" style="text-align:center">版本 ${typeof APP_VER !== 'undefined' ? APP_VER : ''}・<a href="#" id="forceUpd">檢查更新</a></p>`;
 
 /* ---------- 路由與事件 ---------- */
 let current = 'home';
@@ -1077,7 +1077,7 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferr
 $('#installBtn').addEventListener('click', async () => {
   if (!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; $('#installBtn').hidden = true;
 });
-const APP_VER = '2026.10.15e';
+const APP_VER = '2026.10.30';
 if ('serviceWorker' in navigator) window.addEventListener('load', () => {
   // 有新版本時自動套用：回到 App 時檢查更新，新的 Service Worker 接手後重新載入一次
   const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;

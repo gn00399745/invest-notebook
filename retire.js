@@ -313,20 +313,6 @@ document.addEventListener('toggle', e => {
 
 /* ---------- 導覽：策略、退休都導到財務計畫 ---------- */
 PAGES.retire = PAGES.strategy = PAGES.plan;
-const _goPl = go;
-go = function (page) { _goPl(page === 'strategy' || page === 'retire' ? 'plan' : page); };
-if (typeof MORE_PAGES !== 'undefined') MORE_PAGES.push('plan');
-if (typeof GROUPS !== 'undefined') GROUPS.more = GROUPS.more.map(x => x[0] === 'strategy' ? ['plan', '計畫'] : x);
-const _morePl = PAGES.more;
-PAGES.more = () => {
-  let sub = '退休要存多少、錢怎麼放', badge = '';
-  try {
-    if (S.plan) { const R = plCalc(plP()); if (!R.err) { sub = R.ok ? `${R.ra} 歲退休：已經夠了・股 ${R.sp}% 債 ${100 - R.sp}%` : `${R.ra} 歲退休：每月存 ${fmt(R.per[12])}・準備度 ${Math.round(R.prog * 100)}%`; badge = R.ok || R.cur >= R.per[12] ? '<span class="pill green">進度 OK</span>' : '<span class="pill red">投入不足</span>'; } }
-  } catch (e) { /* 資料不全時只顯示說明 */ }
-  const row = `<button class="mrow" data-go="plan"><span class="m-ic">🎯</span><span class="m-t"><b>財務計畫</b><em>${esc(sub)}</em></span>${badge}<span class="m-go">›</span></button>`;
-  return _morePl().replace(/<button class="mrow" data-go="strategy">[\s\S]*?<\/button>/, row);
-};
-if (['retire', 'more', 'strategy', 'plan'].includes(window.__startPage)) go(window.__startPage);
 
 /* ---------- 目標金額模式：最快存到 X 萬 ---------- */
 const GL_T = [1000, 3000, 5000, 10000];   // 萬

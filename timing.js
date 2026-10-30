@@ -174,7 +174,6 @@ document.addEventListener('click', e => {
 document.addEventListener('toggle', e => { if (e.target.id === 'tmGuide') { S.tmGuide = e.target.open; save(); } }, true);
 
 /* ---------- 導覽：市場分頁加入「進出場時機」「季節性」 ---------- */
-if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['macro', '總經'], ['season', '季節性'], ['monitor', '監控'], ['overview', '研究總覽']];
 if (current === 'timing' || current === 'season') render();
 
 /* ================= 美國總經指標：刻度圖（一眼看出高低與方向） ================= */
@@ -321,7 +320,6 @@ document.addEventListener('click', e => {
 }, true);
 SEA_SYMS.push(['GC=F', '黃金'], ['TWD=X', '美元兌台幣'], ['JPY=X', '美元兌日圓']);
 SEA_DEF['GC=F'] = ['all', 'mid']; SEA_DEF['TWD=X'] = ['all']; SEA_DEF['JPY=X'] = ['all'];
-if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['macro', '總經'], ['metfx', '金屬・匯率'], ['season', '季節性'], ['monitor', '監控'], ['overview', '研究總覽']];
 if (current === 'metfx') render();
 
 /* ================= 百年景氣循環：擴張與衰退統計 ================= */
@@ -412,7 +410,6 @@ function cycView(C) {
       <div class="help">${tw ? '台灣的收縮期多為成長放緩而非負成長，因此不列 GDP 與失業率。' : 'GDP＝衰退期間實質 GDP 從高點到低點的跌幅（1947 年後才有季資料）；失業率高點取衰退開始後 2 年內（1948 年後）。'}</div></details>
     <div class="help">${esc(C.src)}。${C.errors?.length ? '<span class="down">' + C.errors.map(esc).join('；') + '</span>' : ''}</div>`;
 };
-if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['macro', '總經'], ['cycles', '景氣循環'], ['metfx', '金屬・匯率'], ['season', '季節性'], ['monitor', '監控'], ['overview', '研究總覽']];
 if (current === 'cycles') render();
 
 /* ---------- 景氣循環：地區切換、國際比較 ---------- */
@@ -504,7 +501,6 @@ PAGES.empire = () => {
     </ol></div>
     <div class="help">資料：歷史 GDP 比重為 Angus Maddison《世界經濟千年史》估計；現代 GDP 與預測為 IMF 世界經濟展望（2026 年 10 月版）；外匯存底為 IMF COFER；軍費為斯德哥爾摩國際和平研究所（SIPRI）2026 年報告。</div>`;
 };
-if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['macro', '總經'], ['cycles', '景氣循環'], ['empire', '霸權輪替'], ['metfx', '金屬・匯率'], ['season', '季節性'], ['monitor', '監控'], ['overview', '研究總覽']];
 if (current === 'cycles' || current === 'empire') render();
 
 /* ================= 週期研究：長週期（霸權）× 中週期（景氣）× 短週期（選舉與季節）整合 ================= */
@@ -567,7 +563,6 @@ PAGES.cycles = () => {
 // 舊入口（季節性、霸權輪替）導向週期研究的分頁
 const _goCyc = go;
 go = function (page) { if (page === 'season' || page === 'empire') { S.cycReg = page; page = 'cycles'; } return _goCyc(page); };
-if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['macro', '總經'], ['cycles', '週期研究'], ['metfx', '黃金・匯率'], ['monitor', '監控'], ['overview', '研究總覽']];
 if (['cycles', 'season', 'empire'].includes(current)) go(current);
 
 /* ================= 極端訊號：冰水區（左側逆勢）／滾水區（右側順勢） =================
@@ -665,7 +660,6 @@ PAGES.timing = () => {
   return at2 >= 0 ? h.slice(0, at2) + card + h.slice(at2) : h + card;
 };
 document.addEventListener('click', e => { const t = e.target.closest('[data-extgo]'); if (t) { S.extSym = t.dataset.extgo; save(); go('extreme'); } });
-if (typeof GROUPS !== 'undefined') GROUPS.market = [['timing', '進出場時機'], ['extreme', '極端訊號'], ['macro', '總經'], ['cycles', '週期研究'], ['metfx', '黃金・匯率'], ['monitor', '監控'], ['overview', '研究總覽']];
 if (['extreme', 'timing'].includes(current)) render();
 
 /* ================= 四層整合：週期 → 溫度 → 標的 → 監控 =================
@@ -1251,9 +1245,7 @@ document.addEventListener('click', e => {
   if (t.id === 'pkRefresh') return loadPicks(true);
   S.pkOpen = S.pkOpen === t.dataset.pkopen ? '' : t.dataset.pkopen; save(); const y = scrollY; render(); scrollTo(0, y);
 });
-if (typeof GROUPS !== 'undefined') GROUPS.research = [['radar', '選股雷達'], ['picks', '策略組合'], ['cards', '研究卡'], ['industry', '產業定位'], ['etf', 'ETF 健檢'], ['claims', '待驗主張'], ['learn', '技術教學']];
 if (current === 'picks') render();
-if (typeof FLOWS !== 'undefined' && !FLOWS[0].steps.some(s => s[0] === 'picks')) FLOWS[0].steps.splice(1, 0, ['picks', '策略組合']);
 
 /* ================= 研究卡清單：搜尋、產業、動作篩選與排序 ================= */
 const RC_SORT = [['date', '研究日（新→舊）'], ['up', '估值空間（大→小）'], ['chg', '近 20 日漲幅'], ['code', '代號']];

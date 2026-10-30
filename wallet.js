@@ -673,26 +673,6 @@ PAGES.ledger = () => {
   ${cardsCard()}`;
 };
 
-/* ---------- 更多 ---------- */
-PAGES.more = () => `<h2>更多功能</h2>
-  <div class="tiles">
-    ${[['overview', '🧭', '研究總覽', '總經、研究卡、事件一頁看'], ['strategy', '🎯', '策略與配置', '目標配置、部位計算、緊急預備金'], ['trades', '🧾', '交易紀錄', '每一筆買賣與當時的分析'], ['review', '🔁', '覆盤', '檢討做對做錯什麼'], ['monitor', '🔔', '監控提醒', '價格、RSI 到點提醒'], ['learn', '📖', '技術分析教學', '9 堂課＋小測驗'], ['settings', '⚙︎', '設定與備份', '匯出、匯入、範例資料']]
-      .map(([p, ic, t, s]) => `<button class="tile" data-go="${p}"><i>${ic}</i><b>${t}</b><em>${s}</em></button>`).join('')}
-  </div>
-  <div class="appver">版本 ${typeof APP_VER !== 'undefined' ? APP_VER : ''}・<a href="#" id="forceUpd">檢查更新</a></div>`;
-
-/* ---------- 分頁群組 ---------- */
-const GROUPS = {
-  home: [['home', '資產']], ledger: [['ledger', '收支']],
-  research: [['radar', '選股雷達'], ['cards', '研究卡'], ['industry', '產業定位'], ['etf', 'ETF 健檢'], ['claims', '待驗主張'], ['learn', '技術教學']],
-  market: [['macro', '總經'], ['monitor', '監控'], ['overview', '研究總覽']],
-  more: [['more', '全部'], ['strategy', '策略'], ['trades', '交易紀錄'], ['review', '覆盤'], ['settings', '設定']],
-};
-const groupOf = p => Object.keys(GROUPS).find(g => GROUPS[g].some(x => x[0] === p)) || 'more';
-window.subNav = p => { const g = GROUPS[groupOf(p)]; return g.length > 1 ? `<div class="subnav">${g.map(([k, l]) => `<button data-go="${k}" class="${k === p ? 'on' : ''}">${l}</button>`).join('')}</div>` : ''; };
-const _goW = go;
-go = function (page) { _goW(page); const g = groupOf(current); document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === g)); };
-
 /* ---------- 動作 ---------- */
 function sheet(kind) {
   const all = [['exp', '➖', '記支出'], ['inc', '➕', '記收入'], ['buy', '📈', '買進股票／ETF'], ['sell', '📉', '賣出'], ['import', '📋', '匯入券商庫存'], ['payslip', '💼', '薪資單（扣繳＋分帳戶）'], ['recur', '🔁', '固定收支／定期定額'], ['espp', '🏢', '員工認股（折價買）'], ['addAcct', '🏦', '存款帳戶'], ['addCard', '💳', '信用卡'], ['addMetal', '🥇', '貴金屬（黃金存摺、金條）'], ['addIns', '🛡️', '保單'], ['addProp', '🏠', '房產']];
