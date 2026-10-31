@@ -46,7 +46,7 @@ PAGES.season = () => {
   if (!d) return head + `<div class="card empty">${seaBusy ? '計算中…（第一次約 5～10 秒）' : '讀取中…'}</div>`;
   const leg = [...d.series.map(s => [s.k, `${s.name}（${s.n} 年）`, SEA_COL[s.k]]), ['cur', `${d.thisYear} 年實際`, 'var(--text)']];
   const M = d.monthly, mo = new Date().getMonth();
-  const mrow = (m, i) => `<div class="gt-r ${i === mo ? 'hl' : ''}"><span>${i + 1} 月</span><span style="${heat(m.all[i]?.avg, 3)}">${pc(m.all[i]?.avg, 2)}</span><span>${m.all[i]?.win ?? '—'}%</span><span style="${heat(m.mid[i]?.avg, 3)}">${pc(m.mid[i]?.avg, 2)}</span><span>${m.mid[i]?.win ?? '—'}%</span></div>`;
+  const mrow = (m, i) => `<div class="gt-r ${i === mo ? 'hl' : ''}"><span>${i + 1} 月</span><span style="${heatP(m.all[i]?.avg, 3)}">${pc(m.all[i]?.avg, 2)}</span><span>${m.all[i]?.win ?? '—'}%</span><span style="${heatP(m.mid[i]?.avg, 3)}">${pc(m.mid[i]?.avg, 2)}</span><span>${m.mid[i]?.win ?? '—'}%</span></div>`;
   const f = d.midFwd || [], fa = f.length ? f.reduce((s, x) => s + x.r, 0) / f.length : null;
   return head + `<div class="card"><h3 class="gold-bar">📅 ${esc(d.name)}：年初至今累積漲跌（%）</h3>
       ${seasonChart(d, show)}
@@ -257,7 +257,7 @@ function goldView() {
       ${rangeBar(40, 110, Math.min(110, gsr), { label: '金銀比 ' + fmt(gsr, 1), zones: [[40, 60, 'bad'], [85, 110, 'good']], ticks: [[40, '40'], [60, '60 白銀偏貴'], [85, '85 白銀偏便宜'], [110, '110']] })}
       ${gsrS ? sparkSVG(gsrS) + '<div class="help" style="margin-top:-2px">近 3 個月金銀比走勢</div>' : ''}
       <div class="help">長期金銀比多在 50～90 之間。比值高＝白銀相對便宜，景氣回升時白銀（兼具工業用途）常漲得比黃金多；比值低則反之。</div>` : ''}
-      ${gtable(['', '價格', '1 月', '今年', '1 年'], [g, si, pl, mkOf('PA=F'), mkOf('HG=F'), gld].filter(Boolean).map(m => `<div class="gt-r"><span>${esc(m.name)}</span><span>${fmt(m.price, m.price < 100 ? 2 : 0)}</span><span style="${heat(m.chg1m, 8)}">${pc(m.chg1m)}</span><span style="${heat(m.ytd, 30)}">${pc(m.ytd)}</span><span style="${heat(m.chg1y, 40)}">${pc(m.chg1y)}</span></div>`), 'wide')}
+      ${gtable(['', '價格', '1 月', '今年', '1 年'], [g, si, pl, mkOf('PA=F'), mkOf('HG=F'), gld].filter(Boolean).map(m => `<div class="gt-r"><span>${esc(m.name)}</span><span>${fmt(m.price, m.price < 100 ? 2 : 0)}</span><span style="${heatP(m.chg1m, 8)}">${pc(m.chg1m)}</span><span style="${heatP(m.ytd, 30)}">${pc(m.ytd)}</span><span style="${heatP(m.chg1y, 40)}">${pc(m.chg1y)}</span></div>`), 'wide')}
       <div class="help">銅不是貴金屬，列出來作對照：銅漲代表製造業需求強（風險偏好），黃金漲但銅跌則偏向避險。</div></div>
     ${ry ? `<div class="card"><h3 class="gold-bar">📉 實質利率 vs 金價</h3><div class="mf-two"><div><em>實質利率（%）</em>${sparkSVG(ry.wk, 'neg')}<b>${ry.v}%</b></div><div><em>金價</em>${sparkSVG(g.wk, 'gold')}<b>${fmt(g.price, 0)}</b></div></div>
       <div class="help">兩條線通常反向：實質利率往下，金價往上。若兩者同時上升，代表有其他買盤（例如各國央行買金、避險需求）在支撐金價。資料：${esc(ry.src)}，${esc(ry.d)}。</div></div>` : ''}`;
@@ -299,7 +299,7 @@ function fxView() {
     action: () => '人民幣升值通常反映中國資金面與出口改善，對港股、陸股與台灣對中出口股偏正面。' });
   const tbl = [dx, tw, jp, eu, cn, kr, mkOf('HKD=X')].filter(Boolean);
   const rates = [['🇺🇸 美國', ffr, us10], ['🇹🇼 台灣', cbc, null], ['🇯🇵 日本', R('jp'), Y('jp')], ['🇪🇺 歐元區', R('eu'), Y('eu')]];
-  return `<div class="card"><h3 class="gold-bar">💱 匯率總覽</h3>${gtable(['', '匯率', '1 月', '今年', '52 週位置'], tbl.map(m => `<div class="gt-r"><span>${esc(m.name)}</span><span>${fmt(m.price, m.price < 10 ? 4 : 2)}</span><span style="${heat(m.chg1m, 3)}">${pc(m.chg1m)}</span><span style="${heat(m.ytd, 8)}">${pc(m.ytd)}</span><span>${pos52(m) == null ? '—' : fmt(pos52(m), 0) + '%'}</span></div>`), 'wide')}
+  return `<div class="card"><h3 class="gold-bar">💱 匯率總覽</h3>${gtable(['', '匯率', '1 月', '今年', '52 週位置'], tbl.map(m => `<div class="gt-r"><span>${esc(m.name)}</span><span>${fmt(m.price, m.price < 10 ? 4 : 2)}</span><span style="${heatP(m.chg1m, 3)}">${pc(m.chg1m)}</span><span style="${heatP(m.ytd, 8)}">${pc(m.ytd)}</span><span>${pos52(m) == null ? '—' : fmt(pos52(m), 0) + '%'}</span></div>`), 'wide')}
       <div class="help">「美元兌 X」上升＝美元變強、X 貶值。52 週位置：0%＝一年最低、100%＝一年最高。</div></div>
     <div class="card"><h3 class="gold-bar">🏦 各國利率（匯率的根本）</h3>${hbars(rates.filter(r => r[1] != null).map(r => ({ l: r[0], v: r[1] })), { unit: '%' })}
       <div class="help">政策利率：美國聯邦基金利率上限、台灣重貼現率、日本短期利率、歐洲央行存款利率。資金會往利率高、貨幣預期升值的地方流，利差變化常領先匯率。${us10 != null ? ` 美國 10 年債 ${us10}%${Y('jp') != null ? `、日本 ${Y('jp')}%` : ''}${Y('eu') != null ? `、德國 ${Y('eu')}%` : ''}。` : ''}</div></div>
@@ -406,9 +406,9 @@ function cycView(C) {
       <li>景氣谷底後一年，${ix}平均 ${s.after12 >= 0 ? '+' : ''}${s.after12}%：衰退結束初期往往是一輪多頭最肥的一段。</li>
       <li>擴張後段的警訊：殖利率曲線倒掛、失業率從低點回升 0.5 個百分點以上（薩姆規則）、領先指標連續下滑、央行持續升息。</li>
     </ol></div>
-    <details class="card rc-sub"><summary>📋 ${C.count || C.recessions.length} 次衰退明細</summary>${gtable(['期間', '月', 'GDP', '失業率高點', '股市跌幅', '谷底後 1 年'], C.recessions.map(r => `<div class="gt-r"><span>${r.peak.slice(0, 4)} ${esc(r.name)}</span><span>${r.months}</span><span>${r.gdpDrop != null ? r.gdpDrop + '%' : '—'}</span><span>${r.unPeak != null ? r.unPeak + '%' : '—'}</span><span style="${heat(r.dd, 40)}">${r.dd != null ? r.dd + '%' : '—'}</span><span style="${heat(r.after12, 40)}">${r.after12 != null ? pc(r.after12) + '%' : '—'}</span></div>`), 'cyt')}
+    <details class="card rc-sub"><summary>📋 ${C.count || C.recessions.length} 次衰退明細</summary>${gtable(['期間', '月', 'GDP', '失業率高點', '股市跌幅', '谷底後 1 年'], C.recessions.map(r => `<div class="gt-r"><span>${r.peak.slice(0, 4)} ${esc(r.name)}</span><span>${r.months}</span><span>${r.gdpDrop != null ? r.gdpDrop + '%' : '—'}</span><span>${r.unPeak != null ? r.unPeak + '%' : '—'}</span><span style="${heatP(r.dd, 40)}">${r.dd != null ? r.dd + '%' : '—'}</span><span style="${heatP(r.after12, 40)}">${r.after12 != null ? pc(r.after12) + '%' : '—'}</span></div>`), 'cyt')}
       <div class="help">${tw ? '台灣的收縮期多為成長放緩而非負成長，因此不列 GDP 與失業率。' : 'GDP＝衰退期間實質 GDP 從高點到低點的跌幅（1947 年後才有季資料）；失業率高點取衰退開始後 2 年內（1948 年後）。'}</div></details>
-    <div class="help">${esc(C.src)}。${C.errors?.length ? '<span class="down">' + C.errors.map(esc).join('；') + '</span>' : ''}</div>`;
+    <div class="help">${esc(C.src)}。${C.errors?.length ? '<span class="bad">' + C.errors.map(esc).join('；') + '</span>' : ''}</div>`;
 };
 if (current === 'cycles') render();
 
@@ -422,14 +422,14 @@ function intlView(D) {
     ${[[2008, 2009.5, '金融海嘯'], [2020, 2020.6, '疫情']].map(([a, b, t]) => `<rect x="${X(a)}" y="2" width="${X(b) - X(a) + 2}" height="${H - 20}" class="rcs"/><text x="${X(a)}" y="${H - 14}" text-anchor="middle" class="ev">${t}</text>`).join('')}
     ${rows.map((r, i) => { const y = 6 + i * 22; return `<text x="2" y="${y + 11}" class="cy-rl">${r.flag} ${r.name}</text>${r.since > x0 ? `<rect x="${X(x0)}" y="${y + 3}" width="${X(r.since) - X(x0)}" height="10" class="nod"><title>${r.name} 季資料自 ${r.since} 年起</title></rect>` : ''}<line x1="${X(Math.max(x0, r.since || x0))}" x2="${W - R}" y1="${y + 8}" y2="${y + 8}" class="base"/>${r.recs.filter(z => ymNum(z.trough) >= x0).map(z => `<rect x="${X(Math.max(x0, ymNum(z.peak)))}" y="${y + 1}" width="${Math.max(2, X(ymNum(z.trough)) - X(Math.max(x0, ymNum(z.peak))))}" height="14" rx="2" class="rc"><title>${r.name} ${yrLab(z.peak)}–${yrLab(z.trough)}${z.name ? '：' + z.name : ''}</title></rect>`).join('')}`; }).join('')}
   </svg>`;
-  const st = gtable(['', '次數', '每 10 年', '平均月數', 'GDP 跌幅', '股市跌幅', '谷底後 1 年'], D.countries.map(c => `<div class="gt-r"><span>${c.flag} ${c.name}<small class="w-u">${c.since} 年起</small></span><span>${c.stats.n}</span><span>${c.stats.perDecade ?? '—'}</span><span>${c.stats.months ?? '—'}</span><span style="${heat(c.stats.gdpDrop, 5)}">${c.stats.gdpDrop ?? '—'}%</span><span style="${heat(c.stats.dd, 40)}">${c.stats.dd ?? '—'}%</span><span style="${heat(c.stats.after12, 30)}">${c.stats.after12 != null ? pc(c.stats.after12) + '%' : '—'}</span></div>`), 'cyi');
+  const st = gtable(['', '次數', '每 10 年', '平均月數', 'GDP 跌幅', '股市跌幅', '谷底後 1 年'], D.countries.map(c => `<div class="gt-r"><span>${c.flag} ${c.name}<small class="w-u">${c.since} 年起</small></span><span>${c.stats.n}</span><span>${c.stats.perDecade ?? '—'}</span><span>${c.stats.months ?? '—'}</span><span style="${heat(c.stats.gdpDrop, 5)}">${c.stats.gdpDrop ?? '—'}%</span><span style="${heatP(c.stats.dd, 40)}">${c.stats.dd ?? '—'}%</span><span style="${heatP(c.stats.after12, 30)}">${c.stats.after12 != null ? pc(c.stats.after12) + '%' : '—'}</span></div>`), 'cyi');
   const dd = D.countries.map(c => { const rs = c.recessions.filter(r => r.dd != null); if (!rs.length) return ''; const mx = Math.max(...rs.map(r => Math.abs(r.dd)), 1);
     return `<details class="rc-sub"><summary>${c.flag} ${c.name}：${c.recessions.length} 次衰退（${esc(c.idxName)}）</summary><div class="cyd">${rs.map(r => `<div class="cyd-r"><span>${yrLab(r.peak)} ${esc(r.name || '')}</span><div class="cyd-t"><i style="width:${Math.abs(r.dd) / mx * 100}%" title="GDP ${r.gdpDrop}%"></i></div><b>${r.dd}%</b></div>`).join('')}</div><div class="help">右側為股市最大跌幅；GDP 跌幅依序：${c.recessions.map(r => `${r.peak.slice(0, 4)} ${r.gdpDrop}%`).join('、')}</div></details>`; }).join('');
   return `<div class="card"><h3 class="gold-bar">🌍 各國衰退同步圖</h3>${sync}<div class="w-legend"><span><i class="cy-rc"></i>衰退</span><span class="help">點色塊看期間；灰色＝尚無季資料</span></div>
       <div class="help">全球化之後，衰退越來越「同步」：2008 金融海嘯與 2020 疫情，所有主要經濟體幾乎同時衰退；歐洲與日本另外多了 2011–12 歐債危機、2022–23 能源危機的獨立衰退。台灣的循環則最貼近美國與全球電子業。</div></div>
     <div class="card"><h3 class="gold-bar">📊 各國衰退統計</h3>${st}<div class="help">歐洲與日本沒有官方的衰退認定機構（歐元區有 CEPR 委員會），這裡統一用「實質 GDP 連續兩季下滑」認定，所以會比官方定義多出一些短而淺的技術性衰退。${(() => { const r = [...D.countries].filter(c => c.stats.perDecade != null).sort((a, b) => b.stats.perDecade - a.stats.perDecade); return r.length > 1 ? `以每 10 年的次數看，${r[0].name}最頻繁（${r[0].stats.perDecade} 次），${r[1].name}次之（${r[1].stats.perDecade} 次）；${r[r.length - 1].name}最少。` : ''; })()}</div></div>
     <div class="card"><h3 class="gold-bar">📉 各國衰退時的股市跌幅</h3>${dd}</div>
-    <div class="help">${esc(D.src)}。${D.errors?.length ? '<span class="down">' + D.errors.map(esc).join('；') + '</span>' : ''}</div>`;
+    <div class="help">${esc(D.src)}。${D.errors?.length ? '<span class="bad">' + D.errors.map(esc).join('；') + '</span>' : ''}</div>`;
 }
 PAGES.cycles = () => {
   const reg = S.cycReg || 'us'; setTimeout(() => loadCycles(false, reg), 30);
@@ -631,7 +631,7 @@ PAGES.extreme = () => {
     <div class="chips">${EXT_SYMS.map(([k, l]) => `<button class="chip ${k === sym ? 'on' : ''}" data-extsym="${k}">${l}${S.ext[k] ? ` ${EXT_Z[S.ext[k].zone].ic}` : ''}</button>`).join('')}</div>`;
   if (!d) return head + `<div class="card empty">${extBusy[sym] ? '計算中…（第一次約 5～10 秒）' : '讀取中…'}</div>`;
   const Z = extZoneOf(d), F = d.fwd, hz = F.all.map(x => x.h);
-  const row = (k, l) => `<div class="gt-r ${d.zone === k ? 'hl' : ''}"><span>${l}</span>${F[k].map((x, i) => `<span style="${heat(x.avg - (F.all[i].avg || 0), 4)}">${x.avg == null ? '—' : pc(x.avg)}%<small>${x.win ?? '—'}%</small></span>`).join('')}</div>`;
+  const row = (k, l) => `<div class="gt-r ${d.zone === k ? 'hl' : ''}"><span>${l}</span>${F[k].map((x, i) => `<span style="${heatP(x.avg - (F.all[i].avg || 0), 4)}">${x.avg == null ? '—' : pc(x.avg)}%<small>${x.win ?? '—'}%</small></span>`).join('')}</div>`;
   const ep = (list, k) => list.length ? list.map(e => `<div class="ex-ep ${k}"><b>${esc(e.d)}</b><span>${e.ongoing ? '<i class="pill gold">進行中</i>' : `${e.days} 天`}</span><span>${k === 'ice' ? '之後再跌' : '之後再漲'} <em class="${k === 'ice' ? 'down' : 'up'}">${pc(e.further)}%</em></span><span>3 個月 <em class="${e.m3 >= 0 ? 'up' : 'down'}">${e.m3 == null ? '—' : pc(e.m3) + '%'}</em></span><span>1 年 <em class="${e.m12 >= 0 ? 'up' : 'down'}">${e.m12 == null ? '—' : pc(e.m12) + '%'}</em></span></div>`).join('') : '<div class="empty">期間內沒有</div>';
   return head + `<div class="card ex-now ${Z.c}"><div class="ex-big"><i>${Z.ic}</i><div><b>${esc(d.name)}：${Z.n}</b><span>綜合溫度 ${fmt(d.temp, 0)}／100・已持續 ${d.daysIn} 個交易日・${esc(Z.side)}</span></div></div>
       ${extThermo(d.temp)}<div class="tm-ph">${esc(Z.one)}</div>
@@ -1018,7 +1018,7 @@ const _dcfHTML0 = dcfHTML;
 dcfHTML = function (c) {
   const h = _dcfHTML0(c), i = c.dcfIn || {}, D = discountRate(c);
   const note = `<div class="dr-box">${i.note ? `<div class="help">⚠️ ${esc(i.note)}。</div>` : ''}${i.basis === 'eps' ? '<div class="help">⚠️ 這家近四季資本支出大於營業現金流（擴產中），現金流欄位改用<b>近四季淨利</b>估算；擴產結束、現金流轉正後再按「⚡ 自動帶入」更新。</div>' : ''}<div><b>折現率建議 ${D.r}%</b>・永續成長 ${D.tg}%</div><div class="help">${esc(i.rWhy || D.why)}</div>
-    ${D.fin ? '<div class="help down">金融股（銀行、壽險）不適合用 DCF，請看股價淨值比與殖利率。</div>' : ''}
+    ${D.fin ? '<div class="help bad">金融股（銀行、壽險）不適合用 DCF，請看股價淨值比與殖利率。</div>' : ''}
     <button type="button" class="btn-small ghost" data-dcfre="1">套用建議折現率</button></div>`;
   return h.replace('<div class="result" id="dcfResult">', note + '<div class="result" id="dcfResult">');
 };
@@ -1321,7 +1321,7 @@ valGauge = function (c, vs) {
   const lo = Math.min(vs.lo ?? vs.min, p) * 0.92, hi = Math.max(vs.hi ?? vs.max, p) * 1.08, X = v => ((v - lo) / (hi - lo) * 100).toFixed(1);
   const d = v => fmt(v, v < 100 ? 1 : 0);
   return `<div class="gauge"><div class="g-track">${vs.lo != null ? `<div class="g-band all" style="left:${X(vs.lo)}%;width:${X(vs.hi) - X(vs.lo)}%"></div>` : ''}<div class="g-band" style="left:${X(vs.min)}%;width:${Math.max(0.8, X(vs.max) - X(vs.min))}%"></div><div class="g-avg" style="left:${X(vs.avg)}%"></div><div class="g-px" style="left:${X(p)}%"><span>現價 ${fmt(p, p < 100 ? 2 : 0)}</span></div></div>
-    <div class="g-lbl"><span>合理價 <b>${d(vs.avg)}</b>・多數方法落在 ${d(vs.min)}～${d(vs.max)}${vs.cons ? `・一致性${vs.cons}` : ''}</span><b class="${vs.upside >= 0 ? 'up' : 'down'}">${vs.upside >= 0 ? '低估' : '高估'} ${pct(Math.abs(vs.upside)).replace('+', '')}</b></div>
+    <div class="g-lbl"><span>合理價 <b>${d(vs.avg)}</b>・多數方法落在 ${d(vs.min)}～${d(vs.max)}${vs.cons ? `・一致性${vs.cons}` : ''}</span><b class="${vs.upside >= 0 ? 'good' : 'bad'}">${vs.upside >= 0 ? '低估' : '高估'} ${pct(Math.abs(vs.upside)).replace('+', '')}</b></div>
     ${vs.far === 'above' ? '<div class="g-warn">股價遠高於所有估值方法：市場在為「未來成長」付費，現在的財報撐不住這個價格，估值只能當下限參考。</div>' : vs.far === 'below' ? '<div class="g-warn">股價遠低於所有估值方法：先確認是不是財報有一次性收入、或公司有市場擔心的風險。</div>' : vs.cons === '低' ? '<div class="g-warn">各方法差距大，合理價參考性有限；打開「計算過程」看哪個假設差最多。</div>' : ''}</div>`;
 };
 // 綜合公允價值卡：標題與刻度改用區間

@@ -244,7 +244,7 @@ PAGES.learn = () => {
       <div class="btn-row"><input type="text" id="learnCode" value="${esc(code)}" style="width:90px" autocapitalize="characters"><button class="btn-small" id="learnGo">看圖</button></div></div>
     <div class="qbtns" style="margin:-4px 0 8px">${['2330', '2317', '0050', 'NVDA', 'SPCX'].map(x => `<button type="button" data-learn-code="${x}">${x}</button>`).join('')}</div>
     ${data?.bars ? `${learnChart(data.bars, cur.panel)}${legendFor(cur.panel)}<div class="snap" style="margin-top:8px"><b>${esc(data.name || code)} 現在的讀數</b>\n${esc(readNow(data.bars, cur.panel))}</div><div class="help" style="margin-top:6px">近 ${Math.min(120, data.bars.length)} 個交易日（${esc(data.bars[Math.max(0, data.bars.length - 120)][0])}～${esc(data.bars[data.bars.length - 1][0])}）。這只是讀圖練習，不是買賣建議。</div>`
-      : data?.error ? `<div class="down">抓不到 ${esc(code)} 的資料：${esc(data.error)}</div>` : '<div class="help">載入中…</div>'}
+      : data?.error ? `<div class="bad">抓不到 ${esc(code)} 的資料：${esc(data.error)}</div>` : '<div class="help">載入中…</div>'}
   </div>` : ''}
   <div class="card"><h3 class="gold-bar">小測驗</h3>
     ${cur.quiz.map((q, qi) => { const ans = S.learnAns?.[cur.id + qi]; return `<div class="quiz"><div class="qq">${qi + 1}. ${esc(q.q)}</div>

@@ -314,7 +314,7 @@ function postPayslip(r, d, o = {}) {
 }
 function payslipRow(r) {
   const c = payslipCalc(r);
-  return `<div class="lrow" data-edit="recurring" data-id="${r.id}"><span class="l-ic">💼</span><span class="l-t"><b>${esc(r.name)}</b><em>每月 ${r.day} 號｜扣 ${c.deds.map(x => x.name).join('、') || '無'} ${fmt(c.dedT)}｜${c.splits.map(x => `${esc(acctById(x.acct)?.name || '?')} ${fmt(x.amt)}`).join('、')}</em></span><span class="l-v up">${fmt(c.gross)}</span></div>`;
+  return `<div class="lrow" data-edit="recurring" data-id="${r.id}"><span class="l-ic">💼</span><span class="l-t"><b>${esc(r.name)}</b><em>每月 ${r.day} 號｜扣 ${c.deds.map(x => x.name).join('、') || '無'} ${fmt(c.dedT)}｜${c.splits.map(x => `${esc(acctById(x.acct)?.name || '?')} ${fmt(x.amt)}`).join('、')}</em></span><span class="l-v good">${fmt(c.gross)}</span></div>`;
 }
 function openPayslip(id) {
   const rec = id ? S.recurring.find(x => x.id === id) : null;
@@ -359,7 +359,7 @@ function openPayslip(id) {
   const refresh = () => {
     const c = payslipCalc(read(body));
     body.querySelectorAll('.ps-row.sp').forEach((x, i) => { const r = x.querySelector('[name=rest]').checked, a = x.querySelector('.s-amt'); a.disabled = r; a.placeholder = r ? `其餘 ${fmt(c.splits[i]?.amt ?? 0)}` : '固定金額'; if (r) a.value = ''; });
-    $('#psSum').innerHTML = `應發 <b>${fmt(c.gross)}</b>　− 扣款 <b>${fmt(c.dedT)}</b>　= 實領 <b>${fmt(c.net)}</b><br>${c.splits.filter(x => x.acct || x.amt).map(x => `→ ${esc(acctById(x.acct)?.name || '未選帳戶')}：${fmt(x.amt)}`).join('<br>')}${c.left > 0 ? `<br><span class="down">還有 ${fmt(c.left)} 沒有指定帳戶</span>` : c.left < 0 ? `<br><span class="down">分配超過實領 ${fmt(-c.left)}</span>` : ''}`;
+    $('#psSum').innerHTML = `應發 <b>${fmt(c.gross)}</b>　− 扣款 <b>${fmt(c.dedT)}</b>　= 實領 <b>${fmt(c.net)}</b><br>${c.splits.filter(x => x.acct || x.amt).map(x => `→ ${esc(acctById(x.acct)?.name || '未選帳戶')}：${fmt(x.amt)}`).join('<br>')}${c.left > 0 ? `<br><span class="bad">還有 ${fmt(c.left)} 沒有指定帳戶</span>` : c.left < 0 ? `<br><span class="bad">分配超過實領 ${fmt(-c.left)}</span>` : ''}`;
   };
   body.addEventListener('input', refresh); body.addEventListener('change', refresh);
   body.addEventListener('click', e => { const x = e.target.closest('.ps-x'); if (x) { x.closest('.ps-row').remove(); refresh(); } });
@@ -422,7 +422,7 @@ function openReconcile(cid, key) {
     title: `${c.name}　${m} 月帳單對帳`,
     body: `<div class="help" style="margin-bottom:8px">消費期間 ${st.start.slice(5).replace('-', '/')}～${st.end.slice(5).replace('-', '/')}，繳款截止 ${st.due.slice(5).replace('-', '/')}。打開銀行 App 的帳單明細，一筆一筆對：對得上就打勾；帳單上有、這裡沒記的，記下來後再回來對。</div>
       <label class="f"><span>銀行帳單應繳金額</span><input type="text" inputmode="decimal" name="bill" value="${st.bill ?? ''}" placeholder="帳單上的「本期應繳總額」"></label>
-      <div class="rc-list">${st.items.map(e => `<label class="rc-it"><input type="checkbox" name="rc" value="${e.id}" ${e.rc ? 'checked' : ''}><span>${esc(e.date.slice(5).replace('-', '/'))}</span><b>${esc(e.note || e.cat)}</b><em class="${e.type === '收入' ? 'up' : ''}">${e.type === '收入' ? '−' : ''}${fmt(toTWD(e.amount, e.ccy))}</em></label>`).join('') || '<div class="empty">這一期沒有用這張卡記的消費。</div>'}</div>
+      <div class="rc-list">${st.items.map(e => `<label class="rc-it"><input type="checkbox" name="rc" value="${e.id}" ${e.rc ? 'checked' : ''}><span>${esc(e.date.slice(5).replace('-', '/'))}</span><b>${esc(e.note || e.cat)}</b><em class="${e.type === '收入' ? 'good' : ''}">${e.type === '收入' ? '−' : ''}${fmt(toTWD(e.amount, e.ccy))}</em></label>`).join('') || '<div class="empty">這一期沒有用這張卡記的消費。</div>'}</div>
       <div class="snap" id="rcSum" style="margin-top:10px"></div>
       <div class="btn-row" style="margin-top:8px"><button type="button" class="btn-small ghost" data-cardadd="${c.id}" data-d="${st.end <= today() ? st.end : today()}">＋ 補記一筆這張卡的消費</button></div>`,
     saveText: '儲存對帳',
@@ -438,7 +438,7 @@ function openReconcile(cid, key) {
     const on = new Set([...body.querySelectorAll('[name=rc]:checked')].map(x => x.value)), bill = num(body.querySelector('[name=bill]').value);
     const ok = st.items.filter(e => on.has(e.id)).reduce((s, e) => s + cardSign(e) * toTWD(e.amount, e.ccy), 0);
     const diff = bill != null ? Math.round(bill - st.total) : null;
-    $('#rcSum').innerHTML = `記帳合計 <b>${fmt(st.total)}</b>（已勾 ${on.size}/${st.items.length} 筆，${fmt(ok)}）${bill != null ? `<br>帳單 <b>${fmt(bill)}</b>　差額 <b class="${diff ? 'down' : 'up'}">${diff ? (diff > 0 ? '帳單多 ' : '帳單少 ') + fmt(Math.abs(diff)) : '✓ 一致'}</b>${diff > 0 ? '<br><span class="help">帳單比較多：可能有漏記的消費、年費或分期。</span>' : diff < 0 ? '<br><span class="help">帳單比較少：可能有刷退、回饋折抵，或記到別張卡／別的月份。</span>' : ''}` : ''}`;
+    $('#rcSum').innerHTML = `記帳合計 <b>${fmt(st.total)}</b>（已勾 ${on.size}/${st.items.length} 筆，${fmt(ok)}）${bill != null ? `<br>帳單 <b>${fmt(bill)}</b>　差額 <b class="${diff ? 'bad' : 'good'}">${diff ? (diff > 0 ? '帳單多 ' : '帳單少 ') + fmt(Math.abs(diff)) : '✓ 一致'}</b>${diff > 0 ? '<br><span class="help">帳單比較多：可能有漏記的消費、年費或分期。</span>' : diff < 0 ? '<br><span class="help">帳單比較少：可能有刷退、回饋折抵，或記到別張卡／別的月份。</span>' : ''}` : ''}`;
   };
   body.addEventListener('input', sum); body.addEventListener('change', sum); sum();
 }
@@ -633,7 +633,7 @@ PAGES.home = () => {
   ${onboard ? `<div class="d-full">${onboard}</div>` : ''}
   <div class="hg-pair"><div class="card d-month">
     <div class="card-head"><h3 class="gold-bar">${+m.slice(5)} 月收支</h3><button class="btn-small ghost" data-go="ledger">看明細 →</button></div>
-    <div class="mstats"><div><em>收入</em><b class="up">${fmt(M.inc)}</b></div><div><em>支出</em><b class="down">${fmt(M.exp)}</b></div><div><em>結餘</em><b>${fmt(M.net)}</b></div><div><em>儲蓄率</em><b>${M.rate == null ? '—' : fmt(M.rate, 0) + '%'}</b></div></div>
+    <div class="mstats"><div><em>收入</em><b class="good">${fmt(M.inc)}</b></div><div><em>支出</em><b class="bad">${fmt(M.exp)}</b></div><div><em>結餘</em><b>${fmt(M.net)}</b></div><div><em>儲蓄率</em><b>${M.rate == null ? '—' : fmt(M.rate, 0) + '%'}</b></div></div>
     ${M.cats.length ? `<div style="margin-top:10px">${M.cats.slice(0, 4).map(([c, v]) => bar(c, v, M.cats[0][1], catIcon('支出', c))).join('')}</div>` : '<div class="empty">這個月還沒記帳。設定薪水、房租等固定收支後會自動記入。</div>'}
   </div>
   <div class="card d-alloc">
@@ -663,13 +663,13 @@ PAGES.ledger = () => {
   const m = S.ledgerMonth || ym(today()), M = monthStats(m);
   const groups = {};
   [...M.list].sort((a, b) => (b.date || '').localeCompare(a.date || '')).forEach(e => { (groups[e.date] = groups[e.date] || []).push(e); });
-  const rows = Object.entries(groups).map(([d, es]) => `<div class="lday">${esc(d.slice(5).replace('-', '/'))}</div>` + es.map(e => `<div class="lrow ${e.type === '轉帳' ? 'xfer' : ''}" data-edit="ledger" data-id="${e.id}"><span class="l-ic">${e.type === '轉帳' ? '💳' : catIcon(e.type, e.cat)}</span><span class="l-t"><b>${esc(e.note || e.cat)}</b><em>${esc(e.type === '轉帳' ? '繳卡費（不計入支出）' : e.cat)}${payLabel(e) ? '｜' + esc(payLabel(e)) : ''}${e.auto ? '｜自動' : ''}${e.noBal ? '｜未動餘額' : ''}${e.rc ? '｜✓已對帳' : ''}</em></span><span class="l-v ${e.type === '收入' ? 'up' : e.type === '轉帳' ? '' : 'down'}">${e.type === '收入' ? '+' : '−'}${money(num(e.amount), e.ccy || 'TWD')}</span></div>`).join('')).join('');
-  const rec = S.recurring.map(r => r.kind === '薪資單' ? payslipRow(r) : `<div class="lrow" data-edit="recurring" data-id="${r.id}"><span class="l-ic">${r.kind === '定期定額' ? '📈' : r.kind === '員工認股' ? '🏢' : catIcon(r.kind, r.cat)}</span><span class="l-t"><b>${esc(r.name)}</b><em>每${r.freq === '年' ? `年 ${r.month} 月` : '月'} ${r.day} 號${r.disc ? `｜市價 ${r.disc}%` : ''}${payLabel(r) ? '｜' + esc(payLabel(r)) : ''}</em></span><span class="l-v ${r.kind === '收入' ? 'up' : ''}">${fmt(num(r.amount))}</span></div>`).join('');
+  const rows = Object.entries(groups).map(([d, es]) => `<div class="lday">${esc(d.slice(5).replace('-', '/'))}</div>` + es.map(e => `<div class="lrow ${e.type === '轉帳' ? 'xfer' : ''}" data-edit="ledger" data-id="${e.id}"><span class="l-ic">${e.type === '轉帳' ? '💳' : catIcon(e.type, e.cat)}</span><span class="l-t"><b>${esc(e.note || e.cat)}</b><em>${esc(e.type === '轉帳' ? '繳卡費（不計入支出）' : e.cat)}${payLabel(e) ? '｜' + esc(payLabel(e)) : ''}${e.auto ? '｜自動' : ''}${e.noBal ? '｜未動餘額' : ''}${e.rc ? '｜✓已對帳' : ''}</em></span><span class="l-v ${e.type === '收入' ? 'good' : e.type === '轉帳' ? '' : 'bad'}">${e.type === '收入' ? '+' : '−'}${money(num(e.amount), e.ccy || 'TWD')}</span></div>`).join('')).join('');
+  const rec = S.recurring.map(r => r.kind === '薪資單' ? payslipRow(r) : `<div class="lrow" data-edit="recurring" data-id="${r.id}"><span class="l-ic">${r.kind === '定期定額' ? '📈' : r.kind === '員工認股' ? '🏢' : catIcon(r.kind, r.cat)}</span><span class="l-t"><b>${esc(r.name)}</b><em>每${r.freq === '年' ? `年 ${r.month} 月` : '月'} ${r.day} 號${r.disc ? `｜市價 ${r.disc}%` : ''}${payLabel(r) ? '｜' + esc(payLabel(r)) : ''}</em></span><span class="l-v ${r.kind === '收入' ? 'good' : ''}">${fmt(num(r.amount))}</span></div>`).join('');
   const byPay = {}; M.list.filter(e => e.type === '支出').forEach(e => { const k = e.card ? '信用卡' : e.acct ? '帳戶扣款' : ({ cash: '現金', mobile: '行動支付', other: '其他' })[e.pay] || '未指定'; byPay[k] = (byPay[k] || 0) + toTWD(e.amount, e.ccy); });
   const payMix = Object.keys(byPay).length > 1 ? `<div class="paymix">${Object.entries(byPay).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span>${k} <b>${fmt(v)}</b></span>`).join('')}</div>` : '';
   return `<h2>收支</h2>${missingCard()}
   <div class="mnav"><button class="btn-small ghost" data-act="mprev">‹</button><b>${m.replace('-', ' 年 ')} 月</b><button class="btn-small ghost" data-act="mnext">›</button></div>
-  <div class="card"><div class="mstats"><div><em>收入</em><b class="up">${fmt(M.inc)}</b></div><div><em>支出</em><b class="down">${fmt(M.exp)}</b></div><div><em>結餘</em><b>${fmt(M.net)}</b></div><div><em>儲蓄率</em><b>${M.rate == null ? '—' : fmt(M.rate, 0) + '%'}</b></div></div>
+  <div class="card"><div class="mstats"><div><em>收入</em><b class="good">${fmt(M.inc)}</b></div><div><em>支出</em><b class="bad">${fmt(M.exp)}</b></div><div><em>結餘</em><b>${fmt(M.net)}</b></div><div><em>儲蓄率</em><b>${M.rate == null ? '—' : fmt(M.rate, 0) + '%'}</b></div></div>
     ${M.cats.length ? `<div style="margin-top:10px">${M.cats.map(([c, v]) => bar(c, v, M.cats[0][1], catIcon('支出', c))).join('')}</div>` : ''}${payMix}
     <div class="btn-row" style="margin-top:10px"><button class="btn-primary" data-act="exp">＋ 記支出</button><button class="btn-ghost" data-act="inc">＋ 記收入</button></div></div>
   <div class="card"><h3 class="gold-bar">明細</h3>${rows || '<div class="empty">這個月還沒有紀錄。</div>'}</div>

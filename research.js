@@ -56,7 +56,7 @@ PAGES.cards = () => {
         <div class="rc-i-name">${esc(c.name || '（未命名）')}</div>
         <div class="rc-i-layer">${esc(f ? `${f.ch.name}・${f.i + 1} ${f.l.n}` : c.layer || '未定位')}${c.layerGuess ? '<span class="la-q">推估</span>' : ''}</div>
         ${c.spark ? `<svg class="rc-i-spark" viewBox="0 0 120 30" preserveAspectRatio="none"><path d="${sparkPath(c.spark, 120, 30)}"/></svg>` : ''}
-        <div class="rc-i-nums"><span><em>股價</em><b>${esc(c.price || '—')}</b></span><span><em>20 日</em><b class="${ch >= 0 ? 'up' : 'down'}">${ch == null ? '—' : pct(ch)}</b></span><span><em>估值空間</em><b class="${vs.upside >= 0 ? 'up' : 'down'}">${vs.upside == null ? '—' : pct(vs.upside)}</b></span></div>
+        <div class="rc-i-nums"><span><em>股價</em><b>${esc(c.price || '—')}</b></span><span><em>20 日</em><b class="${ch >= 0 ? 'up' : 'down'}">${ch == null ? '—' : pct(ch)}</b></span><span><em>估值空間</em><b class="${vs.upside >= 0 ? 'good' : 'bad'}">${vs.upside == null ? '—' : pct(vs.upside)}</b></span></div>
         ${c.verdict ? `<div class="rc-i-v">${esc(c.verdict.replace(/^【自動草稿】/, ''))}</div>` : ''}
         <div class="rc-i-foot">綠 ${g}・紅 ${r}・${esc(c.date || '')}</div>
       </button>`;
@@ -135,7 +135,7 @@ function valGauge(c, vs) {
   const p = num(c.price); if (vs.avg == null || !p) return '';
   const lo = Math.min(vs.min, p) * 0.92, hi = Math.max(vs.max, p) * 1.08, X = v => ((v - lo) / (hi - lo) * 100).toFixed(1);
   return `<div class="gauge"><div class="g-track"><div class="g-band" style="left:${X(vs.min)}%;width:${X(vs.max) - X(vs.min)}%"></div><div class="g-avg" style="left:${X(vs.avg)}%"></div><div class="g-px" style="left:${X(p)}%"><span>現價 ${fmt(p, p < 100 ? 2 : 0)}</span></div></div>
-    <div class="g-lbl"><span>合理價 ${fmt(vs.min, 0)}～${fmt(vs.max, 0)}，均值 ${fmt(vs.avg, 0)}</span><b class="${vs.upside >= 0 ? 'up' : 'down'}">${vs.upside >= 0 ? '低估' : '高估'} ${pct(Math.abs(vs.upside)).replace('+', '')}</b></div></div>`;
+    <div class="g-lbl"><span>合理價 ${fmt(vs.min, 0)}～${fmt(vs.max, 0)}，均值 ${fmt(vs.avg, 0)}</span><b class="${vs.upside >= 0 ? 'good' : 'bad'}">${vs.upside >= 0 ? '低估' : '高估'} ${pct(Math.abs(vs.upside)).replace('+', '')}</b></div></div>`;
 }
 cardEditor = function (c) {
   const vs = valSummary(c);
@@ -170,7 +170,7 @@ cardEditor = function (c) {
       return `<div class="rh-hold"><span>💼 我持有 <b>${shf(h.shares)}</b> 股・均價 ${fmt(h.cost / h.shares, 2)}</span>${pl != null ? `<span class="${pl >= 0 ? 'up' : 'down'}">${pl >= 0 ? '+' : ''}${fmt(pl)}（${pct(pl / h.cost * 100)}）</span>` : ''}<span class="rh-hbtn"><button data-hbuy="${esc(h.code)}">加碼</button><button data-hsell="${esc(h.code)}">賣出</button></span></div>`; })()}
   </section>
   ${c.example ? '<div class="note">範例卡：財報數字附來源日期；標「示範」的是填法示意，不是事實或投資建議。</div>' : ''}
-  ${c.auto ? `<details class="rc-auto"><summary>📋 自動資料摘要・${esc(new Date(c.auto.at).toLocaleDateString('zh-TW'))}</summary><div class="r-body" style="white-space:pre-wrap;color:var(--text)">${esc(c.auto.summary)}</div>${c.auto.errors?.length ? `<div class="help down">部分資料抓取失敗：${esc(c.auto.errors.join('；'))}</div>` : ''}</details>` : ''}
+  ${c.auto ? `<details class="rc-auto"><summary>📋 自動資料摘要・${esc(new Date(c.auto.at).toLocaleDateString('zh-TW'))}</summary><div class="r-body" style="white-space:pre-wrap;color:var(--text)">${esc(c.auto.summary)}</div>${c.auto.errors?.length ? `<div class="help bad">部分資料抓取失敗：${esc(c.auto.errors.join('；'))}</div>` : ''}</details>` : ''}
 
   <nav class="rc-toc">${[['lights', '燈號'], ['ind', '產業'], ['fin', '財報'], ['guide', '法說'], ['val', '估值'], ['tech', '技術'], ['chip', '籌碼'], ['end', '結論']].map(([k, l]) => `<a href="#sec-${k}">${l}</a>`).join('')}</nav>
 
@@ -209,7 +209,7 @@ cardEditor = function (c) {
       ${inp(`val.${i}.fair`, c.val[i].fair, 'class="met-v" inputmode="decimal" placeholder="合理價"')}
       <div class="met-p"><span>vs 現價</span><b data-vup="${i}">${upChip(c, i)}</b></div>
       ${ta(`val.${i}.assume`, c.val[i].assume, '關鍵假設')}${inp(`val.${i}.note`, c.val[i].note, 'class="met-s" placeholder="備註"')}</div>`).join('')}
-      <div class="met sum"><div class="met-h"><span>⚖️ 三法平均</span></div><div class="met-v big" id="valAvg">${vs.avg == null ? '—' : fmt(vs.avg, 1)}</div><div class="met-p"><span>潛在空間</span><b id="valUp">${vs.upside == null ? '—' : `<span class="${vs.upside >= 0 ? 'up' : 'down'}">${pct(vs.upside)}</span>`}</b></div><div class="help" id="valSpread">${vs.min ? `區間 ${fmt(vs.min, 0)}～${fmt(vs.max, 0)}${vs.max / vs.min > 1.3 ? '・<span class="down">差距大，檢查假設</span>' : ''}` : '填兩個以上合理價即可比較'}</div></div></div>
+      <div class="met sum"><div class="met-h"><span>⚖️ 三法平均</span></div><div class="met-v big" id="valAvg">${vs.avg == null ? '—' : fmt(vs.avg, 1)}</div><div class="met-p"><span>潛在空間</span><b id="valUp">${vs.upside == null ? '—' : `<span class="${vs.upside >= 0 ? 'good' : 'bad'}">${pct(vs.upside)}</span>`}</b></div><div class="help" id="valSpread">${vs.min ? `區間 ${fmt(vs.min, 0)}～${fmt(vs.max, 0)}${vs.max / vs.min > 1.3 ? '・<span class="bad">差距大，檢查假設</span>' : ''}` : '填兩個以上合理價即可比較'}</div></div></div>
     <div id="valResult" hidden>${valResultHTML(c, vs)}</div>
     ${srcLinks(c, 'val')}
     <details class="rc-sub"><summary>🧮 DCF 試算器</summary>${dcfHTML(c)}</details>
@@ -298,8 +298,8 @@ document.addEventListener('input', e => {
   document.querySelectorAll('[data-vup]').forEach(el => { el.innerHTML = upChip(c, +el.dataset.vup); });
   const A = document.getElementById('valAvg'), U = document.getElementById('valUp'), SP = document.getElementById('valSpread');
   if (A) A.textContent = vs.avg == null ? '—' : fmt(vs.avg, 1);
-  if (U) U.innerHTML = vs.upside == null ? '—' : `<span class="${vs.upside >= 0 ? 'up' : 'down'}">${pct(vs.upside)}</span>`;
-  if (SP) SP.innerHTML = vs.min ? `區間 ${fmt(vs.min, 0)}～${fmt(vs.max, 0)}${vs.max / vs.min > 1.3 ? '・<span class="down">差距大，檢查假設</span>' : ''}` : '填兩個以上合理價即可比較';
+  if (U) U.innerHTML = vs.upside == null ? '—' : `<span class="${vs.upside >= 0 ? 'good' : 'bad'}">${pct(vs.upside)}</span>`;
+  if (SP) SP.innerHTML = vs.min ? `區間 ${fmt(vs.min, 0)}～${fmt(vs.max, 0)}${vs.max / vs.min > 1.3 ? '・<span class="bad">差距大，檢查假設</span>' : ''}` : '填兩個以上合理價即可比較';
 });
 document.addEventListener('click', e => { if (e.target.closest('summary button')) e.preventDefault(); }, true);
 go(current);
@@ -319,9 +319,9 @@ async function loadRadar(force) {
   if (!force && S.radar && Date.now() - (S.radarAt || 0) < 6 * 3600e3) return;
   radarBusy = true; function chipViz(x, i) {
   const a = num(String(x.d5 || '').replace(/[^\d.+-]/g, '')), b = num(String(x.d20 || '').replace(/[^\d.+-]/g, '')); if (a == null && b == null) return '';
-  const rows = [{ l: '5 日', v: a }, { l: '20 日', v: b }].filter(r => r.v != null), inv = i === 3 || i === 4; // 融資、融券增加視為風險
+  const rows = [{ l: '5 日', v: a }, { l: '20 日', v: b }].filter(r => r.v != null); // 增加紅、減少綠（台灣習慣）
   const mx = Math.max(...rows.map(r => Math.abs(r.v)), 1e-9);
-  return `<div class="tv-dv sm">${rows.map(r => `<div class="tv-dr"><span>${r.l}</span><div class="tv-dt"><i class="tv-0"></i><i class="tv-db ${(r.v < 0) !== inv ? 'n' : 'p'}" style="${r.v < 0 ? `right:50%;width:${Math.abs(r.v) / mx * 50}%` : `left:50%;width:${r.v / mx * 50}%`}"></i></div></div>`).join('')}</div>`;
+  return `<div class="tv-dv sm">${rows.map(r => `<div class="tv-dr"><span>${r.l}</span><div class="tv-dt"><i class="tv-0"></i><i class="tv-db ${r.v < 0 ? 'n' : 'p'}" style="${r.v < 0 ? `right:50%;width:${Math.abs(r.v) / mx * 50}%` : `left:50%;width:${r.v / mx * 50}%`}"></i></div></div>`).join('')}</div>`;
 }
 if (current === 'radar') render();
   try {
@@ -485,7 +485,7 @@ PAGES.radar = () => {
   <div class="chips sm"><button class="chip ${hideDear ? 'on' : ''}" data-radardear="1">${hideDear ? '✓ ' : ''}隱藏偏貴的股票</button>${nDear ? `<span class="help">${hideDear ? `已隱藏 ${nDear} 檔偏貴` : `其中 ${nDear} 檔偏貴`}</span>` : ''}</div>
   <div class="help" style="margin:-4px 0 10px">${esc(p[3])}${R ? `｜${list.length} 檔` : ''}・依「動能＋價格」總分排序</div>
   ${R ? (rows ? rows + (list.length > RD_N ? `<button class="btn-ghost rd-more" data-radarall="1">${S.radarAll ? `只看前 ${RD_N} 名` : `顯示全部 ${list.length} 檔`}</button>` : '') : '<div class="card empty">這個條件目前沒有符合的股票，換一個條件看看。</div>') : `<div class="card empty">${radarBusy ? '正在篩選上市櫃全部股票…（約 20～40 秒）' : '按「重新篩選」開始。'}</div>`}
-  ${R ? `<div class="help" style="margin-top:10px">營收資料：${ym}（每月 10 日前公布上月營收）｜全市場 ${R.universe} 檔、成交值 2,000 萬以上 ${R.liquid} 檔｜加權指數近 3 個月 ${R.idx3m == null ? '—' : pct(R.idx3m)}｜更新 ${new Date(R.updated).toLocaleString('zh-TW', { hour12: false })}${R.errors?.length ? `<br><span class="down">${R.errors.map(esc).join('；')}</span>` : ''}<br>來源：證交所、櫃買中心 OpenAPI，Yahoo Finance。篩選結果是研究的起點，不是買進建議；強勢股波動大，建卡時先寫好「證明我錯」的條件與停損。</div>` : ''}`;
+  ${R ? `<div class="help" style="margin-top:10px">營收資料：${ym}（每月 10 日前公布上月營收）｜全市場 ${R.universe} 檔、成交值 2,000 萬以上 ${R.liquid} 檔｜加權指數近 3 個月 ${R.idx3m == null ? '—' : pct(R.idx3m)}｜更新 ${new Date(R.updated).toLocaleString('zh-TW', { hour12: false })}${R.errors?.length ? `<br><span class="bad">${R.errors.map(esc).join('；')}</span>` : ''}<br>來源：證交所、櫃買中心 OpenAPI，Yahoo Finance。篩選結果是研究的起點，不是買進建議；強勢股波動大，建卡時先寫好「證明我錯」的條件與停損。</div>` : ''}`;
 };
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-radarp],[data-radarmkt],#radarRefresh,[data-radarcard],[data-radarall],[data-radartier],[data-rpmon],[data-radardear]'); if (!t) return;
@@ -557,8 +557,8 @@ function techViz(i, c) {
 }
 function chipViz(x, i) {
   const a = num(String(x.d5 || '').replace(/[^\d.+-]/g, '')), b = num(String(x.d20 || '').replace(/[^\d.+-]/g, '')); if (a == null && b == null) return '';
-  const rows = [{ l: '5 日', v: a }, { l: '20 日', v: b }].filter(r => r.v != null), inv = i === 3 || i === 4; // 融資、融券增加視為風險
+  const rows = [{ l: '5 日', v: a }, { l: '20 日', v: b }].filter(r => r.v != null); // 增加紅、減少綠（台灣習慣）
   const mx = Math.max(...rows.map(r => Math.abs(r.v)), 1e-9);
-  return `<div class="tv-dv sm">${rows.map(r => `<div class="tv-dr"><span>${r.l}</span><div class="tv-dt"><i class="tv-0"></i><i class="tv-db ${(r.v < 0) !== inv ? 'n' : 'p'}" style="${r.v < 0 ? `right:50%;width:${Math.abs(r.v) / mx * 50}%` : `left:50%;width:${r.v / mx * 50}%`}"></i></div></div>`).join('')}</div>`;
+  return `<div class="tv-dv sm">${rows.map(r => `<div class="tv-dr"><span>${r.l}</span><div class="tv-dt"><i class="tv-0"></i><i class="tv-db ${r.v < 0 ? 'n' : 'p'}" style="${r.v < 0 ? `right:50%;width:${Math.abs(r.v) / mx * 50}%` : `left:50%;width:${r.v / mx * 50}%`}"></i></div></div>`).join('')}</div>`;
 }
 if (current === 'radar') render();

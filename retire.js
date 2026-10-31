@@ -251,7 +251,7 @@ function plFill() {
   set('pl_exp_v', `約 ${fmt(R.need0)} 元`);
   set('pl_exp_d', `基本 ${fmt(R.E.v)}（${R.E.d}）＋ 特殊 ${fmt(xNow)}${xLtcV && num(p.ltcAge) > R.ra ? `；${num(p.ltcAge)} 歲起長照再加 ${fmt(xLtcV)}` : ''}`);
   set('pl_have_v', `${fmt(R.N.have)} 元`); set('pl_have_d', `已先扣下緊急預備金 ${fmt(R.N.ef)}`);
-  set('plHaveD', `股票與投資型保單 ${fmt(R.N.stock)}・債券／儲蓄險／多餘現金 ${fmt(R.N.bond)}${R.N.metal ? `・貴金屬 ${fmt(R.N.metal)}` : ''}<br>緊急預備金目標 6 個月 ${fmt(R.eNeed)}，現在存款${R.N.W.cash >= R.eNeed ? '已足夠，多出來的算進投資' : `只有 ${fmt(R.N.W.cash)}，<b class="down">建議先補足 ${fmt(R.eNeed - R.N.W.cash)}</b>`}。`);
+  set('plHaveD', `股票與投資型保單 ${fmt(R.N.stock)}・債券／儲蓄險／多餘現金 ${fmt(R.N.bond)}${R.N.metal ? `・貴金屬 ${fmt(R.N.metal)}` : ''}<br>緊急預備金目標 6 個月 ${fmt(R.eNeed)}，現在存款${R.N.W.cash >= R.eNeed ? '已足夠，多出來的算進投資' : `只有 ${fmt(R.N.W.cash)}，<b class="bad">建議先補足 ${fmt(R.eNeed - R.N.W.cash)}</b>`}。`);
   // 主結果
   const pct = Math.round(R.prog * 100), B = R.cur && !R.ok ? R.sim(R.cur) : null;
   const mPlan = R.ok ? R.cur : R.per[12], dCur = R.draw(R.cur), inc = R.pen0 + dCur, incPlan = R.pen0 + R.draw(mPlan);

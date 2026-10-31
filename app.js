@@ -347,7 +347,7 @@ PAGES.macro = () => `
   </div>`;
 function macroStatus() {
   if (S.macro.fetching) return '資料更新中…（第一次可能需要數十秒）';
-  const err = S.macro.fetchError ? `<div class="down" style="margin-top:4px">${esc(S.macro.fetchError)}</div>` : '';
+  const err = S.macro.fetchError ? `<div class="bad" style="margin-top:4px">${esc(S.macro.fetchError)}</div>` : '';
   if (!S.macro.fetchedAt) return '按「更新數據」自動帶入總經數據（BLS、紐約聯準銀行、美國財政部、臺灣銀行）。台灣景氣與出口請手動填寫。' + err;
   const t = new Date(S.macro.fetchedAt);
   return `已於 ${t.toLocaleString('zh-TW', { hour12: false })} 自動更新。` + err;
@@ -544,7 +544,7 @@ function cardEditor(c) {
     </div>
   </div>
   ${c.auto ? `<div class="card"><h3 class="gold-bar">自動資料摘要</h3><div class="r-body" style="white-space:pre-wrap;color:var(--text)">${esc(c.auto.summary)}</div>
-    <div class="help" style="margin-top:6px">更新於 ${esc(new Date(c.auto.at).toLocaleString('zh-TW', { hour12: false }))}；自動填入的欄位標有「自動」。數字來自公開資料，仍請自行核對。${c.auto.errors?.length ? `<br><span class="down">部分資料抓取失敗：${esc(c.auto.errors.join('；'))}</span>` : ''}</div></div>` : ''}
+    <div class="help" style="margin-top:6px">更新於 ${esc(new Date(c.auto.at).toLocaleString('zh-TW', { hour12: false }))}；自動填入的欄位標有「自動」。數字來自公開資料，仍請自行核對。${c.auto.errors?.length ? `<br><span class="bad">部分資料抓取失敗：${esc(c.auto.errors.join('；'))}</span>` : ''}</div></div>` : ''}
   <div class="card">
     <div class="card-head" style="margin-bottom:0"><h3 class="gold-bar">六面向燈號</h3><button class="btn-small ghost" id="relight">依最新資料重算燈號</button></div>
     ${srcLinks(c, 'industry')}
@@ -689,8 +689,8 @@ function valResultHTML(c, vs) {
   const spread = vs.min ? (vs.max / vs.min - 1) * 100 : null;
   return `<dl class="kv"><dt>三法合理價平均</dt><dd>${fmt(vs.avg, 2)}</dd>
     <dt>區間</dt><dd>${fmt(vs.min, 2)} ～ ${fmt(vs.max, 2)}</dd>
-    <dt>相對目前股價</dt><dd class="${vs.upside >= 0 ? 'up' : 'down'}">${pct(vs.upside)}</dd>
-    ${spread != null && spread > 30 ? `<dt>提醒</dt><dd class="down">三法差距 ${spread.toFixed(0)}%，請回頭檢查假設</dd>` : ''}</dl>`;
+    <dt>相對目前股價</dt><dd class="${vs.upside >= 0 ? 'good' : 'bad'}">${pct(vs.upside)}</dd>
+    ${spread != null && spread > 30 ? `<dt>提醒</dt><dd class="bad">三法差距 ${spread.toFixed(0)}%，請回頭檢查假設</dd>` : ''}</dl>`;
 }
 function setPath(obj, path, val) {
   const ks = path.split('.'); let o = obj;
@@ -876,7 +876,7 @@ function calcStrategy() {
   S.dca = { m: $('#dca_m').value, y: $('#dca_y').value, r: $('#dca_r').value };
   save();
   const cap = g('ps_cap'), risk = g('ps_risk'), entry = g('ps_entry'), stop = g('ps_stop'), target = g('ps_target'), lot = g('ps_lot') || 1;
-  let html = entry && stop && entry === stop ? '<span class="down">停損價不能等於進場價。停損價是「跌到這裡就認錯賣出」的價格，要比進場價低，例如進場 100、停損 92。</span>' : '<span class="lead">輸入進場價與停損價（停損價要比進場價低）。</span>';
+  let html = entry && stop && entry === stop ? '<span class="bad">停損價不能等於進場價。停損價是「跌到這裡就認錯賣出」的價格，要比進場價低，例如進場 100、停損 92。</span>' : '<span class="lead">輸入進場價與停損價（停損價要比進場價低）。</span>';
   if (cap && risk && entry && stop && entry !== stop) {
     const riskAmt = cap * risk / 100, perShare = Math.abs(entry - stop);
     const shares = Math.floor(riskAmt / perShare / lot) * lot;
@@ -1077,7 +1077,7 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferr
 $('#installBtn').addEventListener('click', async () => {
   if (!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; $('#installBtn').hidden = true;
 });
-const APP_VER = '2026.10.31b';
+const APP_VER = '2026.10.31c';
 if ('serviceWorker' in navigator) window.addEventListener('load', () => {
   // 有新版本時自動套用：回到 App 時檢查更新，新的 Service Worker 接手後重新載入一次
   const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;

@@ -125,7 +125,7 @@ function masterHTML(c) {
     return { M, C, y, nn, cl, tx };
   });
   const best = rows.filter(r => r.cl === 'pos').map(r => r.M.n);
-  return `<details class="rc-sub ms" open><summary>🎓 大師檢查表${best.length ? `・<b class="up">${best.join('、')}會喜歡</b>` : ''}</summary>
+  return `<details class="rc-sub ms" open><summary>🎓 大師檢查表${best.length ? `・<b class="good">${best.join('、')}會喜歡</b>` : ''}</summary>
     <div class="ms-list">${rows.map(r => `<details class="ms-m" data-ms="${r.M.id}" ${msOpen.has(r.M.id) ? 'open' : ''}><summary><b>${r.M.n}</b><em>${r.M.t}</em><i class="sigp ${r.cl}">${r.tx} ${r.nn ? `${r.y}/${r.nn}` : ''}</i></summary>
       ${r.C.map(x => `<div class="ms-c ${x.st}"><span>${x.st === 'ok' ? '✅' : x.st === 'no' ? '❌' : '➖'} ${x.k}</span><small>${x.st === 'na' ? (d.fin && /負債|EBITDA|利益率/.test(x.k) ? '金融股不適用' : '缺資料') : x.f(x.v)}</small></div>`).join('')}</details>`).join('')}</div>
     <div class="help">用研究卡的財報（近四季）與估值計算，是照公開選股原則做的簡化版，不代表本人觀點；不同風格本來就會有不同結論，用來檢查自己有沒有漏看。</div></details>`;

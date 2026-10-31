@@ -118,6 +118,9 @@ const TW_SNAP = {
     grows: [['2026(f)', 11.48, 8.91, 4.97, 5.37, 17.37, 12.47, 8.42, -5.32, 22.05, 21.91], ['上半年', 14.15, 7.29, 5.37, 3.74, 12.12, 10.36, 7.63, 3.75, 27.73, 21.55], ['下半年(f)', 9.09, 10.48, 4.58, 6.77, 22.73, 14.75, 8.95, -10.92, 17.17, 22.26]] },
   orders: { date: '2026 年 8 月', src: '經濟部統計處', items: [['資訊通信', 100.5], ['電子產品', 83.9], ['機械', 28.3], ['基本金屬', 26.8], ['化學品', 15.4], ['塑橡膠製品', 6.7], ['光學器材', -5.0]] },
 };
+// 漲跌熱度（台灣習慣：漲紅跌綠）
+const heatP = (v, scale = 5) => { if (v == null || !isFinite(v)) return ''; const a = Math.min(1, Math.abs(v) / scale) * 0.32 + 0.04; return `background:${v >= 0 ? `rgba(214,69,69,${a})` : `rgba(30,158,90,${a})`}`; };
+// 好壞熱度（綠＝好、紅＝壞）
 const heat = (v, scale = 5, invert) => { if (v == null || !isFinite(v)) return ''; const a = Math.min(1, Math.abs(v) / scale) * 0.32 + 0.04; const good = invert ? v < 0 : v >= 0; return `background:${good ? `rgba(30,158,90,${a})` : `rgba(214,69,69,${a})`}`; };
 const pc = (v, d = 1) => v == null ? '—' : `${v > 0 ? '+' : ''}${(+v).toFixed(d)}`;
 function gtable(cols, rows, cls = '') { return `<div class="gt ${cls}" style="--n:${cols.length}"><div class="gt-r gt-h">${cols.map(c => `<span>${c}</span>`).join('')}</div>${rows.join('')}</div>`; }
@@ -314,7 +317,7 @@ function assetsView() {
     const list = g.syms.map(s => ms[s]).filter(Boolean); if (!list.length) return '';
     const rows = list.map(m => g.yld
       ? `<div class="gt-r"><span>${esc(m.name)}${spk(m.spark, 'lt')}</span><span>${m.price}%</span><span style="${heat(-bp(m.spark, 1), 8)}">${bpS(bp(m.spark, 1))}</span><span style="${heat(-bp(m.spark, 21), 30)}">${bpS(bp(m.spark, 21))}</span><span style="${heat(-bp(m.spark, 59), 50)}">${bpS(bp(m.spark, 59))}</span></div>`
-      : `<div class="gt-r"><span>${esc(m.name)}<small class="w-u">${UNIT[m.sym] || '美元'}</small>${spk(m.spark, 'lt')}</span><span>${fmt(m.price, m.price < 100 ? 2 : 0)}</span><span style="${heat(m.chg1d, 2)}">${pc(m.chg1d)}</span><span style="${heat(m.chg1m, 8)}">${pc(m.chg1m)}</span><span style="${heat(m.ytd, 30)}">${pc(m.ytd)}</span></div>`);
+      : `<div class="gt-r"><span>${esc(m.name)}<small class="w-u">${UNIT[m.sym] || '美元'}</small>${spk(m.spark, 'lt')}</span><span>${fmt(m.price, m.price < 100 ? 2 : 0)}</span><span style="${heatP(m.chg1d, 2)}">${pc(m.chg1d)}</span><span style="${heatP(m.chg1m, 8)}">${pc(m.chg1m)}</span><span style="${heatP(m.ytd, 30)}">${pc(m.ytd)}</span></div>`);
     return `<div class="card"><h3 class="gold-bar">${g.t}</h3>${gtable(g.yld ? ['', '殖利率', '1 天 bp', '1 月', '3 月'] : ['', '價格', '1 天%', '1 月', '今年'], rows, 'mk as')}<div class="help">${esc(g.note)}</div></div>`;
   }).join('');
   const d = Object.values(ms).map(m => m.date).sort().pop();
@@ -329,7 +332,7 @@ function globalView() {
   const idx = Object.entries(w?.economies || {}).filter(([id]) => id !== 'assets').flatMap(([id, e]) => (e.markets || []).filter(m => !/=X$|DX-Y|VIX/.test(m.sym)).map(m => ({ ...m, id })));
   const order = ['^GSPC', '^IXIC', '^SOX', '^N225', '^HSI', '000300.SS', '000001.SS', 'BSE-100.BO', '^BSESN', '^TWII', 'TPEX', '^KS11', '^STOXX50E'];
   idx.sort((a, b) => order.indexOf(a.sym) - order.indexOf(b.sym));
-  const mkt = idx.length ? `<div class="card"><h3 class="gold-bar">📊 全球股市報酬（本地貨幣計價，%）</h3>${gtable(['指數', '水平', '1 天', '7 天', '1 個月', '年初至今'], idx.map(m => `<div class="gt-r ${m.sym === '^TWII' ? 'hl' : ''}"><span>${esc(m.name)}</span><span>${fmt(m.price, m.price < 100 ? 2 : 0)}</span><span style="${heat(m.chg1d, 2)}">${pc(m.chg1d)}</span><span style="${heat(m.chg1w, 4)}">${pc(m.chg1w)}</span><span style="${heat(m.chg1m, 8)}">${pc(m.chg1m)}</span><span style="${heat(m.ytd, 40)}">${pc(m.ytd)}</span></div>`), 'mk')}</div>` : '';
+  const mkt = idx.length ? `<div class="card"><h3 class="gold-bar">📊 全球股市報酬（本地貨幣計價，%）</h3>${gtable(['指數', '水平', '1 天', '7 天', '1 個月', '年初至今'], idx.map(m => `<div class="gt-r ${m.sym === '^TWII' ? 'hl' : ''}"><span>${esc(m.name)}</span><span>${fmt(m.price, m.price < 100 ? 2 : 0)}</span><span style="${heatP(m.chg1d, 2)}">${pc(m.chg1d)}</span><span style="${heatP(m.chg1w, 4)}">${pc(m.chg1w)}</span><span style="${heatP(m.chg1m, 8)}">${pc(m.chg1m)}</span><span style="${heatP(m.ytd, 40)}">${pc(m.ytd)}</span></div>`), 'mk')}</div>` : '';
   // 2. 經濟體總覽表
   const rows = list.map(e => {
     const id = e.id, g = w?.imf?.NGDP_RPCH?.[e.imf]?.['2026'];

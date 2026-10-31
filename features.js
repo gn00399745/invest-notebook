@@ -259,7 +259,7 @@ function dcfHTML(c) {
   const u = c.market === '美股' ? { f: '百萬美元', s: '百萬股' } : { f: '億元', s: '億股' };
   const res = dcfCalc(i);
   const out = !res ? '<span class="help">填入自由現金流與股數即可試算（按「⚡ 自動帶入資料」會自動填入）。</span>'
-    : res.neg ? '<span class="down">近四季自由現金流為負，DCF 不適用；可改看營收成長與股價營收比。</span>'
+    : res.neg ? '<span class="bad">近四季自由現金流為負，DCF 不適用；可改看營收成長與股價營收比。</span>'
       : `每股合理價約 <b>${fmt(res.perShare, 1)}</b>${c.price ? `（目前股價 ${c.price}，${pct((res.perShare / num(c.price) - 1) * 100)}）` : ''}；其中未來 5 年現金流現值佔 ${fmt(res.pv / (res.pv + res.tv) * 100, 0)}%，永續價值佔 ${fmt(res.tv / (res.pv + res.tv) * 100, 0)}%。`;
   const f = (k, l, ph) => `<label class="f"><span>${l}</span><input type="text" inputmode="decimal" data-dcf="${k}" value="${esc(i[k] ?? '')}" placeholder="${ph}"></label>`;
   return `<div class="dcf"><div class="sec-title" style="margin-top:4px">DCF 試算（現金流折現）</div>
@@ -370,7 +370,7 @@ PAGES.strategy = () => {
       <label class="f"><span>目標月數</span><input type="number" inputmode="decimal" data-ef="months" value="${esc(e.months ?? '6')}"></label>
       <label class="f"><span>目前預備金</span><input type="number" inputmode="decimal" data-ef="have" value="${esc(e.have ?? '')}"></label>
     </div>
-    <div class="result" id="efResult">${need ? `目標 ${fmt(need)} 元，目前 ${fmt(have)} 元，達成 <b class="${have >= need ? 'up' : 'down'}">${fmt(Math.min(100, have / need * 100), 0)}%</b>${have >= need ? '，已準備好。' : `，還差 ${fmt(need - have)} 元。建議先補足再加碼投資。`}` : '<span class="help">填入每月生活費即可計算。</span>'}</div></div>`;
+    <div class="result" id="efResult">${need ? `目標 ${fmt(need)} 元，目前 ${fmt(have)} 元，達成 <b class="${have >= need ? 'good' : 'bad'}">${fmt(Math.min(100, have / need * 100), 0)}%</b>${have >= need ? '，已準備好。' : `，還差 ${fmt(need - have)} 元。建議先補足再加碼投資。`}` : '<span class="help">填入每月生活費即可計算。</span>'}</div></div>`;
   return _stratPage2().replace('<h3 class="gold-bar">三、資產配置與再平衡</h3>', guide).replace('<div class="card">\n    <h3 class="gold-bar">四、定期定額試算</h3>', ef + '<div class="card">\n    <h3 class="gold-bar">四、定期定額試算</h3>');
 };
 document.addEventListener('click', e => {
@@ -384,7 +384,7 @@ document.addEventListener('input', e => {
   const k = e.target.dataset?.ef; if (!k) return;
   S.emergency = S.emergency || {}; S.emergency[k] = e.target.value; save();
   const x = S.emergency, need = (num(x.monthly) || 0) * (num(x.months) || 6), have = num(x.have) || 0, el = $('#efResult');
-  if (el) el.innerHTML = need ? `目標 ${fmt(need)} 元，目前 ${fmt(have)} 元，達成 <b class="${have >= need ? 'up' : 'down'}">${fmt(Math.min(100, have / need * 100), 0)}%</b>${have >= need ? '，已準備好。' : `，還差 ${fmt(need - have)} 元。建議先補足再加碼投資。`}` : '<span class="help">填入每月生活費即可計算。</span>';
+  if (el) el.innerHTML = need ? `目標 ${fmt(need)} 元，目前 ${fmt(have)} 元，達成 <b class="${have >= need ? 'good' : 'bad'}">${fmt(Math.min(100, have / need * 100), 0)}%</b>${have >= need ? '，已準備好。' : `，還差 ${fmt(need - have)} 元。建議先補足再加碼投資。`}` : '<span class="help">填入每月生活費即可計算。</span>';
 });
 
 /* ================= 五、監控條件：結構化與自動檢查 ================= */
@@ -645,7 +645,7 @@ document.addEventListener('input', e => {
     const c = S.cards.find(x => x.id === openCardId); if (!c) return;
     c.dcfIn = c.dcfIn || {}; c.dcfIn[t.dataset.dcf] = t.value; c.dcfIn.auto = false; save();
     const res = dcfCalc(c.dcfIn), el = $('#dcfResult');
-    if (el) el.innerHTML = !res ? '<span class="help">資料不足或折現率需大於永續成長率。</span>' : res.neg ? '<span class="down">自由現金流為負，DCF 不適用。</span>' : `每股合理價約 <b>${fmt(res.perShare, 1)}</b>${c.price ? `（目前股價 ${c.price}，${pct((res.perShare / num(c.price) - 1) * 100)}）` : ''}`;
+    if (el) el.innerHTML = !res ? '<span class="help">資料不足或折現率需大於永續成長率。</span>' : res.neg ? '<span class="bad">自由現金流為負，DCF 不適用。</span>' : `每股合理價約 <b>${fmt(res.perShare, 1)}</b>${c.price ? `（目前股價 ${c.price}，${pct((res.perShare / num(c.price) - 1) * 100)}）` : ''}`;
   }
 });
 
@@ -765,7 +765,7 @@ function openTradeForm(pre = {}, id) {
       $('#codeStat').innerHTML = `<b>${esc(q.name || code)}</b>　現價 ${q.price}（${esc(q.priceDate)}）${v.esppDisc ? `<br>員工認股價 = 市價 ${q.price} × ${v.esppDisc}% = <b>${Math.round(q.price * v.esppDisc) / 100}</b>（請以公司公告的認購價為準）` : ''}`;
       body._snap = makeSnapshot(code, q, body.querySelector('[name=side]:checked').value);
       $('#snapBox').textContent = body._snap.text;
-    } catch (e) { if (body.isConnected) $('#codeStat').innerHTML = `<span class="down">查不到這個代號（${esc(e.message)}）</span>`; }
+    } catch (e) { if (body.isConnected) $('#codeStat').innerHTML = `<span class="bad">查不到這個代號（${esc(e.message)}）</span>`; }
   };
   f('code').addEventListener('input', () => { clearTimeout(timer); f('name')._auto = true; timer = setTimeout(lookup, 600); });
   f('name').addEventListener('input', () => { f('name')._auto = false; });
