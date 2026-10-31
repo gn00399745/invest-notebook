@@ -64,6 +64,54 @@ PAGES.cards = () => {
   </div>`;
 };
 
+/* ---------- 法說會：網站抓不到資料，改成「複製提問 → 貼回 AI 回覆 → 自動整理」 ---------- */
+const GUIDE_H = [['指引方向', 'dir'], ['管理層指引', 'guidance'], ['關鍵原話', 'quotes'], ['分析師問答重點', 'qa'], ['轉成估值假設', 'assumptions']];
+function guideAiPrompt(c) {
+  return `請幫我整理 ${c.code} ${c.name || ''} 最近一次法說會（或最新一季財報電話會議）的重點。
+請先寫出法說會日期與資料來源；如果查不到，就直接說查不到，不要編造數字或原話。
+
+請完全照下面格式回答，每個標題單獨一行，標題用【】括起來：
+【指引方向】上修／維持／下修（只寫其中一個，跟上一次法說會比較）
+【管理層指引】下一季或全年的營收、毛利率、營益率區間；跟上次比上修或下修多少
+【關鍵原話】2～4 句管理層的原話，每句標日期
+【分析師問答重點】分析師最關心的 3 個問題，以及管理層怎麼回答
+【轉成估值假設】可以拿來估值的數字，例如明年營收成長率、毛利率、資本支出`;
+}
+function guideAiHTML(c, again) {
+  return `<div class="gai">
+    ${again ? '' : '<div class="help" style="margin-bottom:8px">法說會資料網站抓不到，交給 AI 整理：</div>'}
+    <ol class="gai-steps"><li>按「複製提問」，貼到 ChatGPT、Claude 或 Gemini（最好附上法說會簡報 PDF 或逐字稿）</li><li>把 AI 的回覆整段貼到下面，按「整理進研究卡」，會自動拆成指引方向、管理層指引、關鍵原話、分析師問答、估值假設</li></ol>
+    <div class="btn-row"><button type="button" class="btn-small" data-gai="copy">📋 複製提問</button>${again ? '' : '<button type="button" class="btn-small ghost" data-gai="manual">我要自己填</button>'}</div>
+    <textarea class="cell-ta gai-in" rows="4" placeholder="貼上 AI 的回覆…"></textarea>
+    <div class="btn-row"><button type="button" class="btn-primary" data-gai="parse">整理進研究卡</button></div></div>`;
+}
+// 依【標題】拆段；沒有【】時也接受「標題：」開頭的行
+function guideParse(txt) {
+  const t = String(txt || '').replace(/\r/g, '').replace(/\*\*|^#+\s*/gm, ''), out = {}, keys = GUIDE_H.map(h => h[0]);
+  const re = new RegExp(`(?:【\\s*(${keys.join('|')})[^】]*】|^\\s*(${keys.join('|')})\\s*[：:])`, 'gm');
+  const hits = [...t.matchAll(re)];
+  hits.forEach((m, i) => {
+    const key = GUIDE_H.find(h => h[0] === (m[1] || m[2]))[1], body = t.slice(m.index + m[0].length, hits[i + 1]?.index ?? t.length).trim();
+    if (body) out[key] = body;
+  });
+  if (hits.length) { const pre = t.slice(0, hits[0].index).trim(); if (pre) out.pre = pre; }
+  if (out.dir) out.dir = (out.dir.match(/上修|維持|下修/) || [''])[0];
+  return out;
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-gai]'); if (!t) return;
+  const c = S.cards.find(x => x.id === openCardId); if (!c) return;
+  if (t.dataset.gai === 'copy') return copy(guideAiPrompt(c));
+  if (t.dataset.gai === 'manual') { c.guideManual = true; save(); const y = scrollY; render(); return scrollTo(0, y); }
+  const txt = t.closest('.gai')?.querySelector('.gai-in')?.value || '', P = guideParse(txt);
+  const n = ['guidance', 'quotes', 'qa', 'assumptions'].filter(k => P[k]).length;
+  if (!n && !P.dir) return toast('看不出段落：請確認 AI 有照【管理層指引】這樣的標題回答');
+  ['guidance', 'quotes', 'qa', 'assumptions'].forEach(k => { if (P[k]) c[k] = P[k]; });
+  if (P.pre && P.pre.length < 300) c.guidance = `${P.pre}\n${c.guidance || ''}`.trim();
+  if (P.dir) { c.guideDir = P.dir; const L = c.lights[2]; if (!L.c || L.auto || L.fromGuide) { L.c = { 上修: '綠', 維持: '黃', 下修: '紅' }[P.dir]; L.fromGuide = true; } }
+  c.guideAt = today(); save(); toast(`已整理 ${n} 段${P.dir ? `，指引${P.dir}` : ''}`); const y = scrollY; render(); scrollTo(0, y);
+});
+
 /* ---------- 研究卡內頁 ---------- */
 const GUIDE_F = [['guidance', '🧭', '管理層指引', '營收、毛利率區間；上修或下修多少'], ['quotes', '💬', '關鍵原話', '標日期'], ['qa', '🙋', '分析師問答重點', '分析師最關心什麼'], ['assumptions', '🔁', '轉成估值假設', '例如：明年營收成長 20%']];
 const TECH_IC = ['📐', '🌡️', '〰️', '📏', '🔺', '🧱', '📊'];
@@ -148,10 +196,11 @@ cardEditor = function (c) {
     <label class="f"><span>頭條數字 vs 真實體質的落差</span>${ta('finGap', c.finGap, '例如：獲利創高但營業現金流轉負')}</label>
   </details>
 
-  <details class="rc-sec" id="sec-guide" open>${secHead('3', 'guide', '法說會與管理層指引', guideDone, 4)}
-    <div class="met-grid wide">${GUIDE_F.map(([k, ic, l, ph]) => `<div class="met ${filled([c[k]]) ? 'done' : ''}"><div class="met-h"><span>${ic} ${l}</span><span class="pill ${filled([c[k]]) ? 'green' : ''}">${filled([c[k]]) ? '已填' : '待填'}</span></div>
+  <details class="rc-sec" id="sec-guide" open>${secHead('3', 'guide', '法說會與管理層指引', guideDone, guideDone || c.guideDir || c.guideManual ? 4 : 0, guideDone || c.guideDir || c.guideManual ? '' : '<span class="pill gold">等 AI 回覆</span>')}
+    ${!(guideDone || c.guideDir || c.guideManual) ? guideAiHTML(c) : `<div class="met-grid wide">${GUIDE_F.map(([k, ic, l, ph]) => `<div class="met ${filled([c[k]]) ? 'done' : ''}"><div class="met-h"><span>${ic} ${l}</span><span class="pill ${filled([c[k]]) ? 'green' : ''}">${filled([c[k]]) ? '已填' : '待填'}</span></div>
       ${k === 'guidance' ? `<div class="gdir">${['上修', '維持', '下修'].map((d, j) => `<button type="button" class="gd ${['綠', '黃', '紅'][j]} ${c.guideDir === d ? 'on' : ''}" data-gdir="${d}">${['▲', '■', '▼'][j]} ${d}</button>`).join('')}</div>` : ''}
       ${ta(k, c[k], ph)}</div>`).join('')}</div>
+    <details class="gai-again"><summary>重新貼上 AI 的回覆</summary>${guideAiHTML(c, true)}</details>`}
     ${srcLinks(c, 'guide')}
   </details>
 

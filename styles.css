@@ -1295,3 +1295,7 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .rd-val.cheap .pill { background: rgba(30,158,90,.15); color: var(--green); } .rd-val.fair .pill { background: rgba(59,130,196,.14); }
 .rd-val.dear .pill, .rd-val.xdear .pill { background: rgba(214,69,69,.14); color: var(--red); }
 .rd-val.dear, .rd-val.xdear { background: rgba(214,69,69,.07); }
+/* 研究卡：法說會交給 AI 整理 */
+.gai-steps { margin: 0 0 8px; padding-left: 20px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.gai .gai-in { width: 100%; margin: 8px 0; min-height: 90px; }
+.gai-again { margin-top: 10px; } .gai-again > summary { cursor: pointer; font-size: 13px; color: var(--muted); }
