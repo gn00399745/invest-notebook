@@ -92,6 +92,10 @@ module.exports = async (req, res) => {
   const errors = [];
   const [A, B] = await Promise.all([twse(errors).catch(e => { errors.push('證交所：' + why(e)); return {}; }), tpex(errors).catch(e => { errors.push('櫃買中心：' + why(e)); return {}; })]);
   const all = Object.values({ ...A, ...B }).filter(u => u.close > 0);
+  // 同產業本益比、股價淨值比中位數（給前端判斷價格貴不貴）
+  const med = a => { const s = a.filter(v => v > 0).sort((x, y) => x - y); return s.length >= 3 ? s[Math.floor(s.length / 2)] : null; };
+  const byInd = {}; all.forEach(u => { if (u.ind) (byInd[u.ind] = byInd[u.ind] || []).push(u); });
+  const indMed = {}; Object.entries(byInd).forEach(([k, us]) => { indMed[k] = { pe: med(us.map(u => u.pe).filter(v => v < 200)), pb: med(us.map(u => u.pb)) }; });
   // 第一關：流動性（成交值 ≥ 2,000 萬）＋營收或股價動能
   const liq = all.filter(u => (u.value || 0) >= 2e7);
   const pre = u => Math.min(u.revYoY ?? -50, 150) * 0.5 + Math.min(u.cumYoY ?? -50, 100) * 0.3 + (u.mavg ? (u.close / u.mavg - 1) * 200 : 0);
@@ -107,6 +111,7 @@ module.exports = async (req, res) => {
   if (miss) errors.push(`${miss} 檔走勢資料暫時取不到（只用營收計分）`);
   const list = short.sort((a, b) => b.score - a.score).map(u => ({
     code: u.code, name: u.name, mkt: u.mkt, ind: u.ind || '', close: u.close, chg: u.chg, value: u.value, pe: u.pe, dy: u.dy, pb: u.pb,
+    indPE: indMed[u.ind]?.pe ?? null, indPB: indMed[u.ind]?.pb ?? null,
     revYM: u.revYM, revYoY: r1(u.revYoY), revMoM: r1(u.revMoM), cumYoY: r1(u.cumYoY),
     dist: r1(u.t?.dist), rs: r1(u.t?.rs), r1m: r1(u.t?.r1m), r3: r1(u.t?.r3), vr: u.t?.vr != null ? Math.round(u.t.vr * 100) / 100 : null, bias20: r1(u.t?.bias20),
     trend: u.t ? (u.t.last > u.t.ma20 && u.t.ma20 > u.t.ma60 ? '多頭排列' : u.t.last > u.t.ma60 ? '季線之上' : '季線之下') : '', ma60up: u.t?.ma60up ?? null,

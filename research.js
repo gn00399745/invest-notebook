@@ -292,6 +292,41 @@ function radarMarket() {
   try { const v = typeof verdict === 'function' ? verdict('tw') : null; const M = typeof mktSignals === 'function' ? mktSignals() : null;
     return v ? { z: v.z, n: EXT_Z[v.z].n, ic: EXT_Z[v.z].ic, ph: v.P, sig: M?.rows.length ? M.lv[0] : null, sigN: M?.lv[1] } : null; } catch (e) { return null; }
 }
+/* ---------- 選股雷達：價格貴不貴 ----------
+   有研究卡：用研究卡的綜合合理價（本益比、DCF、淨值比、殖利率…加權）；
+   沒有研究卡：用本益比對同產業中位數、以及本益比對營收成長（PEG）快速估。 */
+function radarVal(x) {
+  const card = S.cards.find(c => String(c.code) === String(x.code));
+  if (card && typeof fairComposite === 'function') {
+    try {
+      const F = fairComposite(card);
+      if (F.avg > 0) {
+        const up = (F.avg / x.close - 1) * 100, t = `研究卡合理價 ${rdP(F.avg)}，現價${up >= 0 ? '低' : '高'} ${fmt(Math.abs(up), 0)}%`;
+        if (up >= 15) return { k: 'cheap', n: '便宜', adj: 10, t, fair: F.avg, src: 'card' };
+        if (up <= -30) return { k: 'xdear', n: '很貴', adj: -30, t, fair: F.avg, src: 'card' };
+        if (up <= -10) return { k: 'dear', n: '偏貴', adj: -20, t, fair: F.avg, src: 'card' };
+        return { k: 'fair', n: '合理', adj: 0, t, fair: F.avg, src: 'card' };
+      }
+    } catch (e) { /* 研究卡估值資料不全，改用快速估 */ }
+  }
+  const g = Math.max(1, Math.min(40, x.cumYoY ?? (x.revYoY != null ? x.revYoY / 2 : 0)));
+  // 營收暴增（累計年增 >100%）或營建業：低本益比常是一次性入帳或景氣高峰，不算便宜
+  const spike = (x.cumYoY ?? 0) > 100 || /營造|建材/.test(x.ind || '');
+  if (!(x.pe > 0)) {
+    const hi = x.pb > 6 || (x.indPB && x.pb > x.indPB * 2);
+    return hi ? { k: 'dear', n: '偏貴', adj: -20, t: `近四季虧損，股價淨值比 ${fmt(x.pb, 1)} 倍${x.indPB ? `（同業 ${fmt(x.indPB, 1)}）` : ''}偏高` }
+      : { k: 'na', n: '難估', adj: -5, t: `近四季虧損，沒有本益比可比${x.pb ? `；股價淨值比 ${fmt(x.pb, 1)} 倍` : ''}` };
+  }
+  const peg = x.pe / g, rel = x.indPE ? x.pe / x.indPE : null;
+  const t = `本益比 ${fmt(x.pe, 1)}${x.indPE ? `（同業 ${fmt(x.indPE, 1)}）` : ''}・成長 ${fmt(g, 0)}%・PEG ${fmt(peg, 1)}`;
+  if (peg > 4 || x.pe > 80) return { k: 'xdear', n: '很貴', adj: -30, t };
+  if (peg > 2.5 || x.pe > 50 || (rel && rel > 1.8)) return { k: 'dear', n: '偏貴', adj: -20, t };
+  if ((spike && (x.pe < 15 || peg < 1)) || x.pe < 6) return { k: 'fair', n: '難說', adj: 0, t: `${t}；${spike ? `營收暴增 ${fmt(x.cumYoY ?? x.revYoY, 0)}%` : `本益比只有 ${fmt(x.pe, 1)} 倍`}，低本益比可能是一次性入帳或景氣高峰，建研究卡確認` };
+  if (peg < 1 && x.pe <= 20 && (!rel || rel < 1.2)) return { k: 'cheap', n: '便宜', adj: 10, t };
+  return { k: 'fair', n: '合理', adj: 0, t };
+}
+const rdDear = v => v.k === 'dear' || v.k === 'xdear';
+
 function radarPlan(x, mkt) {
   const s = x.spark || []; if (s.length < 40 || !x.close) return null;
   const px = x.close, avg = a => a.reduce((t, v) => t + v, 0) / a.length;
@@ -318,6 +353,9 @@ function radarPlan(x, mkt) {
   if (mkt?.ph === '收縮') { P.half = true; P.why.push('景氣收縮：部位減半'); }
   if (mkt?.sig === 'r') { P.half = true; P.why.push('九大指標逆風：只買半批'); }
   if (mkt?.sig === 'o') P.why.push('VIX ≥ 40 罕見機會：照計畫分批承接');
+  const V = x.val || radarVal(x);
+  if (rdDear(V)) { if (P.act === 'buy') { P.act = 'wait'; P.lbl = '價格偏貴'; } P.why.push(`估值${V.n}：${V.t}${V.fair ? `，等接近合理價再考慮` : '，價格已反映成長'}`); }
+  else if (V.k === 'cheap') P.why.push(`估值便宜：${V.t}`);
   if (P.card && (P.card[1] === 'neg' || /偏貴|觀望/.test(P.card[0]))) { if (P.act === 'buy') { P.act = 'wait'; P.lbl = '研究卡不建議'; } P.why.push(`你的研究卡：${P.card[0]}`); }
   else if (P.card) P.why.push(`你的研究卡：${P.card[0]}`);
   if ((x.warn || []).some(w => /虧損/.test(w))) { P.half = true; P.why.push('近四季虧損：獲利還沒跟上營收，部位減半'); }
@@ -351,14 +389,17 @@ PAGES.radar = () => {
   setTimeout(() => loadRadar(false), 30);
   const R = S.radar, p = RADAR_P.find(x => x[0] === (S.radarP || '綜合')) || RADAR_P[0], mk = S.radarMkt || '全部';
   const tier = RD_TIERS.find(t => t[0] === (S.radarTier || '低價')) || RD_TIERS[0], mkt = radarMarket();
-  const list = (R?.list || []).filter(p[2]).filter(x => mk === '全部' || x.mkt === mk).filter(tier[2]);
+  const all = (R?.list || []).filter(p[2]).filter(x => mk === '全部' || x.mkt === mk).filter(tier[2])
+    .map(x => { const val = radarVal(x); return { ...x, val, fs: Math.max(0, Math.min(100, x.score + val.adj)) }; }).sort((a, b) => b.fs - a.fs);
+  const hideDear = S.radarHideDear !== false, list = hideDear ? all.filter(x => !rdDear(x.val)) : all, nDear = all.length - all.filter(x => !rdDear(x.val)).length;
   const ym = R?.revYM ? `${+R.revYM.slice(0, 3) + 1911} 年 ${+R.revYM.slice(3)} 月` : '';
   const mine = code => S.cards.find(c => String(c.code) === code);
   const RD_N = 30, shown = S.radarAll ? list : list.slice(0, RD_N);
   const rows = shown.map((x, i) => `<div class="rd">
     <div class="rd-h"><span class="rd-rank">${i + 1}</span><div class="rd-id"><b>${esc(x.code)} ${esc(x.name)}</b><em>${esc(x.mkt)}・${esc(x.ind || '—')}${x.pe ? `・本益比 ${x.pe}` : ''}</em></div>
       <div class="rd-px"><b>${fmt(x.close, x.close < 100 ? 2 : 1)}</b>${x.r1m != null ? `<em class="${x.r1m >= 0 ? 'up' : 'down'}">近 1 月 ${pct(x.r1m)}</em>` : ''}</div>
-      <div class="rd-sc ${x.score >= 70 ? 'hi' : x.score >= 50 ? 'mid' : ''}"><b>${x.score}</b><em>分</em></div></div>
+      <div class="rd-sc ${x.fs >= 70 ? 'hi' : x.fs >= 50 ? 'mid' : ''}"><b>${x.fs}</b><em>分</em></div></div>
+    <div class="rd-val ${x.val.k}"><span class="pill">估值${esc(x.val.n)}${x.val.adj ? ` ${x.val.adj > 0 ? '+' : ''}${x.val.adj}` : ''}</span><span>${esc(x.val.t)}</span><em>動能 ${x.score} 分${x.val.adj ? ` ${x.val.adj > 0 ? '+' : '−'} 價格 ${Math.abs(x.val.adj)}` : ''}${x.val.src === 'card' ? '・用你的研究卡' : ''}</em></div>
     <div class="rd-tier"><span class="pill ${x.close < 100 ? 'green' : ''}">${x.close < 100 ? '低價股' : '高價股'}</span><span>一張約 ${fmt(x.close * 1000)} 元</span></div>
     ${x.spark?.length > 2 ? `<svg class="rd-spark" viewBox="0 0 300 34" preserveAspectRatio="none"><path d="${sparkPath(x.spark.map((v, k) => [k, v]), 300, 34)}"/></svg>` : ''}
     <div class="rd-m">
@@ -377,7 +418,7 @@ PAGES.radar = () => {
   <details class="card rd-how"><summary>怎麼篩的？（營收動能 → 趨勢 → 相對強勢 → 量能 → 研究卡驗證）</summary>
     <p class="lead" style="margin-top:10px">「飆股」通常同時具備兩件事：<b>基本面有新變化</b>（營收突然大幅成長）＋ <b>股價已經開始反映</b>（多頭排列、創新高、強於大盤、量增）。雷達每天從上市櫃全部股票篩一遍，給你值得研究的名單。</p>
     <div class="rd-steps">${[['1', '營收動能', '月營收年增、累計年增'], ['2', '趨勢轉強', '站上均線、多頭排列'], ['3', '相對強勢', '逼近新高、強於大盤'], ['4', '量能確認', '近 5 日量放大'], ['5', '研究卡驗證', '產業、財報、估值、籌碼']].map(([n, t, s]) => `<div><b>${n}</b><span>${t}</span><em>${s}</em></div>`).join('')}</div>
-    <div class="help">分數滿分 100：營收 30、趨勢 20、新高 15、相對強度 15、量能 10；離月線太遠（短線漲多）會扣分。</div>
+    <div class="help">動能分數滿分 100：營收 30、趨勢 20、新高 15、相對強度 15、量能 10；離月線太遠（短線漲多）會扣分。<br><b>再加上價格：</b>便宜 +10、合理 0、偏貴 −20、很貴 −30。有研究卡的用研究卡的綜合合理價（現價低於合理價 15% 以上算便宜、高 10% 以上算偏貴、高 30% 以上算很貴）；沒有研究卡的看本益比對同產業中位數，以及本益比除以營收成長（PEG：1 以下且本益比 20 以下便宜、2.5 以上偏貴、4 以上很貴）；營收暴增、營建股或本益比低於 6 倍的，低本益比可能是一次性獲利或景氣高峰，只算「難說」。</div>
     <div class="help" style="margin-top:6px"><b>交易計畫怎麼算：</b>買進區＝月線到「月線＋1.5 天平均波動」；停損＝跌破季線或虧 8% 先到者（最多 10%）；停利＝風險的 2 倍（賠 1 賺 2）；股數＝跌到停損最多虧可投資資產 1%、單檔不超過 10%。
     同時參考你的市場研究：大盤溫度偏熱／滾水區、景氣收縮或九大指標逆風時只買半批；有研究卡的，研究卡判斷偏貴或觀望就不建議買。</div></details>
   <div class="chips">${RADAR_P.map(([k, l]) => `<button class="chip ${k === p[0] ? 'on' : ''}" data-radarp="${k}">${l}</button>`).join('')}</div>
@@ -392,14 +433,16 @@ PAGES.radar = () => {
     </ol></div>
   <div class="chips">${RD_TIERS.map(([k, l]) => `<button class="chip ${k === tier[0] ? 'on' : ''}" data-radartier="${k}">${k === '低價' ? '💰 ' : ''}${l}</button>`).join('')}</div>
   <div class="chips sm">${['全部', '上市', '上櫃'].map(k => `<button class="chip ${k === mk ? 'on' : ''}" data-radarmkt="${k}">${k}</button>`).join('')}<span class="spacer"></span><button class="btn-small ghost" id="radarRefresh">${radarBusy ? '篩選中…' : '↻ 重新篩選'}</button></div>
-  <div class="help" style="margin:-4px 0 10px">${esc(p[3])}${R ? `｜${list.length} 檔` : ''}</div>
+  <div class="chips sm"><button class="chip ${hideDear ? 'on' : ''}" data-radardear="1">${hideDear ? '✓ ' : ''}隱藏偏貴的股票</button>${nDear ? `<span class="help">${hideDear ? `已隱藏 ${nDear} 檔偏貴` : `其中 ${nDear} 檔偏貴`}</span>` : ''}</div>
+  <div class="help" style="margin:-4px 0 10px">${esc(p[3])}${R ? `｜${list.length} 檔` : ''}・依「動能＋價格」總分排序</div>
   ${R ? (rows ? rows + (list.length > RD_N ? `<button class="btn-ghost rd-more" data-radarall="1">${S.radarAll ? `只看前 ${RD_N} 名` : `顯示全部 ${list.length} 檔`}</button>` : '') : '<div class="card empty">這個條件目前沒有符合的股票，換一個條件看看。</div>') : `<div class="card empty">${radarBusy ? '正在篩選上市櫃全部股票…（約 20～40 秒）' : '按「重新篩選」開始。'}</div>`}
   ${R ? `<div class="help" style="margin-top:10px">營收資料：${ym}（每月 10 日前公布上月營收）｜全市場 ${R.universe} 檔、成交值 2,000 萬以上 ${R.liquid} 檔｜加權指數近 3 個月 ${R.idx3m == null ? '—' : pct(R.idx3m)}｜更新 ${new Date(R.updated).toLocaleString('zh-TW', { hour12: false })}${R.errors?.length ? `<br><span class="down">${R.errors.map(esc).join('；')}</span>` : ''}<br>來源：證交所、櫃買中心 OpenAPI，Yahoo Finance。篩選結果是研究的起點，不是買進建議；強勢股波動大，建卡時先寫好「證明我錯」的條件與停損。</div>` : ''}`;
 };
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-radarp],[data-radarmkt],#radarRefresh,[data-radarcard],[data-radarall],[data-radartier],[data-rpmon]'); if (!t) return;
+  const t = e.target.closest('[data-radarp],[data-radarmkt],#radarRefresh,[data-radarcard],[data-radarall],[data-radartier],[data-rpmon],[data-radardear]'); if (!t) return;
   if (t.dataset.radarall) { S.radarAll = !S.radarAll; save(); return render(); }
   if (t.dataset.radartier) { S.radarTier = t.dataset.radartier; save(); return render(); }
+  if (t.dataset.radardear) { S.radarHideDear = S.radarHideDear === false; save(); return render(); }
   if (t.dataset.rpmon) return radarLock(t.dataset.rpmon);
   if (t.dataset.radarp) { S.radarP = t.dataset.radarp; save(); return render(); }
   if (t.dataset.radarmkt) { S.radarMkt = t.dataset.radarmkt; save(); return render(); }
