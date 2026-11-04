@@ -390,13 +390,12 @@ function radarPlan(x, mkt) {
   }
   // 買進區：月線（或季線）到「月線＋1.5 天波動」，不高於現價
   const base = px >= m20 ? m20 : m60, lo = rdTick(base), hi = rdTick(Math.max(base, Math.min(px, base + 1.5 * vol)), true);
-  const entry = (lo + hi) / 2;
-  let stop = Math.min(lo * 0.97, Math.max(m60 * 0.98, entry * 0.92)); if (stop < entry * 0.9) stop = entry * 0.9;
-  stop = rdTick(stop); const risk = entry - stop, t1 = rdTick(entry + 2 * risk, true);
-  Object.assign(P, { lo, hi, entry, stop, t1, riskP: risk / entry * 100, gainP: (t1 / entry - 1) * 100 });
+  // 出場（抱長）：不設固定停利；收盤跌破季線 2% 或虧 15% 就全賣
+  const entry = (lo + hi) / 2, maLine = rdTick(m60 * 0.98), cut = rdTick(entry * 0.85);
+  Object.assign(P, { lo, hi, entry, maLine, cut, stop: Math.max(maLine, cut) });
   P.act = px <= hi * 1.005 ? 'buy' : 'wait';
   P.lbl = P.act === 'buy' ? '現價在買進區' : '等回檔';
-  P.msg = P.act === 'buy' ? '可分 2 批：第一批現在、第二批回測月線不破時' : `現價 ${rdP(px)} 高於買進區 ${fmt((px / hi - 1) * 100, 1)}%：不追高，設提醒等回到區間`;
+  P.msg = P.act === 'buy' ? '可以買進；買了就抱，等出場訊號再賣' : `現價 ${rdP(px)} 高於買進區 ${fmt((px / hi - 1) * 100, 1)}%：不追高，設提醒等回到區間`;
   if (mkt && (mkt.z === 'boil' || mkt.z === 'hot')) { P.half = true; P.why.push(`大盤${mkt.n}：只買半批`); }
   if (mkt && mkt.z === 'ice') P.why.push('大盤冰水區：可照計畫分批');
   if (mkt?.ph === '收縮') { P.half = true; P.why.push('景氣收縮：部位減半'); }
@@ -409,29 +408,29 @@ function radarPlan(x, mkt) {
   else if (P.card) P.why.push(`你的研究卡：${P.card[0]}`);
   if ((x.warn || []).some(w => /虧損/.test(w))) { P.half = true; P.why.push('近四季虧損：獲利還沒跟上營收，部位減半'); }
   if (x.bias20 > 15) P.why.push('離月線太遠，追高容易套');
-  // 股數：每筆最多虧總資金 1%，單一個股不超過總資產 10%
+  // 股數：每檔投入可投資資產的 10%（逆風、虧損股減半）
   try {
     const W = typeof wealth === 'function' ? wealth() : null, cap = W?.invest || 0;
-    if (cap && risk > 0) { let sh = Math.min(cap * 0.01 / risk, cap * 0.1 / entry); if (P.half) sh /= 2; P.sh = Math.floor(sh); }
+    if (cap) P.sh = Math.floor(cap * (P.half ? 0.05 : 0.1) / entry);
   } catch (e) { /* 沒有資產資料時不算股數 */ }
   return P;
 }
-// 鎖定的計畫：設了提醒後價位就固定，避免事後移動停損
+// 鎖定的計畫：設了提醒後買進區與「虧 15%」價位就固定；季線每天跟著更新
 const rdLock = code => (S.radarPlans || {})[code];
 function radarPlanHTML(x, P) {
   if (!P) return '';
-  const L = rdLock(x.code); if (L) Object.assign(P, { lo: L.lo, hi: L.hi, stop: L.stop, t1: L.t1, entry: (L.lo + L.hi) / 2 });
+  const L = rdLock(x.code); if (L) { const entry = (L.lo + L.hi) / 2; Object.assign(P, { lo: L.lo, hi: L.hi, entry, cut: L.cut || rdTick(entry * 0.85) }); P.stop = Math.max(P.maLine || 0, P.cut); }
   if (P.act === 'skip') return `<div class="rp skip"><div class="rp-h"><b>📋 交易計畫</b><span class="pill red">不買</span></div><div class="rp-msg">${esc(P.msg)}</div></div>`;
   const sz = P.sh ? (P.sh >= 1000 ? `${fmt(Math.floor(P.sh / 1000))} 張${P.sh % 1000 >= 1 ? ` ＋ ${fmt(P.sh % 1000)} 股零股` : ''}` : `${fmt(P.sh)} 股（零股）`) : '';
   return `<div class="rp ${P.act}"><div class="rp-h"><b>📋 交易計畫</b><span class="pill ${P.act === 'buy' ? 'green' : 'gold'}">${esc(P.lbl)}</span>${L ? `<span class="pill">🔒 ${esc(L.date.slice(5).replace('-', '/'))} 鎖定</span>` : ''}</div>
     <div class="rp-g">
       <div><em>買進區</em><b>${rdP(P.lo)}～${rdP(P.hi)}</b><small>只在這個區間買，不追高</small></div>
-      <div><em>停損</em><b class="down">${rdP(P.stop)}</b><small>收盤跌破就全賣（−${fmt((1 - P.stop / P.entry) * 100, 1)}%）</small></div>
-      <div><em>停利</em><b class="up">${rdP(P.t1)}</b><small>到價先賣一半（+${fmt((P.t1 / P.entry - 1) * 100, 1)}%）</small></div>
-      <div><em>剩下一半</em><b>跌破月線</b><small>收盤跌破月線（約 ${rdP(P.m20)}）全賣</small></div>
+      <div><em>停利</em><b class="up">不設</b><small>賺錢就抱著，讓它繼續漲</small></div>
+      <div><em>出場一：跌破季線</em><b class="down">${rdP(P.maLine)}</b><small>收盤低於這裡全賣（季線每天會變）</small></div>
+      <div><em>出場二：虧 15%</em><b class="down">${rdP(P.cut)}</b><small>收盤低於這裡全賣，不攤平</small></div>
     </div>
     <div class="rp-msg">${esc(P.msg)}${P.why.length ? `<br>${P.why.map(esc).join('・')}` : ''}</div>
-    ${sz ? `<div class="rp-sz">建議最多 <b>${sz}</b>${P.half ? '（已減半）' : ''}・約 ${fmt(P.sh * P.entry)} 元：跌到停損最多虧總資金 ${P.half ? '0.5' : '1'}%</div>` : ''}
+    ${sz ? `<div class="rp-sz">建議買 <b>${sz}</b>・約 ${fmt(P.sh * P.entry)} 元＝可投資資產的 ${P.half ? '5%（已減半）' : '10%'}；最多同時 10 檔</div>` : ''}
     <div class="btn-row"><button class="btn-small" data-rpmon="${esc(x.code)}">${L ? '🔒 已設提醒・解除鎖定' : '🔔 鎖定計畫並設到價提醒'}</button></div></div>`;
 }
 PAGES.radar = () => {
@@ -468,18 +467,26 @@ PAGES.radar = () => {
     <p class="lead" style="margin-top:10px">「飆股」通常同時具備兩件事：<b>基本面有新變化</b>（營收突然大幅成長）＋ <b>股價已經開始反映</b>（多頭排列、創新高、強於大盤、量增）。雷達每天從上市櫃全部股票篩一遍，給你值得研究的名單。</p>
     <div class="rd-steps">${[['1', '營收動能', '月營收年增、累計年增'], ['2', '趨勢轉強', '站上均線、多頭排列'], ['3', '相對強勢', '逼近新高、強於大盤'], ['4', '量能確認', '近 5 日量放大'], ['5', '研究卡驗證', '產業、財報、估值、籌碼']].map(([n, t, s]) => `<div><b>${n}</b><span>${t}</span><em>${s}</em></div>`).join('')}</div>
     <div class="help">動能分數滿分 100：營收 30、趨勢 20、新高 15、相對強度 15、量能 10；離月線太遠（短線漲多）會扣分。<br><b>再加上價格：</b>便宜 +10、合理 0、偏貴 −20、很貴 −30。有研究卡的用研究卡的綜合合理價（現價低於合理價 15% 以上算便宜、高 10% 以上算偏貴、高 30% 以上算很貴）；沒有研究卡的看本益比對同產業中位數，以及本益比除以營收成長（PEG：1 以下且本益比 20 以下便宜、2.5 以上偏貴、4 以上很貴）；營收暴增、營建股或本益比低於 6 倍的，低本益比可能是一次性獲利或景氣高峰，只算「難說」。</div>
-    <div class="help" style="margin-top:6px"><b>交易計畫怎麼算：</b>買進區＝月線到「月線＋1.5 天平均波動」；停損＝跌破季線或虧 8% 先到者（最多 10%）；停利＝風險的 2 倍（賠 1 賺 2）；股數＝跌到停損最多虧可投資資產 1%、單檔不超過 10%。
+    <div class="help" style="margin-top:6px"><b>交易計畫怎麼算：</b>買進區＝月線到「月線＋1.5 天平均波動」；不設固定停利，收盤跌破季線 2% 或虧 15% 才全部賣出；每檔投入可投資資產 10%，最多同時 10 檔。
     同時參考你的市場研究：大盤溫度偏熱／滾水區、景氣收縮或九大指標逆風時只買半批；有研究卡的，研究卡判斷偏貴或觀望就不建議買。</div></details>
   <div class="chips">${RADAR_P.map(([k, l]) => `<button class="chip ${k === p[0] ? 'on' : ''}" data-radarp="${k}">${l}</button>`).join('')}</div>
   <div class="card rd-rule"><div class="card-head"><h3 class="gold-bar">⚠️ 交易紀律：買之前先讀，買了就照做</h3>${mkt ? `<span class="pill">台股大盤 ${mkt.ic} ${esc(mkt.n)}${mkt.ph ? `・景氣${esc(mkt.ph)}` : ''}${mkt.sigN ? `・九大指標${esc(mkt.sigN)}` : ''}</span>` : ''}</div>
     <ol>
       <li><b>只在買進區買。</b>價格沒到就不買，寧可錯過，不要追高。</li>
-      <li><b>停損價收盤跌破就賣，</b>不攤平、不往下移停損、不「再等等看」。</li>
-      <li><b>到停利價先賣一半，</b>剩下一半收盤跌破月線就全部賣出。</li>
-      <li><b>股數照建議，</b>每筆最多虧總資金 1%；大盤偏熱、滾水區、景氣收縮或九大指標逆風時只買半批。</li>
-      <li><b>買進理由消失就出場：</b>下個月營收年增掉到 15% 以下、或研究卡「證明我錯」的條件成立。</li>
-      <li><b>按「鎖定計畫」後價位就固定，</b>之後不因股價漲跌改計畫；要改先寫進覆盤，說清楚為什麼。</li>
-    </ol></div>
+      <li><b>買了就抱，不設停利。</b>賺錢的股票讓它繼續漲，不要漲一點就跑。</li>
+      <li><b>收盤跌破季線 2%、或虧 15%，隔天全部賣出。</b>不攤平、不凹單、不「再等等看」。</li>
+      <li><b>買進理由消失就出場：</b>月營收年增掉到 15% 以下、或研究卡「證明我錯」的條件成立。</li>
+      <li><b>每檔投入可投資資產 10%，最多同時 10 檔；</b>大盤偏熱、滾水區、景氣收縮、九大指標逆風或虧損股只買一半。</li>
+      <li><b>勝率只有 3 成左右是正常的。</b>多數交易小賠出場，靠少數大漲的股票撐起報酬；連續停損時不要改規則、不要加碼攤平。</li>
+    </ol>
+    <details class="rd-bt"><summary>📊 這套規則的歷史回測（2022/1～2026/10）</summary>
+      <table class="rd-bt-t"><thead><tr><th>做法（500 萬起、含配息與手續費稅）</th><th class="num">年化報酬</th><th class="num">最大回落</th></tr></thead><tbody>
+        <tr class="me"><td>目前規則：抱長出場（百元內，8～12 檔）</td><td class="num">19～27%</td><td class="num">約 −25%</td></tr>
+        <tr><td>舊規則：停損 8%、停利先賣一半</td><td class="num">9～12%</td><td class="num">約 −18%</td></tr>
+        <tr><td>0050（含配息）</td><td class="num">28%</td><td class="num">−34%</td></tr>
+      </tbody></table>
+      <div class="help">用當時公開的月營收、本益比與股價逐日模擬，隔天開盤或限價成交。這 5 年大型權值股漲最多，沒有任何選股方法贏過 0050；過去表現不代表未來，也不構成投資建議。</div>
+    </details></div>
   <div class="chips">${RD_TIERS.map(([k, l]) => `<button class="chip ${k === tier[0] ? 'on' : ''}" data-radartier="${k}">${k === '低價' ? '💰 ' : ''}${l}</button>`).join('')}</div>
   <div class="chips sm">${['全部', '上市', '上櫃'].map(k => `<button class="chip ${k === mk ? 'on' : ''}" data-radarmkt="${k}">${k}</button>`).join('')}<span class="spacer"></span><button class="btn-small ghost" id="radarRefresh">${radarBusy ? '篩選中…' : '↻ 重新篩選'}</button></div>
   <div class="chips sm"><button class="chip ${hideDear ? 'on' : ''}" data-radardear="1">${hideDear ? '✓ ' : ''}隱藏偏貴的股票</button>${nDear ? `<span class="help">${hideDear ? `已隱藏 ${nDear} 檔偏貴` : `其中 ${nDear} 檔偏貴`}</span>` : ''}</div>
@@ -503,7 +510,7 @@ document.addEventListener('click', e => {
   }
 });
 
-// 鎖定計畫：記下價位，並建立三個到價提醒（進入買進區、停損、停利）；再按一次解除
+// 鎖定計畫：記下價位，並建立三個提醒（進入買進區、跌破季線、虧 15%）；再按一次解除
 function radarLock(code) {
   S.radarPlans = S.radarPlans || {};
   const tag = `雷達計畫 ${code}`;
@@ -511,13 +518,13 @@ function radarLock(code) {
     delete S.radarPlans[code]; S.monitors = S.monitors.filter(m => m.src !== tag); save(); toast('已解除鎖定並移除提醒'); const y = scrollY; render(); return scrollTo(0, y);
   }
   const x = S.radar?.list?.find(y => y.code === code), P = x && radarPlan(x, radarMarket()); if (!P || P.act === 'skip') return toast('這檔目前不買，沒有計畫可鎖定');
-  S.radarPlans[code] = { date: today(), lo: P.lo, hi: P.hi, stop: P.stop, t1: P.t1 };
-  const base = { target: `${code} ${x.name}`.trim(), code, metric: '收盤價', notify: '網站內提醒', status: '啟用', src: tag };
+  S.radarPlans[code] = { date: today(), lo: P.lo, hi: P.hi, cut: P.cut };
+  const base = { target: `${code} ${x.name}`.trim(), code, notify: '網站內提醒', status: '啟用', src: tag };
   S.monitors.push(
-    { id: uid(), ...base, op: '低於', value: String(P.hi), cond: `進入買進區：跌到 ${rdP(P.hi)}`, action: `買第一批（買進區 ${rdP(P.lo)}～${rdP(P.hi)}，停損 ${rdP(P.stop)}）` },
-    { id: uid(), ...base, op: '低於', value: String(P.stop), cond: `停損：跌到 ${rdP(P.stop)}`, action: '有持股就收盤全部賣出，不攤平、不移動停損' },
-    { id: uid(), ...base, op: '高於', value: String(P.t1), cond: `停利：漲到 ${rdP(P.t1)}`, action: '先賣一半；剩下一半收盤跌破月線全部賣出' });
-  save(); toast('已鎖定計畫，並建立買進、停損、停利三個提醒'); const y = scrollY; render(); scrollTo(0, y);
+    { id: uid(), ...base, metric: '收盤價', op: '低於', value: String(P.hi), cond: `進入買進區：跌到 ${rdP(P.hi)}`, action: `買進（買進區 ${rdP(P.lo)}～${rdP(P.hi)}，投入可投資資產 10%）` },
+    { id: uid(), ...base, metric: '距 60 日均線 %', op: '低於', value: '-2', cond: '出場：收盤跌破季線 2%', action: '有持股就隔天全部賣出，不攤平、不凹單' },
+    { id: uid(), ...base, metric: '收盤價', op: '低於', value: String(P.cut), cond: `出場：虧 15%，跌到 ${rdP(P.cut)}`, action: '有持股就隔天全部賣出，不攤平' });
+  save(); toast('已鎖定計畫，並建立買進、跌破季線、虧 15% 三個提醒'); const y = scrollY; render(); scrollTo(0, y);
 }
 
 /* ---------- 技術指標視覺化（像通膨比較圖：一眼看出位置） ---------- */

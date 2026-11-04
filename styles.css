@@ -1303,3 +1303,7 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .gai-steps { margin: 0 0 8px; padding-left: 20px; font-size: 13px; line-height: 1.6; color: var(--muted); }
 .gai .gai-in { width: 100%; margin: 8px 0; min-height: 90px; }
 .gai-again { margin-top: 10px; } .gai-again > summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.rd-bt { margin-top: 10px; } .rd-bt > summary { cursor: pointer; font-weight: 700; font-size: 13.5px; }
+.rd-bt-t { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0 4px; }
+.rd-bt-t th, .rd-bt-t td { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: left; } .rd-bt-t .num { text-align: right; white-space: nowrap; }
+.rd-bt-t tr.me td { font-weight: 700; background: rgba(201,162,74,.1); }
