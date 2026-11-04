@@ -73,7 +73,8 @@ module.exports = async (req, res) => {
     score: u.score, tags: u.tags, warn: u.warn, spark: u.t?.spark || [],
   }));
   const revYM = all.map(u => u.revYM).filter(Boolean).sort().pop() || '';
-  res.setHeader('Cache-Control', list.length ? 's-maxage=21600, stale-while-revalidate=86400' : 'no-store');
+  const partial = errors.some(e => /證交所|櫃買/.test(e));
+  res.setHeader('Cache-Control', !list.length ? 'no-store' : partial ? 's-maxage=600' : 's-maxage=21600, stale-while-revalidate=86400');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.status(200).send(JSON.stringify({ updated: new Date().toISOString(), revYM, universe: all.length, liquid: liq.length, idx3m: r1(idx3m), list, errors }));
 };

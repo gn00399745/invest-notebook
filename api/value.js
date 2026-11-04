@@ -27,7 +27,9 @@ module.exports = async (req, res) => {
   const hold = {};
   all.forEach(u => { hold[u.code] = [u.name, u.close, u.pe ?? null, u.pe > 0 && indMed[u.ind]?.pe ? Math.round(u.pe / indMed[u.ind].pe * 100) / 100 : null, u.dy ?? null, r1(u.cumYoY), u.pb ?? null]; });
   const revYM = all.map(u => u.revYM).filter(Boolean).sort().pop() || '';
-  res.setHeader('Cache-Control', list.length ? 's-maxage=21600, stale-while-revalidate=86400' : 'no-store');
+  // 交易所資料不完整時只快取 10 分鐘，避免缺一半的名單被留 6 小時
+  const partial = errors.some(e => /證交所|櫃買/.test(e));
+  res.setHeader('Cache-Control', !list.length ? 'no-store' : partial ? 's-maxage=600' : 's-maxage=21600, stale-while-revalidate=86400');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.status(200).send(JSON.stringify({ updated: new Date().toISOString(), revYM, universe: all.length, liquid: liq.length, list, hold, errors }));
 };

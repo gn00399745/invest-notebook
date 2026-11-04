@@ -4,7 +4,9 @@
 const UA = { 'User-Agent': 'Mozilla/5.0 (invest-notebook; personal research tool)', Accept: 'application/json' };
 const T = ms => AbortSignal.timeout(ms);
 const why = e => e.cause?.code ? `${e.message}（${e.cause.code}）` : e.message;
-async function getJ(url, ms = 20000) { const r = await fetch(url, { headers: UA, signal: T(ms) }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
+async function getJ1(url, ms) { const r = await fetch(url, { headers: UA, signal: T(ms) }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
+// 證交所／櫃買中心偶爾斷線：失敗時隔 1.5 秒再試一次
+async function getJ(url, ms = 20000) { try { return await getJ1(url, ms); } catch (e) { await new Promise(r => setTimeout(r, 1500)); return getJ1(url, ms); } }
 const num = s => { const n = parseFloat(String(s ?? '').replace(/[,%\s]/g, '')); return Number.isFinite(n) ? n : null; };
 const pick = (o, ...ks) => { for (const k of ks) if (o[k] != null && o[k] !== '') return o[k]; return null; };
 const r1 = n => n == null ? null : Math.round(n * 10) / 10;
