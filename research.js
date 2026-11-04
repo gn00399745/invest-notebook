@@ -317,13 +317,7 @@ let radarBusy = false;
 async function loadRadar(force) {
   if (radarBusy || !location.protocol.startsWith('http')) return;
   if (!force && S.radar && Date.now() - (S.radarAt || 0) < 6 * 3600e3) return;
-  radarBusy = true; function chipViz(x, i) {
-  const a = num(String(x.d5 || '').replace(/[^\d.+-]/g, '')), b = num(String(x.d20 || '').replace(/[^\d.+-]/g, '')); if (a == null && b == null) return '';
-  const rows = [{ l: '5 日', v: a }, { l: '20 日', v: b }].filter(r => r.v != null); // 增加紅、減少綠（台灣習慣）
-  const mx = Math.max(...rows.map(r => Math.abs(r.v)), 1e-9);
-  return `<div class="tv-dv sm">${rows.map(r => `<div class="tv-dr"><span>${r.l}</span><div class="tv-dt"><i class="tv-0"></i><i class="tv-db ${r.v < 0 ? 'n' : 'p'}" style="${r.v < 0 ? `right:50%;width:${Math.abs(r.v) / mx * 50}%` : `left:50%;width:${r.v / mx * 50}%`}"></i></div></div>`).join('')}</div>`;
-}
-if (current === 'radar') render();
+  radarBusy = true;
   try {
     const j = await (await fetch('api/radar' + (force ? '?t=' + Date.now() : ''), { signal: AbortSignal.timeout(90000) })).json();
     if (!j.list) throw new Error('格式錯誤');
@@ -463,6 +457,7 @@ PAGES.radar = () => {
       <a class="btn-small ghost" href="https://tw.stock.yahoo.com/quote/${esc(x.code)}.${x.mkt === '上櫃' ? 'TWO' : 'TW'}/revenue" target="_blank" rel="noopener">營收明細</a></div>
   </div>`).join('');
   return `<h2>選股雷達</h2>
+  <div class="help" style="margin:-2px 0 10px">追的是<b>營收爆發、股價轉強</b>的動能股。想找長期被低估的股票 → <button class="linkbtn" data-go="value">價值雷達 ›</button></div>
   <details class="card rd-how"><summary>怎麼篩的？（營收動能 → 趨勢 → 相對強勢 → 量能 → 研究卡驗證）</summary>
     <p class="lead" style="margin-top:10px">「飆股」通常同時具備兩件事：<b>基本面有新變化</b>（營收突然大幅成長）＋ <b>股價已經開始反映</b>（多頭排列、創新高、強於大盤、量增）。雷達每天從上市櫃全部股票篩一遍，給你值得研究的名單。</p>
     <div class="rd-steps">${[['1', '營收動能', '月營收年增、累計年增'], ['2', '趨勢轉強', '站上均線、多頭排列'], ['3', '相對強勢', '逼近新高、強於大盤'], ['4', '量能確認', '近 5 日量放大'], ['5', '研究卡驗證', '產業、財報、估值、籌碼']].map(([n, t, s]) => `<div><b>${n}</b><span>${t}</span><em>${s}</em></div>`).join('')}</div>
