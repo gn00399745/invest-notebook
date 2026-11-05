@@ -4,13 +4,13 @@
 // 每個分組 = 手機底部一個分頁；電腦版左側選單一次列出全部頁面
 const NAV = [
   { g: 'assets', ic: '💰', t: '資產', pages: [['home', '資產總覽'], ['ledger', '收支記帳'], ['trades', '交易紀錄']] },
-  { g: 'research', ic: '🔍', t: '研究', pages: [['radar', '選股雷達'], ['value', '價值雷達'], ['picks', '策略組合'], ['cards', '個股研究卡'], ['industry', '產業定位'], ['etf', 'ETF 健檢']] },
+  { g: 'research', ic: '🔍', t: '研究', pages: [['radar', '選股雷達'], ['picks', '策略組合'], ['cards', '個股研究卡'], ['industry', '產業定位'], ['etf', 'ETF 健檢']] },
   { g: 'market', ic: '🌐', t: '市場', pages: [['timing', '進出場時機'], ['extreme', '極端訊號'], ['macro', '總經'], ['cycles', '週期研究'], ['metfx', '黃金・匯率'], ['monitor', '監控提醒']] },
   { g: 'plan', ic: '🎯', t: '計畫', pages: [['plan', '財務計畫'], ['review', '覆盤'], ['claims', '待驗主張・回測']] },
   { g: 'more', ic: '📚', t: '學習', pages: [['learn', '技術分析教學'], ['overview', '投資流程與資料來源'], ['settings', '設定與備份']] },
 ];
 // 舊網址與舊按鈕的頁面名稱 → 現在的頁面
-const NAV_ALIAS = { more: 'settings', strategy: 'plan', retire: 'plan', season: 'cycles', empire: 'cycles' };
+const NAV_ALIAS = { value: 'radar', more: 'settings', strategy: 'plan', retire: 'plan', season: 'cycles', empire: 'cycles' };
 const navGroupOf = p => NAV.find(n => n.pages.some(x => x[0] === p)) || NAV[0];
 const navLabel = p => NAV.flatMap(n => n.pages).find(x => x[0] === p)?.[1] || '';
 
