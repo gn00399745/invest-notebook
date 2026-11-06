@@ -1327,3 +1327,4 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .vr-h { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .vr-h:first-of-type { border-top: 0; } .vr-h em { font-style: normal; color: var(--muted); font-size: 12.5px; flex-basis: 100%; }
 
+.vr-score > summary { font-weight: 400; } .vr-st { overflow-x: auto; } .vr-st small { color: var(--muted); font-weight: 400; }
