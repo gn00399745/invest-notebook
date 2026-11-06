@@ -604,8 +604,8 @@ PAGES.home = () => {
       <button class="step" data-act="import"><b>2</b><span><strong>匯入股票／ETF 庫存</strong><em>照抄券商 App 庫存頁的代號、股數、均價</em></span></button>
       <button class="step" data-act="payslip"><b>3</b><span><strong>設定薪資單</strong><em>扣掉公保、退撫、健保，實領分別存入公教帳戶與活存，每月自動記帳</em></span></button>
       <div class="help" style="margin-top:6px">有保單、房產也可以加進來：按右下角 ＋。資料只存在這台裝置，記得定期到 ⚙︎ 匯出備份。</div></div>` : '';
-  const hold = W.hs.map(h => `<div class="hcard">
-      <div class="h-top"><div><b>${esc(h.code)}</b> <span>${esc(h.name || '')}</span></div><div class="h-mv">${fmt(h.mvT)}</div></div>
+  const hold = W.hs.map(h => `<div class="hcard" data-hcard="${esc(h.code)}" title="打開研究卡">
+      <div class="h-top"><div><b>${esc(h.code)}</b> <span>${esc(h.name || '')}</span> <em class="h-go">研究卡 ›</em></div><div class="h-mv">${fmt(h.mvT)}</div></div>
       <div class="h-mid"><span>${shf(h.shares)} 股　均價 ${fmt(h.cost / h.shares, 2)}　現價 ${h.priced ? fmt(h.px, 2) : '—'}</span></div>
       <div class="h-bot"><span>損益 ${signed(h.plT)}（${pct(h.plP)}）${h.chg != null ? `　今日 <span class="${h.chg >= 0 ? 'up' : 'down'}">${pct(h.chg, 2)}</span>` : ''}</span>
         <span class="btn-row"><button class="btn-small" data-hbuy="${esc(h.code)}">加碼</button><button class="btn-small ghost" data-hsell="${esc(h.code)}">賣出</button><button class="btn-small ghost" data-hdet="${esc(h.code)}">明細</button></span></div></div>`).join('');
@@ -755,3 +755,12 @@ processRecurring();
 processCards();
 loadFx();
 go(window.__startPage || 'home');
+
+// 點持股（按鈕以外的地方）→ 打開這檔的研究卡；還沒有就先建一張
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-hcard]'); if (!t || e.target.closest('button,a')) return;
+  const code = t.dataset.hcard, find = () => S.cards.find(c => String(c.code).toUpperCase() === code);
+  if (!find()) syncHoldCards();
+  const c = find(); if (!c) return;
+  openCardId = c.id; go('cards'); window.scrollTo(0, 0);
+});
