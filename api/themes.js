@@ -104,7 +104,7 @@ module.exports = async (req, res) => {
     out.forEach(t => {
       t.score = Math.round(100 * (0.3 * rankPct(M3, t.m3) + 0.15 * rankPct(M1, t.m1) + 0.15 * rankPct(BR, t.breadth) + 0.25 * rankPct(RV, t.rev) + 0.15 * rankPct(NW, t.news?.n7 ?? null)));
       const rv = t.rev ?? 0, m = t.m3 ?? 0;
-      t.stage = rv >= 15 && m >= 10 ? ['hot', '🔥 紅利兌現中', '營收和股價都在漲，主題正被市場買單；追高要分批'] : rv >= 15 ? ['gem', '💎 基本面先行', '營收已經成長，股價還沒跟上，值得優先研究'] : m >= 15 ? ['spec', '🚀 題材先行', '股價先漲、營收還沒跟上，要等月營收驗證'] : m < -5 ? ['cold', '❄️ 降溫中', '股價轉弱，先觀察，等止跌再看'] : ['neu', '🌱 醞釀中', '還在早期，持續追蹤新聞與營收'];
+      t.stage = rv >= 15 && m >= 10 ? ['hot', '🔥 紅利兌現中', '營收和股價都在漲，主題正被市場買單；追高要分批'] : rv >= 15 && m <= -10 ? ['gem', '💎 營收強、股價修正中', '營收還在成長、股價卻回檔，等止跌（站回季線）再分批，是撿便宜的候選'] : rv >= 15 ? ['gem', '💎 基本面先行', '營收已經成長，股價還沒跟上，值得優先研究'] : m >= 15 ? ['spec', '🚀 題材先行', '股價先漲、營收還沒跟上，要等月營收驗證'] : m < -5 ? ['cold', '❄️ 降溫中', '股價轉弱，先觀察，等止跌再看'] : ['neu', '🌱 醞釀中', '還在早期，持續追蹤新聞與營收'];
     });
     out.sort((a, b) => b.score - a.score);
     res.setHeader('Cache-Control', errors.length ? 's-maxage=600' : 's-maxage=21600, stale-while-revalidate=86400');
