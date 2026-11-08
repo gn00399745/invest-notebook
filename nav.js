@@ -4,15 +4,17 @@
 // 每個分組 = 手機底部一個分頁；電腦版左側選單一次列出全部頁面
 const NAV = [
   { g: 'assets', ic: '💰', t: '資產', pages: [['home', '資產總覽'], ['ledger', '收支記帳'], ['trades', '交易紀錄']] },
-  { g: 'research', ic: '🔍', t: '研究', pages: [['themes', '趨勢主題'], ['radar', '選股雷達'], ['picks', '策略組合'], ['cards', '個股研究卡'], ['industry', '產業定位'], ['etf', 'ETF 健檢']] },
-  { g: 'market', ic: '🌐', t: '市場', pages: [['timing', '進出場時機'], ['extreme', '極端訊號'], ['macro', '總經'], ['cycles', '週期研究'], ['metfx', '黃金・匯率'], ['monitor', '監控提醒']] },
-  { g: 'plan', ic: '🎯', t: '計畫', pages: [['plan', '財務計畫'], ['review', '覆盤'], ['claims', '待驗主張・回測']] },
+  { g: 'research', ic: '🔍', t: '研究', pages: [['radar', '選股'], ['themes', '趨勢與產業'], ['cards', '個股研究卡'], ['etf', 'ETF 健檢']], hide: [['picks', '策略組合'], ['industry', '產業定位']] },
+  { g: 'market', ic: '🌐', t: '市場', pages: [['market', '市場總覽'], ['monitor', '監控提醒']], hide: [['timing', '進出場時機'], ['extreme', '極端訊號'], ['macro', '總經'], ['cycles', '週期研究'], ['metfx', '黃金・匯率']] },
+  { g: 'plan', ic: '🎯', t: '計畫', pages: [['plan', '財務計畫'], ['review', '投資覆盤']], hide: [['claims', '驗證想法']] },
   { g: 'more', ic: '📚', t: '學習', pages: [['learn', '技術分析教學'], ['overview', '投資流程與資料來源'], ['settings', '設定與備份']] },
 ];
 // 舊網址與舊按鈕的頁面名稱 → 現在的頁面
 const NAV_ALIAS = { value: 'radar', more: 'settings', strategy: 'plan', retire: 'plan', season: 'cycles', empire: 'cycles' };
-const navGroupOf = p => NAV.find(n => n.pages.some(x => x[0] === p)) || NAV[0];
-const navLabel = p => NAV.flatMap(n => n.pages).find(x => x[0] === p)?.[1] || '';
+// 不放在選單上的細節頁 → 所屬的入口頁
+const NAV_PARENT = { picks: 'radar', industry: 'themes', timing: 'market', extreme: 'market', macro: 'market', cycles: 'market', metfx: 'market', claims: 'review' };
+const navGroupOf = p => NAV.find(n => n.pages.concat(n.hide || []).some(x => x[0] === p)) || NAV[0];
+const navLabel = p => NAV.flatMap(n => n.pages.concat(n.hide || [])).find(x => x[0] === p)?.[1] || '';
 
 // 需要注意的項目：顯示在選單上
 function navBadges() {
@@ -31,7 +33,9 @@ function navBadges() {
 // 手機：頁面上方的分組內切換列；電腦：側欄已列出全部頁面，不另外顯示
 window.subNav = p => {
   const n = navGroupOf(p);
-  return n.pages.length > 1 ? `<div class="subnav">${n.pages.map(([k, l]) => `<button data-go="${k}" class="${k === p ? 'on' : ''}">${l}</button>`).join('')}</div>` : '';
+  if (NAV_PARENT[p] === 'market') return `<div class="subnav keep"><button data-go="market">‹ 市場總覽</button>${n.hide.map(([k, l]) => `<button data-go="${k}" class="${k === p ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  const cur = NAV_PARENT[p] || p;
+  return n.pages.length > 1 ? `<div class="subnav">${n.pages.map(([k, l]) => `<button data-go="${k}" class="${k === cur ? 'on' : ''}">${l}</button>`).join('')}</div>` : '';
 };
 
 // 底部／上方分頁列
@@ -42,12 +46,13 @@ document.body.insertAdjacentHTML('afterbegin', '<aside class="side" id="side" ar
 function renderSide() {
   const bd = navBadges();
   $('#side').innerHTML = NAV.map(n => `<div class="side-g"><div class="side-h">${n.ic} ${n.t}</div>${n.pages.map(([k, l]) =>
-    `<button data-go="${k}" class="${k === current ? 'on' : ''}"><span>${l}</span>${bd[k] ? `<i class="side-b ${bd[k][1]}">${bd[k][0]}</i>` : ''}</button>`).join('')}</div>`).join('')
+    `<button data-go="${k}" class="${k === (NAV_PARENT[current] || current) ? 'on' : ''}"><span>${l}</span>${bd[k] ? `<i class="side-b ${bd[k][1]}">${bd[k][0]}</i>` : ''}</button>`).join('')}</div>`).join('')
     + `<div class="side-ver">版本 ${typeof APP_VER !== 'undefined' ? APP_VER : ''}</div>`;
 }
 
 const _goNav = go;
 go = function (page) {
+  if (page === 'strategy' || page === 'retire') S.planView = 'retire';
   page = NAV_ALIAS[page] || page;
   _goNav(page);
   const g = navGroupOf(current).g;
@@ -73,7 +78,7 @@ PAGES.home = () => {
       }).join('');
       const M = typeof mktSignals === 'function' ? mktSignals() : null;
       const sig = M?.rows.length ? `<div class="mk-r"><b>九大指標</b><i class="sig-lv ${M.lv[0]}">${SIG_IC[M.lv[0]]} ${M.lv[1]}</i><span>🟢 ${M.g}　🟡 ${M.y}　🔴 ${M.red}${M.rows.filter(r => r.c === 'r' || r.c === 'o').map(r => `｜${esc(r.n)}`).join('')}</span></div>` : '';
-      snap = `<div class="card mk"><div class="card-head"><h3 class="gold-bar">今天的市場</h3><button class="btn-small ghost" data-go="timing">進出場時機 →</button></div>${rows}${sig}</div>`;
+      snap = `<div class="card mk"><div class="card-head"><h3 class="gold-bar">今天的市場</h3><button class="btn-small ghost" data-go="market">市場總覽 →</button></div>${rows}${sig}</div>`;
     }
   } catch (e) { /* 市場資料未載入 */ }
   // 放在右側欄最上面（手機版排在持股之後）

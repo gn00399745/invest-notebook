@@ -84,7 +84,7 @@ PAGES.themes = () => {
   const hot = uniq.filter(x => x.cls === 'hot').sort((a, b) => (b.rev ?? 0) - (a.rev ?? 0)).slice(0, 12);
   const gem = uniq.filter(x => x.cls === 'gem').sort((a, b) => (b.r3m ?? -99) - (a.r3m ?? -99)).slice(0, 8);   // 最接近轉強（3 個月 ≥ +15%）的排前面
   const open = S.thOpen || T[0]?.id;
-  return `<h2>趨勢主題雷達</h2>
+  return `<h2>趨勢與產業</h2>${hubThemeTabs('themes')}
     <p class="help">先看哪個科技趨勢正在升溫，再看供應鏈裡誰的營收真的跟著成長。熱度＝股價動能、站上季線比例、營收年增、新聞篇數，在所有主題中排名。
       ${D ? `<br>更新於 ${new Date(D.updated).toLocaleString('zh-TW', { hour12: false })}` : ''} <button class="btn-small ghost" id="thRefresh">${themesBusy ? '更新中…（約 20～40 秒）' : '↻ 更新'}</button></p>
     ${!D ? `<div class="card"><div class="empty">${themesBusy ? '正在分析各主題的股價、營收與新聞…（約 20～40 秒）' : '還沒有資料，按「更新」開始分析。'}</div></div>` : `

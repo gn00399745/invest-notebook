@@ -60,10 +60,10 @@ const VR_SCORE = [
   ['0050 一半 ＋ 成長趨勢 一半', '核心＋衛星', 24.2, -40, 10.9, 37.9, 3],
 ];
 const vrPct = v => `<span class="${v > 0 ? 'good' : v < 0 ? 'bad' : ''}">${v > 0 ? '+' : ''}${fmt(v, 1)}%</span>`;
+const vrTabs = c => `<div class="chips hub-tabs"><button class="chip ${c === 'value' ? 'on' : ''}" data-radarstyle="value">💎 價值</button><button class="chip ${c === 'trend' ? 'on' : ''}" data-radarstyle="trend">🚀 成長趨勢</button><button class="chip ${c === 'picks' ? 'on' : ''}" data-go="picks">📦 策略組合</button></div>`;
 function vrHead() {
   const T = vrTrend();
-  return `<h2>選股雷達</h2>
-  <div class="chips"><button class="chip ${T ? '' : 'on'}" data-radarstyle="value">💎 價值・公允價值</button><button class="chip ${T ? 'on' : ''}" data-radarstyle="trend">🚀 成長趨勢</button></div>
+  return `<h2>選股</h2>${vrTabs(T ? 'trend' : 'value')}
   <details class="card rd-bt vr-score"><summary><b>🏆 大師選股法成績單</b>：13 年半下來，沒有一派穩定贏 0050</summary>
     <div class="help" style="margin-top:6px">把各派公開的選股原則寫成規則，用 2013/4～2026/10 每季當時公開的本益比、淨值比、殖利率、營收與股價回測。每派選 20 檔等權重，含配息、扣手續費與證交稅。</div>
     <div class="vr-st"><table class="rd-bt-t"><thead><tr><th>選股法</th><th class="num">年化</th><th class="num">最大回落</th><th class="num">2013～19</th><th class="num">2020～26</th></tr></thead><tbody>
@@ -190,7 +190,7 @@ PAGES.radar = () => {
 };
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-radarstyle],[data-radartier],[data-radarall],#radarRefresh,[data-radarcard],[data-rpmon]'); if (!t) return;
-  if (t.dataset.radarstyle) { S.radarStyle = t.dataset.radarstyle; S.radarAll = false; save(); render(); return loadRadar(false); }
+  if (t.dataset.radarstyle) { S.radarStyle = t.dataset.radarstyle; S.radarAll = false; save(); if (current !== 'radar') go('radar'); else render(); return loadRadar(false); }
   if (t.dataset.radartier) { S.radarTier = t.dataset.radartier; save(); return render(); }
   if (t.dataset.radarall) { S.radarAll = !S.radarAll; save(); return render(); }
   if (t.id === 'radarRefresh') return loadRadar(true);
