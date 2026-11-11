@@ -1380,3 +1380,12 @@ i.c1, .w-legend i.c1 { background: #3b82c4; } i.c2, .w-legend i.c2 { background:
 .pc-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 0 22px; } .pc-i { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); } .pc-n { width: 22px; height: 22px; border-radius: 50%; background: rgba(127,127,127,.15); display: grid; place-items: center; font-size: 12px; font-weight: 700; } .pc-b { min-width: 0; } .pc-b em { display: block; font-style: normal; font-size: 12.5px; color: var(--muted); } .pc-b b { display: block; font-size: 15px; } .pc-b small { display: block; font-size: 13px; color: var(--muted); line-height: 1.5; }
 .rv-bars { display: flex; align-items: flex-end; gap: 3px; height: 54px; margin: 10px 0 4px; } .rv-bars i { flex: 1; max-width: 22px; border-radius: 3px 3px 0 0; background: var(--fall); } .rv-bars i.up { background: var(--rise); }
 .subnav.keep { display: flex !important; } @media (max-width: 420px) { .pc-list { grid-template-columns: 1fr; } .hub-t { font-size: 21px; } .hub-acts b { font-size: 14px; } }
+
+/* Google 試算表備份 */
+.gas-steps { margin: 0 0 12px; padding-left: 20px; font-size: 14px; line-height: 1.6; }
+.gas-steps code { font-size: 12px; background: var(--line, rgba(127,127,127,.15)); padding: 1px 5px; border-radius: 4px; }
+.gas-auto { display: flex; gap: 8px; align-items: center; font-size: 14px; margin: 4px 0 12px; }
+.gas-list { display: grid; gap: 8px; max-height: 55vh; overflow: auto; }
+.gas-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line, rgba(127,127,127,.25)); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.gas-item span { font-size: 12px; color: var(--muted); }
+.gas-item:hover { border-color: var(--gold, #c9a227); }
